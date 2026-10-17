@@ -5398,19 +5398,34 @@ const facturaDelMismoImporte=(cands,invoiceType)=>(cands||[]).find(c=>c&&c.monto
 let EMISOR_ON=false;
 const SNOOZE_PRESETS=[
   {kind:"client_correction",label:"Cliente enviará corrección / nuevo diseño",text:"El cliente enviará corrección o un nuevo diseño"},
-  {kind:"far_due",label:"Entrega lejana — aún no entra a máquina",text:"Entrega lejana: aún no toca programar en máquina"},
+  {kind:"far_due",label:"Entrega lejana: aún no entra a máquina",text:"Entrega lejana: aún no toca programar en máquina"},
   {kind:"material",label:"Esperando material / insumo",text:"Esperando material o insumo para continuar"},
   {kind:"authorization",label:"Esperando autorización del cliente",text:"Esperando autorización del cliente"},
 ];
 // v10.73.40 — meta de los chips de filtro por MOTIVO en "En espera". __none = snooze genérico (texto libre sin preset). Etiquetas cortas + iconos ya importados.
 const SNOOZE_KIND_META={material:{l:"Material",Icon:PackageIcon},authorization:{l:"Autorización",Icon:UserIcon},client_correction:{l:"Corrección",Icon:NotePencilIcon},far_due:{l:"Entrega lejana",Icon:CalendarDotsIcon},awaiting_client_invoice:{l:"Espera factura",Icon:ReceiptIcon},__none:{l:"Otro",Icon:BellSlashIcon}};
 const SNOOZE_KIND_ORDER=["material","authorization","client_correction","far_due","awaiting_client_invoice","__none"];
+// v10.84.147 — /impeccable critique de «Poner en espera» (17-oct; ~20/40): no era un diálogo (el lector de pantalla no se enteraba, el foco se quedaba
+//   atrás y el Tab se salía), un clic en el fondo tiraba la razón ya escrita, «0» o «-2» días la ponían en espera «hasta que cambie de etapa» sin decirlo
+//   y «1.5» la redondeaba a 1, no decía cuándo vuelve sola, y el botón apagado era blanco sobre gris claro (1.4:1). Ahora: diálogo con su nombre que se
+//   lleva el foco y no deja salir al Tab; Esc o el fondo con algo escrito preguntan; los días, enteros de 1 a 365 o vacío, y dice el día en que vuelve.
 function SnoozeModal({order,onConfirm,onClose}){
-  useEscClose(onClose);
   const [kind,setKind]=useState(null);
   const [reason,setReason]=useState("");
   const [days,setDays]=useState("");
   const [saving,setSaving]=useState(false);
+  const [preguntaSalir,setPreguntaSalir]=useState(false);
+  const sucio=reason.trim().length>0||days.trim().length>0;
+  const salir=()=>{ if(saving)return; if(sucio&&!preguntaSalir){setPreguntaSalir(true);return;} onClose(); };
+  useEscClose(salir);
+  useDevolverFoco();
+  const panel=useRef(null), refRazon=useRef(null);
+  useLayoutEffect(()=>{panel.current?.focus({preventScroll:true});},[]);
+  // los días: enteros de 1 a 365, o vacío (vuelve al cambiar de etapa)
+  const diasTxt=days.trim(), diasN=diasTxt===""?null:Number(diasTxt), diasMal=diasTxt!==""&&!(Number.isInteger(diasN)&&diasN>=1&&diasN<=365);
+  // «el lunes 19 de octubre» (Intl escribe «lunes, 19 de octubre», con coma)
+  const fVuelve=diasN&&!diasMal?new Date(Date.now()+diasN*86400000):null;
+  const vuelve=fVuelve?fVuelve.toLocaleDateString("es-MX",{weekday:"long"})+" "+fVuelve.toLocaleDateString("es-MX",{day:"numeric",month:"long"}):null;
   // v10.73.44b — "entrega lejana" (far_due) se auto-reactiva si la entrega es ≤5 días hábiles o ya venció (v10.73.44): pausarla así
   // sería un no-op con toast de éxito engañoso. La ocultamos del modal cuando no aplica (el usuario usa otra razón real).
   // v10.73.46 (scan) — TAMBIÉN sin fecha de entrega: el auto-lift far_due depende de due_date, así que NUNCA dispararía → la orden
@@ -5419,29 +5434,34 @@ function SnoozeModal({order,onConfirm,onClose}){
   const farDueSoon=!!(order?.due_date&&(isOverdue(order.due_date)||bizDaysUntil(order.due_date)<=5));
   const farDueBlocked=farDueNoDate||farDueSoon;
   const submit=async()=>{
-    const r=reason.trim(); if(r.length<5)return;
-    const d=parseInt(days,10);
-    const until=Number.isFinite(d)&&d>0?localDayStr(new Date(Date.now()+d*86400000)):null;
+    const r=reason.trim(); if(r.length<5||diasMal)return;
+    const until=diasN?localDayStr(new Date(Date.now()+diasN*86400000)):null;
     setSaving(true);
     try{ await onConfirm({reason:r,kind,until}); }finally{ setSaving(false); }
   };
-  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:20}} onClick={onClose}>
-    <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:24,maxWidth:460,width:"100%",maxHeight:"85vh",overflowY:"auto"}}>
-      <h3 style={{display:"flex",alignItems:"center",gap:8,fontSize:16,fontWeight:800,margin:"0 0 4px",color:C.ac}}><BellSlashIcon size={17} weight="bold"/>Poner en espera</h3>
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:20}} onClick={salir}>
+    <div onClick={e=>e.stopPropagation()} ref={panel} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="snz-titulo" onKeyDown={atraparTab} style={{outline:"none",background:C.bg,borderRadius:20,padding:24,maxWidth:460,width:"100%",maxHeight:"85vh",overflowY:"auto"}}>
+      <h3 id="snz-titulo" style={{display:"flex",alignItems:"center",gap:8,fontSize:16,fontWeight:800,margin:"0 0 4px",color:C.ac}}><BellSlashIcon size={17} weight="bold"/>Poner en espera</h3>
       <p style={{fontSize:12,color:C.t2,margin:"0 0 14px",lineHeight:1.45}}>{order?.client||""} sale de la cola activa y deja de marcarse como estancada. Se reactiva sola al cambiar de etapa o al vencer la fecha.</p>
       <div style={{fontSize:11,fontWeight:700,color:C.t2,marginBottom:6}}>Razón</div>
       <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:10}}>
         {SNOOZE_PRESETS.filter(p=>!(p.kind==="far_due"&&farDueBlocked)).map(p=><button key={p.kind} onClick={()=>{setKind(p.kind);setReason(p.text);}} style={{display:"flex",alignItems:"center",gap:6,width:"100%",textAlign:"left",cursor:"pointer",fontSize:12,fontWeight:600,padding:"8px 11px",borderRadius:9,border:"1.5px solid "+(kind===p.kind?C.ac:C.bd),background:kind===p.kind?C.ac+"0e":C.bg,color:kind===p.kind?C.ac:C.tx,fontFamily:"'Geist',sans-serif"}}>{p.label}</button>)}
       </div>
-      {farDueBlocked&&<div style={{fontSize:10.5,color:C.t3,margin:"-4px 0 10px",display:"flex",alignItems:"flex-start",gap:5,lineHeight:1.4}}><CalendarDotsIcon size={12} weight="bold" style={{flexShrink:0,marginTop:1}}/><span>{farDueNoDate?"\"Entrega lejana\" necesita una fecha de entrega para reactivarse sola; sin ella la orden quedaría pausada indefinidamente. Ponle fecha de entrega o usa la razón real de la pausa.":"\"Entrega lejana\" no está disponible: la entrega es ≤5 días hábiles o ya venció (se reactivaría al instante). Usa la razón real de la pausa."}</span></div>}
-      <textarea value={reason} onChange={e=>setReason(e.target.value)} placeholder="Razón (mín. 5 caracteres) — edita el preset o escribe la tuya…" style={{...inp,minHeight:60,resize:"vertical",fontSize:12,marginBottom:10}}/>
-      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16}}>
-        <span style={{fontSize:11,color:C.t2,whiteSpace:"nowrap"}}>¿Por cuántos días?</span>
-        <input type="number" min="1" value={days} onChange={e=>setDays(e.target.value)} placeholder="vacío = hasta que cambie de etapa" style={{...inp,fontSize:12,flex:1}}/>
+      {farDueBlocked&&<div style={{fontSize:11,color:C.t2,margin:"-4px 0 10px",display:"flex",alignItems:"flex-start",gap:5,lineHeight:1.4}}><CalendarDotsIcon size={12} weight="bold" style={{flexShrink:0,marginTop:1}}/><span>{farDueNoDate?"\"Entrega lejana\" necesita una fecha de entrega para reactivarse sola; sin ella la orden quedaría pausada indefinidamente. Ponle fecha de entrega o usa la razón real de la pausa.":"\"Entrega lejana\" no está disponible: la entrega es en 5 días hábiles o menos, o ya venció (se reactivaría al instante). Usa la razón real de la pausa."}</span></div>}
+      <textarea ref={refRazon} aria-label="La razón de la pausa" value={reason} onChange={e=>{setReason(e.target.value);setPreguntaSalir(false);}} placeholder="La razón, 5 letras o más: elige una de arriba y edítala, o escribe la tuya" style={{...inp,minHeight:60,resize:"vertical",fontSize:12,marginBottom:10}}/>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:diasMal||vuelve||!diasTxt?6:16}}>
+        <label htmlFor="snz-dias" style={{fontSize:12,color:C.t2,whiteSpace:"nowrap"}}>¿Por cuántos días?</label>
+        <input id="snz-dias" type="number" min="1" max="365" step="1" value={days} onChange={e=>{setDays(e.target.value);setPreguntaSalir(false);}} placeholder="vacío: hasta que cambie de etapa" aria-invalid={diasMal} style={{...inp,fontSize:12,flex:1}}/>
       </div>
+      <div style={{fontSize:12,margin:"0 0 16px",color:diasMal?C.dnInk:C.t2,fontWeight:diasMal?600:400,lineHeight:1.4}} aria-live="polite">{diasMal?"Escribe días enteros, de 1 a 365, o déjalo vacío: vuelve sola al cambiar de etapa.":vuelve?"En espera hasta el "+vuelve+" (o hasta que cambie de etapa).":"Vuelve sola cuando cambie de etapa."}</div>
+      {preguntaSalir&&<div role="alert" style={{display:"flex",alignItems:"center",flexWrap:"wrap",gap:8,margin:"0 0 12px",padding:"10px 12px",borderRadius:10,background:C.sf,border:"1px solid "+C.bd,fontSize:12,color:C.tx}}>
+        <span style={{flex:"1 1 200px"}}>Tienes una razón escrita. ¿Salir sin ponerla en espera?</span>
+        <button onClick={()=>{setPreguntaSalir(false);refRazon.current?.focus({preventScroll:true});}} style={{...bt(C.ac),fontSize:12,padding:"6px 12px"}}>Seguir escribiendo</button>
+        <button onClick={onClose} style={{...bt(C.bg,C.tx),fontSize:12,padding:"6px 12px",border:"1px solid "+C.bdSt}}>Salir sin guardar</button>
+      </div>}
       <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
         <button onClick={onClose} disabled={saving} style={{...bt(C.sf,C.t2),fontSize:12,padding:"8px 14px",border:"0.5px solid "+C.bd}}>Cancelar</button>
-        <button onClick={submit} disabled={saving||reason.trim().length<5} style={{...bt(reason.trim().length>=5?C.ac:C.bdSt),fontSize:12,padding:"8px 14px",cursor:reason.trim().length>=5&&!saving?"pointer":"default",opacity:saving?.6:1}}>{saving?"Guardando…":<><BellSlashIcon size={13} weight="bold"/>Poner en espera</>}</button>
+        <button onClick={submit} disabled={saving||reason.trim().length<5||diasMal} style={reason.trim().length>=5&&!diasMal?{...bt(C.ac),fontSize:12,padding:"8px 14px",cursor:saving?"default":"pointer",opacity:saving?.6:1}:{...bt(C.sf,C.t2),fontSize:12,padding:"8px 14px",border:"1px solid "+C.bd,cursor:"not-allowed"}}>{saving?"Guardando…":<><BellSlashIcon size={13} weight="bold"/>Poner en espera</>}</button>
       </div>
     </div>
   </div>;

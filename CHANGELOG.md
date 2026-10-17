@@ -12,6 +12,31 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.147 — «Poner en espera»: el fondo ya no tira lo escrito, los días se validan y dice cuándo vuelve sola — 17-oct-2026
+
+**Qué pasaba.** La pasada de `/impeccable critique` de la madrugada del 17-oct sobre la ventana «Poner en espera» (`SnoozeModal`; 21/40, snapshot
+`.impeccable/critique/2026-10-17T08-37-50Z__src-app-jsx-poner-en-espera.md`). Un clic en el fondo **tiraba la razón ya escrita** (y Esc, con el cursor fuera de la razón); «0» o «-2» días la
+ponían en espera «hasta que cambie de etapa» sin decirlo y «1.5» la redondeaba a 1; no decía qué día vuelve sola; no era un diálogo (el lector de pantalla no
+se enteraba, el foco se quedaba en la página de atrás y el Tab se salía); el botón apagado era blanco sobre gris claro (1.4:1); y decía «preset», «mín. 5
+caracteres», «≤5 días hábiles» y llevaba rayas largas.
+
+**Qué se cambió** (sólo `SnoozeModal`):
+- Esc o el fondo con algo escrito preguntan dentro de la ventana («Tienes una razón escrita. ¿Salir sin ponerla en espera?»: «Seguir escribiendo» regresa el
+  cursor a la razón, «Salir sin guardar»); un segundo Esc sale; mientras guarda no se cierra a medias. Con el cursor en la razón, Esc es del campo (la regla
+  de la app).
+- Los días: enteros de 1 a 365, o vacío; si no, lo dice y no deja ponerla. Abajo dice cuándo vuelve: «En espera hasta el lunes 19 de octubre (o hasta que
+  cambie de etapa)» o «Vuelve sola cuando cambie de etapa».
+- Un diálogo con su nombre que se lleva el foco, no deja salir al Tab y al cerrar lo regresa; el botón apagado legible; en palabras y sin rayas largas.
+
+**Cómo se probó.** Tanda nueva `poner-espera` (19; banco `gen-poner-espera.mjs`, montado con la línea de App y `applySnooze` simulado como es: la razón
+corta no pasa, la base puede rechazar). Vuelta 1 contra v10.84.146: fallaban 8 de 13; una prueba era mía (oprimía Esc con el cursor en la razón, donde Esc
+es del campo); en el arreglo, la fecha salía «lunes, 19 de octubre», con la coma de Intl (ahora «el lunes 19 de octubre»). Vuelta 2, por donde no se diseñó:
+Esc dos veces, «Seguir escribiendo», los bordes de los días (365, 366, -2) y de la razón (5 letras, sólo espacios), Esc y un clic fuera mientras guarda, el
+motivo con el teclado: sin fallas. Ahora 19 de 19; contra v10.84.146 fallan 12. El detector: antes, el botón apagado (1.4:1); después, sólo la jerarquía de
+letra de la app. Los 30 bancos se generan con el App.jsx nuevo; build y `probar-alcance` en verde.
+
+**En producción:** (pendiente)
+
 ## v10.84.146 — «Auditoría»: buscar una orden como se escribe, duplicados por serie y la clave con las series de hoy — 17-oct-2026
 
 **Qué pasaba.** La pasada de `/impeccable critique` de la madrugada del 17-oct sobre «Auditoría» (`AuditoriaView`: los consecutivos fiscales y de órdenes;
