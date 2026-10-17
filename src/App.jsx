@@ -1158,8 +1158,8 @@ const WORKFLOW_ZONES=[
   {id:"captura",label:"📝 Captura",labelT:"Captura",Icon:NotePencilIcon,color:"#aeaeb2",stages:["draft","maq_created"]},
   {id:"preprensa",label:"🎨 Pre-prensa",labelT:"Pre-prensa",Icon:PaletteIcon,color:C.dsn,stages:["design","proof_printing","proof_client","ctp","placas_listas"]},
   {id:"produccion",label:"⚙️ Producción",labelT:"Producción",Icon:GearIcon,color:C.amb,stages:["ready","in_production"]},
-  {id:"maquila_ext",label:"🚚 Maquila Externa",labelT:"Maquila Externa",Icon:TruckIcon,color:C.maq,stages:["maquila_out","maq_sent","maq_in_progress"]},
-  {id:"regreso_maq",label:"📥 Regreso Maquila",labelT:"Regreso Maquila",Icon:DownloadSimpleIcon,color:C.maqin,stages:["maquila_in","maq_received"]},
+  {id:"maquila_ext",label:"🚚 Maquila Externa",labelT:"Maquila externa",Icon:TruckIcon,color:C.maq,stages:["maquila_out","maq_sent","maq_in_progress"]},
+  {id:"regreso_maq",label:"📥 Regreso Maquila",labelT:"Regreso de maquila",Icon:DownloadSimpleIcon,color:C.maqin,stages:["maquila_in","maq_received"]},
   {id:"salida",label:"📤 Salida",labelT:"Salida",Icon:ExportIcon,color:C.sal,stages:["packaging","salidas"]}
 ];
 
@@ -17763,366 +17763,209 @@ function Analytics({orders,onReload}) {
   </div>;
 }
 
-// ─── WIP DASHBOARD (v10.27.0) ─── Dinero en Proceso — admin-only
-function WIPDashboard({ orders, role, onAction }) {
-  const [expandedZone, setExpandedZone] = useState(null);
+// ─── DINERO EN PROCESO (v10.27.0) ─── Dirección
+// v10.84.142 — /impeccable critique (16-oct, noche; 17/40). Medido ese día en producción: 58 activas por $660,062 sin IVA, y de eso $296,287 (45 %) eran
+//   21 órdenes LISTAS que esperan a que el cliente pida su factura, sumadas como «capital atorado» por zona junto con lo que de verdad está en proceso (el
+//   mismo número engañoso del calendario y Analytics, v10.84.140). Ahora van aparte: «En proceso», por zona, y «Listo, espera que el cliente pida su
+//   factura» (`esperaAlCliente`), con cuáles son. Sin una lectura buena no dice «$0» ni «Sin precio 0» con su palomita (regla 12: App le pasa `leido`).
+//   Los días son hábiles EN LA ETAPA (`daysInStage`; antes contaban desde la captura: una orden de septiembre recién llegada a Listas sumaba 26). Zonas y
+//   órdenes son botones (el teclado), «Ver las N» (antes «+ N más» sin salida), un renglón de cifras en lugar de cuatro tarjetas de número grande (la
+//   cuarta llevaba de etiqueta el nombre de un cliente), en palabras («órdenes», «Margen de la maquila», «sin IVA»), tintas con AA y sin medallas. «En
+//   Stock» y la orden con su cancelación ya no cuentan: son finales en toda la app y aquí sumaban al total sin caer en ninguna zona. El margen de la
+//   maquila, sólo de las maquilas con precio y costo (sin el costo, todo el precio parecía margen).
+const WIP_FUERA=["delivered","maq_delivered","cancelled","maq_cancelled","web_pending","web_rejected","stocked"];
+// los centavos se enseñan cuando los hay: redondeada cada zona a pesos por su lado, las zonas no sumaban lo de arriba ($2,000.50 + $7,000.50 daban
+//   «$2,001» y «$7,001» y arriba «$66,001»: un peso de más; tests/romper/wip.mjs, wip-19)
+const pesosWip=n=>{const v=Math.round((Number(n)||0)*100)/100;return "$"+v.toLocaleString("es-MX",Number.isInteger(v)?{maximumFractionDigits:0}:{minimumFractionDigits:2,maximumFractionDigits:2})};
+// un precio de cero o menos es un precio que FALTA (la base no tiene CHECK en price): sale en «sin precio» y no resta (wip-20)
+const dineroWip=o=>{const v=precioVenta(o);return v>0?v:0};
+const nOrdenes=n=>n+(n===1?" orden":" órdenes");
+const listaDesde=n=>n<=0?"hoy":"hace "+n+(n===1?" día":" días");
+const capturadaHace=d=>{const n=Math.floor((Date.now()-Date.parse(d))/86400000);return isNaN(n)?"":n<=0?"capturada hoy":n===1?"capturada ayer":"capturada hace "+n+" días"};
+const promedioEnEtapa=(x,n)=>{const r=Math.round(x*10)/10;if(r===0)return n===1?"llegó hoy a su etapa":"llegaron hoy a su etapa";return (n===1?"":"en promedio ")+(Number.isInteger(r)?r:r.toFixed(1))+(r===1?" día":" días")+" en su etapa"};
+const COLS_WIP="minmax(0,1fr) 112px 104px";
+const H3_WIP={display:"flex",alignItems:"center",gap:8,fontSize:14,fontWeight:700,color:C.tx,margin:"0 0 10px"};
+const LISTA_WIP={background:C.bg,border:"1px solid "+C.bd,borderRadius:12,overflow:"hidden"};
+const NUM_WIP={fontSize:16,fontWeight:800,color:C.tx,fontVariantNumeric:"tabular-nums",marginLeft:4};
+// una orden de las listas: un botón que abre su detalle. El segundo clic de un doble clic no cuenta: con «Ver las N» la orden que aparece queda bajo el
+//   ratón y el segundo clic la abría (wip-26)
+function FilaDeWip({ f, onAction, dias }) {
+  return <button type="button" data-wip-fila="" onClick={e => { if (e.detail > 1) return; onAction(f.o.id, "detail"); }}
+    onMouseEnter={e => { e.currentTarget.style.background = C.sf; }} onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
+    style={{ display: "grid", gridTemplateColumns: COLS_WIP, gap: 12, alignItems: "baseline", width: "100%", padding: "6px 10px", background: "transparent", border: "none", borderRadius: 8, textAlign: "left", cursor: "pointer", fontFamily: "inherit", fontSize: 12, color: C.tx }}>
+    <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><b style={{ fontWeight: 700 }}>{f.o.production_number || "Sin folio"}</b> · {(f.o.client || "Sin cliente").trim()}</span>
+    <span style={{ textAlign: "right", color: C.t2 }}>{dias}</span>
+    <span style={{ textAlign: "right", fontWeight: 600, fontVariantNumeric: "tabular-nums", color: f.dinero > 0 ? C.tx : C.wnInk }}>{f.dinero > 0 ? pesosWip(f.dinero) : "sin precio"}</span>
+  </button>;
+}
+function EncabezadoWip({ a, b }) {
+  return <div style={{ display: "grid", gridTemplateColumns: COLS_WIP, gap: 12, padding: "2px 10px 4px", fontSize: 12, fontWeight: 600, color: C.t2 }}><span>Orden y cliente</span><span style={{ textAlign: "right" }}>{a}</span><span style={{ textAlign: "right" }}>{b}</span></div>;
+}
+function WIPDashboard({ orders, role, onAction, leido }) {
+  const [abiertas, setAbiertas] = useState({});   // las zonas abiertas (varias a la vez, para comparar)
+  const [todas, setTodas] = useState({});         // «Ver las N» de cada etapa y de lo que espera
+  // tras «Ver las N» el botón desaparece: el foco pasa a la primera de las que aparecen (con el teclado se perdía hasta el principio de la página; wip-24)
+  const [focoEn, setFocoEn] = useState(null);
+  useLayoutEffect(() => {
+    if (!focoEn) return;
+    const filas = document.querySelectorAll('[data-wip-lista="' + focoEn + '"] [data-wip-fila]');
+    if (filas[5]) filas[5].focus({ preventScroll: true });
+    setFocoEn(null);
+  }, [focoEn]);
+  const fila = o => ({ o, dias: daysInStage(o), dinero: dineroWip(o) });
+  const porDias = (a, b) => b.dias - a.dias || b.dinero - a.dinero;
+  const active = useMemo(() => (orders || []).filter(o => o && !o.cancelled_at && !WIP_FUERA.includes(o.stage)), [orders]);
+  // lo LISTO que espera a que el cliente pida su factura (Salidas o recibida de maquila, «En espera» con esa razón) va aparte: no es trabajo de la planta
+  const espera = useMemo(() => active.filter(esperaAlCliente).map(fila).sort(porDias), [active]);
+  const enProceso = useMemo(() => active.filter(o => !esperaAlCliente(o)), [active]);
+  const sinPrecio = useMemo(() => active.filter(o => !(dineroWip(o) > 0)), [active]);
+  const totEnProceso = enProceso.reduce((s, o) => s + dineroWip(o), 0), totEspera = espera.reduce((s, f) => s + f.dinero, 0);
 
-
-  const active = useMemo(() => {
-    const terminal = ["delivered", "maq_delivered", "cancelled", "maq_cancelled", "web_pending", "web_rejected"];
-    return orders.filter(o => !terminal.includes(o.stage));
-  }, [orders]);
-
-  const orderMoney = (o) => {
-    if (o.order_type === "maquila") return Number(o.maq_price) || 0;
-    return Number(o.price) || 0;
-  };
-  const hasPrice = (o) => orderMoney(o) > 0;
-  const daysAgo = (dateStr) => {
-    if (!dateStr) return 0;
-    return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000);
-  };
-
-  const totals = useMemo(() => {
-    const totalMoney = active.reduce((s, o) => s + orderMoney(o), 0);
-    const ordersWithoutPrice = active.filter(o => !hasPrice(o));
-    return {
-      totalMoney,
-      totalOrders: active.length,
-      withoutPriceCount: ordersWithoutPrice.length,
-      withoutPriceList: ordersWithoutPrice
-    };
-  }, [active]);
-
-
-  const byZone = useMemo(() => {
-    return WORKFLOW_ZONES.map(zone => {
-      const zoneOrders = active.filter(o => zone.stages.includes(o.stage));
-      const money = zoneOrders.reduce((s, o) => s + orderMoney(o), 0);
-      const avgDays = zoneOrders.length > 0
-        ? zoneOrders.reduce((s, o) => s + daysAgo(o.created_at), 0) / zoneOrders.length
-        : 0;
-      const withoutPrice = zoneOrders.filter(o => !hasPrice(o)).length;
-
-      let maqMargin = null;
-      if (zone.id === "maquila_ext" || zone.id === "regreso_maq") {
-        maqMargin = zoneOrders.reduce((s, o) => {
-          const price = Number(o.maq_price) || 0;
-          const cost = Number(o.maq_cost) || 0;
-          return s + (price - cost);
-        }, 0);
-      }
-
-      const stages = zone.stages.map(stageId => {
-        const stageOrders = zoneOrders.filter(o => o.stage === stageId);
-        const stageMoney = stageOrders.reduce((s, o) => s + orderMoney(o), 0);
-        const stageAvgDays = stageOrders.length > 0
-          ? stageOrders.reduce((s, o) => s + daysAgo(o.created_at), 0) / stageOrders.length
-          : 0;
-        return {
-          id: stageId,
-          label: SM[stageId]?.l || stageId,
-          color: SM[stageId]?.c || "#aeaeb2",
-          count: stageOrders.length,
-          money: stageMoney,
-          avgDays: stageAvgDays,
-          orders: stageOrders
-        };
-      }).filter(s => s.count > 0);
-
-      let byMachine = null;
-      if (zone.id === "produccion") {
-        const inProd = zoneOrders.filter(o => o.stage === "in_production");
-        if (inProd.length > 0) {
-          const machineMap = {};
-          inProd.forEach(o => {
-            const mid = o.current_machine || "sin_asignar";
-            if (!machineMap[mid]) machineMap[mid] = { machine: mid, count: 0, money: 0, orders: [] };
-            machineMap[mid].count += 1;
-            machineMap[mid].money += orderMoney(o);
-            machineMap[mid].orders.push(o);
-          });
-          byMachine = Object.values(machineMap).sort((a, b) => b.money - a.money);
-        }
-      }
-
-      return {
-        ...zone,
-        count: zoneOrders.length,
-        money,
-        avgDays,
-        withoutPrice,
-        stages,
-        byMachine,
-        maqMargin
-      };
-    });
-  }, [active]);
+  const byZone = useMemo(() => WORKFLOW_ZONES.map(zone => {
+    const filas = enProceso.filter(o => zone.stages.includes(o.stage)).map(fila).sort(porDias);
+    const maquilas = filas.filter(f => f.o.order_type === "maquila");
+    const conCosto = maquilas.filter(f => Number(f.o.maq_price) > 0 && Number(f.o.maq_cost) > 0);
+    const stages = zone.stages.map(id => {
+      const fs = filas.filter(f => f.o.stage === id);
+      return { id, color: SM[id]?.c || C.t2, count: fs.length, money: fs.reduce((s, f) => s + f.dinero, 0), filas: fs };
+    }).filter(s => s.count > 0);
+    let byMachine = null;
+    if (zone.id === "produccion") {
+      const m = {};
+      filas.filter(f => f.o.stage === "in_production").forEach(f => {
+        const id = f.o.current_machine || "sin_asignar";
+        if (!m[id]) m[id] = { machine: id, count: 0, money: 0 };
+        m[id].count += 1; m[id].money += f.dinero;
+      });
+      byMachine = Object.values(m).sort((a, b) => b.money - a.money);
+    }
+    return { ...zone, tinta: tintaAA(zone.color), count: filas.length, money: filas.reduce((s, f) => s + f.dinero, 0),
+      avgDays: filas.length ? filas.reduce((s, f) => s + f.dias, 0) / filas.length : 0, withoutPrice: filas.filter(f => !(f.dinero > 0)).length,
+      margen: maquilas.length ? { total: conCosto.reduce((s, f) => s + Number(f.o.maq_price) - Number(f.o.maq_cost), 0), sinCosto: maquilas.length - conCosto.length } : null,
+      stages, byMachine };
+  }), [enProceso]);
 
   const topClients = useMemo(() => {
     const map = {};
-    active.forEach(o => {
-      const display = (o.client || "—").trim();
+    enProceso.forEach(o => {
+      const display = (o.client || "Sin cliente").trim();
       // v10.28.1 — agrupar por casing/espacios normalizados pero mostrar el primer nombre tal como se capturó
       const key = display.toLowerCase().replace(/\s+/g, " ");
-      if (!map[key]) map[key] = { client: display, count: 0, money: 0, stages: new Set() };
+      if (!map[key]) map[key] = { key, client: display, count: 0, money: 0, stages: new Set() };
       map[key].count += 1;
-      map[key].money += orderMoney(o);
-      map[key].stages.add(SM[o.stage]?.l || o.stage);
+      map[key].money += dineroWip(o);
+      map[key].stages.add(SM[o.stage]?.lt || o.stage);
     });
-    return Object.values(map)
-      .sort((a, b) => b.money - a.money)
-      .slice(0, 5)
-      .map(c => ({ ...c, stages: Array.from(c.stages).join(", ") }));
-  }, [active]);
+    return Object.values(map).filter(c => c.money > 0).sort((a, b) => b.money - a.money).slice(0, 5).map(c => ({ ...c, stages: Array.from(c.stages).join(", ") }));
+  }, [enProceso]);
   // v10.84.80 — el «return» por rol va DESPUÉS de los hooks (antes los dejaba fuera según el rol: regla de los hooks; tests/romper/hooks.mjs)
   if (role !== "admin") return null;
+  const verLas = (k, n) => <button type="button" onClick={() => { setTodas(p => ({ ...p, [k]: true })); setFocoEn(k); }} style={{ margin: "4px 10px 0", padding: "6px 0", background: "transparent", border: "none", fontFamily: "inherit", fontSize: 12, fontWeight: 600, color: C.ac, cursor: "pointer" }}>Ver las {n}</button>;
 
   return (
-    <div style={{ padding: "20px 24px", maxWidth: "min(1680px, 100%)", margin: "0 auto" }}>
-      <h2 style={{ display:"flex", alignItems:"center", gap:8, fontSize: 20, fontWeight: 800, margin: "0 0 8px", color: C.tx }}>
+    <div style={{ padding: "20px 24px", maxWidth: "min(1120px, 100%)", margin: "0 auto" }}>
+      <h2 style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 20, fontWeight: 800, margin: "0 0 6px", color: C.tx }}>
         <CurrencyDollarIcon size={22} weight="bold"/>Dinero en Proceso
       </h2>
-      <p style={{ fontSize: 12, color: C.t2, margin: "0 0 24px" }}>
-        Distribución de capital atorado por zona del workflow. Excluye entregadas, canceladas y rechazadas.
-      </p>
-
-      {/* Resumen Global */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 24 }}>
-        <StatCard
-          label="Total $$$"
-          value={"$" + totals.totalMoney.toLocaleString("es-MX", { maximumFractionDigits: 0 })}
-          color={C.live}
-        />
-        <StatCard
-          label="Órdenes activas"
-          value={String(totals.totalOrders)}
-          color={C.ios}
-        />
-        <StatCard
-          label="Sin precio"
-          value={totals.withoutPriceCount > 0 ? <span style={{display:"inline-flex",alignItems:"center",gap:5}}><WarningIcon size={16} weight="fill"/>{totals.withoutPriceCount}</span> : <span style={{display:"inline-flex",alignItems:"center",gap:5}}><CheckCircleIcon size={16} weight="fill"/>0</span>}
-          color={totals.withoutPriceCount > 0 ? C.amb : C.live}
-        />
-        <StatCard
-          label={topClients[0]?.client || "—"}
-          value={topClients[0] ? "$" + topClients[0].money.toLocaleString("es-MX", { maximumFractionDigits: 0 }) : "$0"}
-          subValue={topClients[0] && totals.totalMoney > 0 ? Math.round((topClients[0].money / totals.totalMoney) * 100) + "% del total" : ""}
-          color={C.fac}
-        />
+      {!leido ? <p style={{ fontSize: 13, color: C.t2, margin: 0 }}>Sin cifras mientras no se lea de la base.</p>
+      : active.length === 0 ? <p style={{ fontSize: 13, color: C.t2, margin: 0 }}>No hay órdenes en proceso.</p>
+      : <>
+      <p style={{ fontSize: 12, color: C.t2, margin: "0 0 14px", maxWidth: "62ch" }}>Lo que falta entregar, sin IVA. Los días son hábiles y cuentan desde que cada orden llegó a su etapa.</p>
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "baseline", gap: "6px 28px", margin: "0 0 24px", fontSize: 13, color: C.t2 }}>
+        <span>En proceso <b style={NUM_WIP}>{pesosWip(totEnProceso)}</b> · {nOrdenes(enProceso.length)}</span>
+        <span>Listo, espera que el cliente pida su factura <b style={NUM_WIP}>{pesosWip(totEspera)}</b> · {nOrdenes(espera.length)}</span>
+        {sinPrecio.length > 0 && <span style={{ color: C.wnInk, fontWeight: 600 }}>{sinPrecio.length} sin precio, {sinPrecio.length === 1 ? "no suma" : "no suman"}</span>}
       </div>
 
-      {/* Zonas */}
-      <h3 style={{ display:"flex", alignItems:"center", gap:8, fontSize: 14, fontWeight: 700, color: C.tx, margin: "0 0 12px" }}><ChartBarIcon size={16} weight="bold"/>Por zona del workflow</h3>
-      <div style={{ marginBottom: 24 }}>
-        {byZone.map(zone => (
-          <div key={zone.id} style={{
-            border: "1px solid " + zone.color + "30",
-            borderRadius: 12,
-            marginBottom: 8,
-            background: "#fff",
-            overflow: "hidden"
-          }}>
-            <div
-              onClick={() => zone.count > 0 && setExpandedZone(expandedZone === zone.id ? null : zone.id)}
-              style={{
-                padding: "12px 16px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                cursor: zone.count > 0 ? "pointer" : "default",
-                background: zone.color + "08",
-                opacity: zone.count === 0 ? 0.5 : 1
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 14, fontWeight: 700, color: zone.color, display:"inline-flex", alignItems:"center", gap:6 }}>{zone.Icon && <zone.Icon size={14} weight="bold"/>}{zone.labelT}</span>
-                <span style={{ fontSize: 11, color: C.t3 }}>{zone.count} órd</span>
-                {zone.avgDays > 0 && <span style={{ display:"inline-flex", alignItems:"center", gap:3, fontSize: 11, color: C.t3 }}><ClockIcon size={11}/>{zone.avgDays.toFixed(1)}d prom</span>}
-                {zone.withoutPrice > 0 && <span style={{ display:"inline-flex", alignItems:"center", gap:3, fontSize: 11, color: C.amb, fontWeight: 600 }}><WarningIcon size={11} weight="fill"/>{zone.withoutPrice} sin precio</span>}
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <span style={{ fontSize: 14, fontWeight: 800, color: C.tx }}>
-                  ${zone.money.toLocaleString("es-MX", { maximumFractionDigits: 0 })}
-                </span>
-                {zone.maqMargin !== null && zone.maqMargin > 0 && (
-                  <span style={{ fontSize: 10, color: C.live, fontWeight: 600 }}>
-                    M ${zone.maqMargin.toLocaleString("es-MX", { maximumFractionDigits: 0 })}
-                  </span>
-                )}
-                {zone.count > 0 && (
-                  <span style={{ fontSize: 12, color: C.t3, display:"inline-flex", alignItems:"center" }}>
-                    {expandedZone === zone.id ? <CaretDownIcon size={12} weight="bold"/> : <CaretRightIcon size={12} weight="bold"/>}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {expandedZone === zone.id && zone.count > 0 && (
-              <div style={{ padding: "12px 16px", borderTop: "1px solid " + C.bd }}>
-                {zone.stages.map(stage => (
-                  <div key={stage.id} style={{ marginBottom: 8 }}>
-                    <div style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      padding: "6px 0",
-                      borderBottom: "0.5px solid " + C.bd
-                    }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <span style={{ fontSize: 12, fontWeight: 600, color: stage.color, display:"inline-flex", alignItems:"center" }}><StageLbl stage={stage.id} size={12}/></span>
-                        <span style={{ fontSize: 10, color: C.t3 }}>{stage.count} órd</span>
-                        {stage.avgDays > 0 && <span style={{ display:"inline-flex", alignItems:"center", gap:3, fontSize: 10, color: C.t3 }}><ClockIcon size={10}/>{stage.avgDays.toFixed(1)}d</span>}
-                      </div>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: C.tx }}>
-                        ${stage.money.toLocaleString("es-MX", { maximumFractionDigits: 0 })}
-                      </span>
+      {/* En proceso, por zona: cada zona se abre (varias a la vez) */}
+      <section aria-labelledby="wip-zonas-t" style={{ marginBottom: 28 }}>
+        <h3 id="wip-zonas-t" style={H3_WIP}><ChartBarIcon size={16} weight="bold"/>En proceso, por zona</h3>
+        <div style={LISTA_WIP}>
+          {byZone.map((z, i) => {
+            const abierta = !!abiertas[z.id] && z.count > 0;
+            return <div key={z.id} style={{ borderTop: i ? "1px solid " + C.bd : "none" }}>
+              <button type="button" disabled={!z.count} aria-expanded={z.count ? abierta : undefined} aria-controls={z.count ? "wip-z-" + z.id : undefined}
+                onClick={e => { if (e.detail > 1) return; setAbiertas(p => ({ ...p, [z.id]: !p[z.id] })); }}
+                style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "4px 12px", width: "100%", padding: "12px 16px", background: "transparent", border: "none", textAlign: "left", cursor: z.count ? "pointer" : "default", fontFamily: "inherit", fontSize: 14, color: C.tx }}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6, minWidth: 168, fontSize: 14, fontWeight: 700, color: z.tinta }}>{z.Icon && <z.Icon size={15} weight="bold"/>}{z.labelT}</span>
+                <span style={{ fontSize: 12, color: C.t2 }}>{nOrdenes(z.count)}{z.count ? " · " + promedioEnEtapa(z.avgDays, z.count) : ""}</span>
+                {z.withoutPrice > 0 && <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 600, color: C.wnInk }}><WarningIcon size={12} weight="fill"/>{z.withoutPrice} sin precio</span>}
+                <span style={{ flex: 1 }}/>
+                {z.count > 0 && <span style={{ fontSize: 14, fontWeight: 800, color: C.tx, fontVariantNumeric: "tabular-nums" }}>{pesosWip(z.money)}</span>}
+                {z.margen && z.margen.total > 0 && <span style={{ fontSize: 12, fontWeight: 600, color: C.okInk }}>Margen de la maquila {pesosWip(z.margen.total)}{z.margen.sinCosto ? " (a " + nOrdenes(z.margen.sinCosto) + " le falta el costo)" : ""}</span>}
+                {z.count > 0 && <span aria-hidden="true" style={{ display: "inline-flex", color: C.t2 }}>{abierta ? <CaretDownIcon size={12} weight="bold"/> : <CaretRightIcon size={12} weight="bold"/>}</span>}
+              </button>
+              {abierta && <div id={"wip-z-" + z.id} style={{ padding: "4px 6px 12px", borderTop: "1px solid " + C.bd }}>
+                <EncabezadoWip a="En la etapa" b="Sin IVA"/>
+                {z.stages.map(s => {
+                  const k = z.id + "/" + s.id, ver = todas[k] ? s.filas : s.filas.slice(0, 5);
+                  return <div key={s.id} data-wip-lista={k} style={{ marginTop: 6 }}>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 10, padding: "4px 10px", fontSize: 12 }}>
+                      <span style={{ display: "inline-flex", alignItems: "center", fontWeight: 700, color: tintaAA(s.color) }}><StageLbl stage={s.id} size={12}/></span>
+                      <span style={{ color: C.t2 }}>{nOrdenes(s.count)}</span>
+                      <span style={{ flex: 1 }}/>
+                      <span style={{ fontWeight: 700, color: C.tx, fontVariantNumeric: "tabular-nums" }}>{pesosWip(s.money)}</span>
                     </div>
-                    <div style={{ marginTop: 4, marginLeft: 12 }}>
-                      {stage.orders.slice(0, 5).map(o => (
-                        <div
-                          key={o.id}
-                          onClick={() => onAction(o.id, "detail")}
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            padding: "3px 0",
-                            fontSize: 10,
-                            color: C.t2,
-                            cursor: "pointer"
-                          }}
-                          onMouseEnter={e => e.currentTarget.style.color = C.tx}
-                          onMouseLeave={e => e.currentTarget.style.color = C.t2}
-                        >
-                          <span>{o.production_number || "—"} · {(o.client || "—").trim()}</span>
-                          <span>${orderMoney(o).toLocaleString("es-MX", { maximumFractionDigits: 0 })}</span>
-                        </div>
-                      ))}
-                      {stage.orders.length > 5 && (
-                        <div style={{ fontSize: 9, color: C.t3, fontStyle: "italic", marginTop: 2 }}>
-                          + {stage.orders.length - 5} más
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                    {ver.map(f => <FilaDeWip key={f.o.id} f={f} onAction={onAction} dias={f.dias <= 0 ? "hoy" : f.dias + (f.dias === 1 ? " día" : " días")}/>)}
+                    {s.filas.length > 5 && !todas[k] && verLas(k, s.filas.length)}
+                  </div>;
+                })}
+                {z.byMachine && z.byMachine.length > 0 && <div style={{ margin: "12px 10px 0", paddingTop: 8, borderTop: "1px solid " + C.bd }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700, color: C.t2, marginBottom: 4 }}><FactoryIcon size={13} weight="bold"/>En máquina, por máquina</div>
+                  {z.byMachine.map(m => <div key={m.machine} style={{ display: "grid", gridTemplateColumns: COLS_WIP, gap: 12, padding: "3px 0", fontSize: 12, color: C.tx }}>
+                    <span>{MACHINES.find(x => x.id === m.machine)?.name || (m.machine === "sin_asignar" ? "Sin máquina asignada" : m.machine)}</span>
+                    <span style={{ textAlign: "right", color: C.t2 }}>{nOrdenes(m.count)}</span>
+                    <span style={{ textAlign: "right", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{pesosWip(m.money)}</span>
+                  </div>)}
+                </div>}
+              </div>}
+            </div>;
+          })}
+        </div>
+      </section>
 
-                {zone.byMachine && zone.byMachine.length > 0 && (
-                  <div style={{ marginTop: 12, padding: "10px", background: C.amb+"08", borderRadius: 8 }}>
-                    <div style={{ display:"flex", alignItems:"center", gap:6, fontSize: 11, fontWeight: 700, color: C.amb, marginBottom: 6 }}>
-                      <FactoryIcon size={12} weight="bold"/>Por máquina
-                    </div>
-                    {zone.byMachine.map(m => (
-                      <div key={m.machine} style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        fontSize: 11,
-                        padding: "3px 0",
-                        color: C.t2
-                      }}>
-                        <span>{MACHINES.find(x => x.id === m.machine)?.name || m.machine} · {m.count} órd</span>
-                        <span style={{ fontWeight: 600, color: C.tx }}>
-                          ${m.money.toLocaleString("es-MX", { maximumFractionDigits: 0 })}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
+      {/* Lo listo que espera al cliente: cuáles son, la que lleva más tiempo primero */}
+      <section aria-labelledby="wip-espera-t" style={{ marginBottom: 28 }}>
+        <h3 id="wip-espera-t" style={H3_WIP}><BellSlashIcon size={16} weight="bold"/>Listo, espera que el cliente pida su factura</h3>
+        <p style={{ fontSize: 12, color: C.t2, margin: "-2px 0 10px", maxWidth: "62ch" }}>Ya se hizo y está en Salidas (o se recibió de maquila), «En espera» porque el cliente no ha pedido su factura o remisión. No es trabajo de la planta: se entrega y se cobra en cuanto la pida.</p>
+        {espera.length === 0 ? <p style={{ fontSize: 12, color: C.t2, margin: 0 }}>Ninguna orden lista espera al cliente.</p>
+        : <div data-wip-lista="espera" style={{ ...LISTA_WIP, padding: "6px 6px 8px" }}>
+          <EncabezadoWip a="Lista desde" b="Sin IVA"/>
+          {(todas.espera ? espera : espera.slice(0, 5)).map(f => <FilaDeWip key={f.o.id} f={f} onAction={onAction} dias={listaDesde(f.dias)}/>)}
+          {espera.length > 5 && !todas.espera && verLas("espera", espera.length)}
+        </div>}
+      </section>
 
-      {/* Top 5 clientes */}
-      <h3 style={{ display:"flex", alignItems:"center", gap:8, fontSize: 14, fontWeight: 700, color: C.tx, margin: "0 0 12px" }}><TrophyIcon size={16} weight="bold"/>Top 5 clientes con dinero atorado</h3>
-      <div style={{
-        background: "#fff",
-        borderRadius: 12,
-        border: "1px solid " + C.bd,
-        overflow: "hidden",
-        marginBottom: 24
-      }}>
-        {topClients.map((c, i) => (
-          <div key={c.client} style={{
-            padding: "10px 16px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            borderBottom: i < topClients.length - 1 ? "0.5px solid " + C.bd : "none"
-          }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <span style={{
-                fontSize: 16,
-                fontWeight: 800,
-                color: i === 0 ? "#FFD700" : i === 1 ? "#C0C0C0" : i === 2 ? "#CD7F32" : C.t3,
-                width: 20
-              }}>
-                {i + 1}
-              </span>
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: C.tx }}>{c.client}</div>
-                <div style={{ fontSize: 10, color: C.t3 }}>{c.count} órd · {c.stages}</div>
-              </div>
-            </div>
-            <span style={{ fontSize: 14, fontWeight: 700, color: C.tx }}>
-              ${c.money.toLocaleString("es-MX", { maximumFractionDigits: 0 })}
+      {/* Top 5 clientes con dinero en proceso (sin lo que espera al cliente) */}
+      {topClients.length > 0 && <section aria-labelledby="wip-top-t" style={{ marginBottom: 28 }}>
+        <h3 id="wip-top-t" style={H3_WIP}><TrophyIcon size={16} weight="bold"/>Top 5 clientes con dinero en proceso</h3>
+        <div style={LISTA_WIP}>
+          {topClients.map((c, i) => <div key={c.key} style={{ display: "grid", gridTemplateColumns: "24px minmax(0,1fr) auto", gap: 12, alignItems: "baseline", padding: "10px 16px", borderTop: i ? "1px solid " + C.bd : "none" }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: C.t2, fontVariantNumeric: "tabular-nums" }}>{i + 1}</span>
+            <span style={{ minWidth: 0 }}>
+              <span style={{ display: "block", fontSize: 13, fontWeight: 600, color: C.tx }}>{c.client}</span>
+              <span style={{ display: "block", fontSize: 12, color: C.t2, marginTop: 2 }}>{nOrdenes(c.count)} · {c.stages}</span>
             </span>
-          </div>
-        ))}
-      </div>
+            <span style={{ fontSize: 14, fontWeight: 700, color: C.tx, fontVariantNumeric: "tabular-nums" }}>{pesosWip(c.money)}</span>
+          </div>)}
+        </div>
+      </section>}
 
-      {/* Alertas: órdenes sin precio */}
-      {totals.withoutPriceList.length > 0 && (
-        <>
-          <h3 style={{ display:"flex", alignItems:"center", gap:8, fontSize: 14, fontWeight: 700, color: C.amb, margin: "0 0 12px" }}>
-            <WarningIcon size={16} weight="fill"/>Órdenes sin precio capturado
-          </h3>
-          <div style={{
-            background: C.amb+"08",
-            border: "1px solid "+C.amb+"40",
-            borderRadius: 12,
-            overflow: "hidden"
-          }}>
-            {totals.withoutPriceList.map((o, i) => (
-              <div key={o.id} style={{
-                padding: "10px 16px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                borderBottom: i < totals.withoutPriceList.length - 1 ? "0.5px solid "+C.amb+"25" : "none"
-              }}>
-                <div>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: C.tx }}>
-                    {o.production_number || "—"} · {(o.client || "—").trim()}
-                  </span>
-                  <div style={{ fontSize: 10, color: C.t3, marginTop: 2 }}>
-                    <StageLbl stage={o.stage} size={10}/> · {daysAgo(o.created_at)} días
-                  </div>
-                </div>
-                <button
-                  onClick={() => onAction(o.id, "edit")}
-                  style={{
-                    padding: "6px 12px",
-                    fontSize: 11,
-                    fontWeight: 600,
-                    background: C.amb,
-                    color: "#fff",
-                    border: "none",
-                    borderRadius: 8,
-                    cursor: "pointer",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 5
-                  }}
-                >
-                  <NotePencilIcon size={12} weight="bold"/>Editar Precio
-                </button>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
+      {/* Órdenes sin precio: no suman arriba */}
+      {sinPrecio.length > 0 && <section aria-labelledby="wip-sp-t">
+        <h3 id="wip-sp-t" style={{ ...H3_WIP, color: C.wnInk }}><WarningIcon size={16} weight="fill"/>Órdenes sin precio capturado</h3>
+        <p style={{ fontSize: 12, color: C.t2, margin: "-2px 0 10px" }}>No suman en las cifras de arriba.</p>
+        <div style={LISTA_WIP}>
+          {sinPrecio.map((o, i) => <div key={o.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "10px 16px", borderTop: i ? "1px solid " + C.bd : "none" }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: C.tx }}>{o.production_number || "Sin folio"} · {(o.client || "Sin cliente").trim()}</div>
+              <div style={{ fontSize: 12, color: C.t2, marginTop: 2 }}><StageLbl stage={o.stage} size={12}/> · {capturadaHace(o.created_at)}</div>
+            </div>
+            <button type="button" onClick={e => { if (e.detail > 1) return; onAction(o.id, "edit"); }} style={{ ...bs(C.wnInk), flexShrink: 0 }}><NotePencilIcon size={12} weight="bold"/>Editar precio</button>
+          </div>)}
+        </div>
+      </section>}
+      </>}
     </div>
   );
 }
@@ -24006,7 +23849,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         {/* v10.84.125 — «Todas» en su vista (VistaTodas): de 40 en 40, las activas primero, el filtro por estado y sin cifras sin lectura */}{view==="orders"&&<VistaTodas orders={filteredOrders} search={search} onClearSearch={()=>setSearch("")} role={user} userLogin={userLogin} onAction={handleAction} actionLoading={actionLoading} onNueva={(user==="admin"||isSec(user))?()=>{setEditO(null);setView("form")}:null} leido={!!lectura.ok}/>}
         {view==="archive"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:8}}><ArchiveIcon size={18} weight="bold"/>Archivo de Completadas</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Órdenes entregadas organizadas por fecha{search?<> · <MagnifyingGlassIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:1}}/>"{search}"</>:""}</p>{!archiveLoaded?<div style={{textAlign:"center",padding:"40px 20px"}}><button onClick={loadArchive} style={{...bt(C.ac),fontSize:14,padding:"14px 28px"}}><FolderOpenIcon size={14} weight="bold"/>Cargar Archivo Completo</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Las órdenes activas ya están cargadas. Presiona para cargar el historial completo.</p></div>:<Archive orders={filteredOrders} role={user} onAction={handleAction} userLogin={userLogin}/>}</div>}
         {view==="analytics"&&user==="admin"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px",textAlign:"center"}}>Analytics</h2>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}><ChartBarIcon size={14} weight="bold"/>Cargar datos completos para Analytics</button></div>:<Analytics orders={viewOrders} onReload={reload}/>}</div>}
-        {view==="wip"&&user==="admin"&&<WIPDashboard orders={orders} role={user} onAction={handleAction}/>}
+        {view==="wip"&&user==="admin"&&<WIPDashboard orders={orders} role={user} onAction={handleAction} leido={!!lectura.ok}/>}
         {view==="health"&&(user==="admin"||user==="secretaria"||user==="karla")&&<OperationalHealthView orders={orders} role={user} userLogin={userLogin} notifications={notifications} maintenance={maintenance} maintKey={maintKey} purchaseOrders={purchaseOrders} onAction={handleAction} setConfirmModal={setConfirmModal} showToast={showToast} reload={reload} reloadNotifications={()=>db.loadNotifications(notifKey).then(setNotifications)} leido={!!lectura.ok}/>}
         {/* 🗼 v10.58.52 — Torre de Control (admin) */}
         {view==="torre"&&user==="admin"&&<ControlTowerView orders={orders} onAction={handleAction} onSnooze={snoozeOrder} onUnsnooze={unsnoozeOrder} onNudge={nudgeDiag} onNudgeBatch={nudgeBatch} onOpenHealth={()=>setView("health")} dayTick={dayTick} maintKey={maintKey} leido={!!lectura.ok}/>}

@@ -12,6 +12,43 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.142 — «Dinero en Proceso»: lo listo que espera al cliente va aparte, y sin lectura no dice «$0» — 16-oct-2026
+
+**Qué pasaba.** La pasada de `/impeccable critique` de la noche del 16-oct sobre «Dinero en Proceso» (Dirección, `WIPDashboard`; 17/40, snapshot
+`.impeccable/critique/2026-10-17T05-04-22Z__src-app-jsx-dinero-en-proceso.md`). Medido ese día en producción: 58 activas por $660,062 sin IVA, y de eso
+**$296,287 (45 %) eran 21 órdenes LISTAS** (las 14 de Salidas y las 7 recibidas de maquila, todas «En espera: el cliente no ha pedido factura») sumadas como
+«capital atorado» por zona con lo que de verdad está en proceso: el mismo número engañoso que Marcelo vio en el calendario y en Analytics (v10.84.140).
+Además: sin una lectura buena decía «Total $0», «Órdenes activas 0» y «Sin precio 0» con su palomita verde (la regla 12); «d prom» contaba desde la
+captura (una orden de septiembre recién llegada a Listas sumaba 26 días); ni las zonas ni las órdenes se abrían con el teclado, y «+ N más» no se abría
+con nada; cuatro tarjetas de número grande (la cuarta, con el nombre de un cliente de etiqueta); «órd», «M $», «Total $$$»; el color de cada zona como
+texto (Producción 2.1:1, Captura 2.2:1), «Editar Precio» blanco sobre ámbar (2.2:1) y letra de 9 y 10 px. 🔥 Y la prueba encontró dos que la crítica no
+vio: una orden «En Stock» o con su cancelación contaba en el total (y encabezaba el top 5) sin caer en ninguna zona —en el banco el total decía $254,000
+con $66,000 en proceso; hoy no hay ninguna en producción—, y el margen de la maquila tomaba todo el precio de la que no tiene costo.
+
+**Qué se cambió** (sólo `WIPDashboard`; App le pasa `leido`):
+- Arriba, un renglón: «En proceso $X · N órdenes», «Listo, espera que el cliente pida su factura $Y · M órdenes» (`esperaAlCliente`, la regla de
+  v10.84.140) y cuántas no tienen precio (no suman). Sin IVA, dicho, y con centavos cuando los hay (redondeada cada zona a pesos por su lado, las zonas no
+  sumaban lo de arriba).
+- «En proceso, por zona»: cada zona es un botón que se abre (varias a la vez), con sus órdenes por etapa (botones que abren el detalle), los días hábiles
+  EN LA ETAPA (`daysInStage`), «Ver las N» (el foco pasa a la primera de las que aparecen) y el margen de la maquila sólo de las maquilas con precio y costo.
+- «Listo, espera que el cliente pida su factura»: cuáles son, la que lleva más tiempo lista primero; cada una abre su detalle.
+- El top 5 es de lo que está en proceso, sin medallas; las órdenes sin precio con «Editar precio». Un precio de cero o menos es un precio que falta: no resta.
+- Sin lectura: «Sin cifras mientras no se lea de la base»; leído y sin nada: «No hay órdenes en proceso». No cuentan «En Stock» ni la orden con su cancelación.
+- El segundo clic de un doble clic no cuenta (con «Ver las N» abría la orden que aparece bajo el ratón, cerraba la zona recién abierta y pedía dos veces la
+  forma de «Editar precio»). Tintas con AA, nada de menos de 11 px y los renglones de explicación de ~62 caracteres.
+
+**Cómo se probó.** Tanda nueva `wip` (32; banco `gen-wip.mjs` con la línea de App que la monta y el reloj fijo en el viernes 16 a las 12:00). Vuelta 1
+contra v10.84.141: fallaban 19 de 21 (pasaban sólo las del ancho a 1366 y 1920); una de ellas era de la prueba (wip-07 contaba dos veces el folio que el
+cliente del banco lleva en su nombre; corregida para contar folios distintos). Vuelta 2, por donde no se diseñó: con centavos las zonas no sumaban lo de
+arriba (wip-19: $66,002 contra $66,001) y un precio negativo restaba y salía «$-2,000» (wip-20): dos fallas de mi primer arreglo. Vuelta 3, en los
+arreglos: con el teclado «Ver las 7» perdía el foco hasta el principio de la página (wip-24), el doble clic en «Ver las 7» abría P-0724 (wip-26) y el doble
+clic en una zona la volvía a cerrar (wip-27). Vuelta 4 (la última): el doble clic en «Editar precio» pedía dos veces la forma (wip-30; venía de antes).
+Ahora 32 de 32; contra v10.84.141 fallan 29. El detector de la skill en el navegador, sobre el banco: antes, el ámbar a 2.0:1, el blanco sobre ámbar a
+2.2:1, gris a 4.2:1, 10 px y renglones de ~177 caracteres; después, sólo lo de toda la app (la letra única, la jerarquía de 12 a 20 px). Los 25 bancos se
+generan con el App.jsx nuevo sin usar nada que no traigan; build y `probar-alcance` en verde.
+
+**En producción:** (pendiente)
+
 ## v10.84.141 — «Aplicar saldo» (Corona) ya no promete un descubierto que la base no deja — 16-oct-2026
 
 **Qué pasaba.** Lo encontró la sesión de CobranzaFlow al revisar la decisión de Corona (16-oct). En «Asignar folio y entregar» de un cliente Corona, con
