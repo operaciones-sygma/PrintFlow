@@ -17151,11 +17151,15 @@ function Archive({orders,role,onAction,userLogin}) {
   //   se llama como es (decía «Facturado» a lo entregado sin IVA, como el Dashboard antes de v10.84.124), el vendedor cuenta lo que lleva como vendedor
   //   (la ficha ya lo hacía: isVendedorOwnerByAgent; a Genaro le faltaban las que captura Lupita, $34,660 en 120 días), y el resumen separa lo entregado.
   const archiveDate=o=>o.stage.includes("cancelled")?(o.cancelled_at||o.created_at):(o.delivered_at||o.deliveredAt||o.created_at);
-  const delivered=orders.filter(o=>isFinalStage(o)&&archiveDate(o));
+  // v10.84.152 — el vendedor ve sólo lo suyo, aunque arriba esté «Todas» (Marcelo, 17-oct: «escojo tus recomendaciones»): lo que capturó o lleva como
+  //   vendedor (`esDelVendedor`, la regla de la ficha y del historial del cliente). Antes veía las entregadas y canceladas de todos (sin su importe) y su
+  //   ingreso era sólo lo suyo: dos cuentas distintas en la misma pantalla
+  const suyas=useMemo(()=>role==="vendedor"?orders.filter(o=>!o.created_by||esDelVendedor(role,userLogin,o)):orders,[orders,role,userLogin]);
+  const delivered=suyas.filter(o=>isFinalStage(o)&&archiveDate(o));
 
   // Group by year → month → week
   const tree=useMemo(()=>{
-    const fin=orders.filter(o=>(o.stage.includes("delivered")||o.stage.includes("cancelled"))&&archiveDate(o));
+    const fin=suyas.filter(o=>(o.stage.includes("delivered")||o.stage.includes("cancelled"))&&archiveDate(o));
     const t={};
     fin.forEach(o=>{
       const d=new Date(archiveDate(o));
@@ -17170,7 +17174,7 @@ function Archive({orders,role,onAction,userLogin}) {
       t[y][m][w].push(o);
     });
     return t;
-  },[orders]);
+  },[suyas]);
 
   const years=Object.keys(tree).sort((a,b)=>b-a);
 
@@ -17189,6 +17193,7 @@ function Archive({orders,role,onAction,userLogin}) {
   const hp=role==="produccion"||role==="preprensa"||role==="german";
 
   return <div>
+    {role==="vendedor"&&<p data-solo-lo-suyo style={{fontSize:12,color:C.t2,margin:"0 0 10px"}}>Sólo tus órdenes: las que capturaste o llevas como vendedor.</p>}
     <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
       <div style={{background:C.sf,borderRadius:10,padding:"8px 14px",fontSize:12}}>
         <span style={{color:C.t2,fontWeight:600}}>Entregadas: </span>

@@ -157,10 +157,33 @@ await caso("arc-15-la-semana-de-un-dia", "caso=bordes", async p => {
   const etiquetas = await semanas(p).evaluateAll(xs => xs.map(x => x.innerText.replace(/\s+/g, " ").trim()));
   ok("arc-15-la-semana-de-un-dia", etiquetas.some(e => /^El 31\b/.test(e)), `las semanas de mayo: ${etiquetas.map(e => "«" + e.slice(0, 20) + "»").join(", ") || "ninguna"} (el domingo 31 es una semana de un día: «El 31»)`);
 });
-await caso("arc-16-el-vendedor-no-ve-el-importe-de-lo-ajeno", "rol=vendedor", async p => {
-  await abrirMes(p, "Octubre 2026"); await buscarEnSemanas(p, /DE MANUEL/);
-  const ajena = ((await p.getByRole("button", { name: /^Orden P-0903/ }).first().innerText().catch(() => "")) || (await texto(p)).match(/DE MANUEL[^$]{0,80}\$?[\d,.]*/)?.[0] || "").replace(/\s+/g, " ");
-  ok("arc-16-el-vendedor-no-ve-el-importe-de-lo-ajeno", !!ajena && !/\$\d/.test(ajena), `Genaro, la de Manuel (P-0903): «${ajena.slice(0, 80)}» ${/\$\d/.test(ajena) ? "con su importe" : "sin importe"}`);
+// (arc-16 afirmaba que Genaro veía la de Manuel sin su importe; desde v10.84.152 no la ve: arc-18)
+
+// ── vuelta 3 (v10.84.152; Marcelo, 17-oct: «escojo tus recomendaciones»): el vendedor ve sólo lo suyo (lo que capturó o lleva como vendedor), aunque arriba
+//   esté «Todas» (el banco le pasa todas, como «Todas»). Antes veía las entregadas y canceladas de todos y su ingreso era sólo lo suyo. Escritas antes del arreglo ──
+await caso("arc-18-el-vendedor-ve-solo-lo-suyo", "rol=vendedor", async p => {
+  const t0 = await texto(p), ent = (t0.match(/Entregadas:\s*(\d+)/) || [])[1], septiembre = await mes(p, "Septiembre 2026").count();
+  await abrirMes(p, "Octubre 2026");
+  const textos = [], n = await semanas(p).count();
+  for (let i = 0; i < n; i++) { await semanas(p).nth(i).click(); await espera(p); textos.push(await texto(p)); }
+  const todo = textos.join(" "), ajenas = ["DE MANUEL", "CANCELADA EN OCTUBRE"].filter(c => todo.includes(c));
+  ok("arc-18-el-vendedor-ve-solo-lo-suyo", /DE GENARO POR LUPITA/.test(todo) && /DE GENARO\b/.test(todo) && !ajenas.length && ent === "2" && !/Canceladas:/.test(t0) && !septiembre,
+    `Genaro con «Todas» arriba: «Entregadas: ${ent ?? "?"}» (debe 2: las suyas)${/Canceladas:/.test(t0) ? ", con «Canceladas» (la cancelada es de Manuel)" : ""}; en octubre ${ajenas.length ? "SALEN las ajenas: " + ajenas.join(", ") : "sólo las suyas"}; septiembre ${septiembre ? "SALE (sólo trae una de Manuel)" : "no sale"}`);
+});
+await caso("arc-19-el-vendedor-sabe-que-ve-lo-suyo", "rol=vendedor", async p => {
+  const t = await texto(p);
+  ok("arc-19-el-vendedor-sabe-que-ve-lo-suyo", /Sólo tus órdenes/.test(t), `Genaro: ${/Sólo tus órdenes/.test(t) ? "dice que son sólo las suyas" : "nada dice que son sólo las suyas"}`);
+});
+
+// ── vuelta 4 (v10.84.152): los demás siguen viendo todo ──
+await caso("arc-20-lupita-sigue-viendo-todo", "rol=secretaria", async p => {
+  const t0 = await texto(p), ent = (t0.match(/Entregadas:\s*(\d+)/) || [])[1];
+  await abrirMes(p, "Octubre 2026");
+  const textos = [], n = await semanas(p).count();
+  for (let i = 0; i < n; i++) { await semanas(p).nth(i).click(); await espera(p); textos.push(await texto(p)); }
+  const todo = textos.join(" ");
+  ok("arc-20-lupita-sigue-viendo-todo", ent === "5" && /DE MANUEL/.test(todo) && /DE GENARO/.test(todo) && !/Sólo tus órdenes/.test(t0),
+    `Lupita: «Entregadas: ${ent ?? "?"}» (debe 5); ${/DE MANUEL/.test(todo) && /DE GENARO/.test(todo) ? "ve las de Manuel y de Genaro" : "LE FALTAN órdenes"}${/Sólo tus órdenes/.test(t0) ? "; DICE «Sólo tus órdenes»" : ""}`);
 });
 
 await browser.close();
