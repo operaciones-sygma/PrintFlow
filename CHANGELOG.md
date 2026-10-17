@@ -12,6 +12,123 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.156 — El Inventario Cuadra dice lo que se llevó cada cliente del apartado — 17-oct-2026
+
+**Qué pasaba.** Una pregunta de la critique del Inventario Cuadra (v10.84.130) que no tenía recomendación; Marcelo, 17-oct, a la recomendación: «si hazlo».
+Los productos de un apartado compartido (pool) sólo decían «📦 Pool Cuadra»: nadie sabía quién se los llevaba. La base sí lo sabe: cada salida trae su
+orden y su cliente (desde el 27-may: MANUFACTURERA DE BOTAS CUADRA 1,299,475 piezas en 142 salidas, FÁBRICA DE ALTA CALIDAD 111,400 en 50, TIENDAS
+CUADRA 28,500 en 17).
+
+**Qué se cambió.** «Lo que se llevó cada cliente del Pool …», plegado arriba del catálogo: por cliente (el de la orden de cada salida; lo mismo escrito
+distinto cuenta junto), piezas, salidas y la última, y desde cuándo. Una lectura nueva, sólo de lectura (`db.loadSalidasDelApartado`: TODAS las salidas de
+los productos de un pool, por páginas, con el cliente de su orden), por su lado como las demás del inventario: si falla, lo dice con «Reintentar» y no
+«Nadie se ha llevado nada». El recorrido de producción ahora abre también el Inventario Cuadra (no lo abría).
+
+**Cómo se probó.** Tanda `inventario`: 3 nuevas (el banco simula la lectura nueva; `falla=apartado`). Vuelta 1 contra v10.84.149: fallaban las 2 (nada decía quién
+se llevó lo del apartado; con la lectura caída, nada). Vuelta 2: «Reintentar» trae lo del apartado: sin fallas. El recorrido de producción ahora abre el
+Inventario Cuadra y su apartado (sólo lee). **Las siete se probaron juntas:** los 31 bancos se generan con el App.jsx de la 156; build y `probar-alcance` en
+verde; las tandas tocadas completas (sesion 112, auditoria 32, archivo 19, cancelaciones-vista 29, salud 51, inventario 24, detalle 213, espera 25).
+
+**En producción:** (pendiente)
+
+## v10.84.155 — «Datos incompletos»: cada orden dice lo demás que le falta — 17-oct-2026
+
+**Qué pasaba.** Una pregunta de la critique de «Datos Pendientes» (v10.84.123) que no tenía recomendación; Marcelo, 17-oct: «si hazlo». Lo que falta va por
+listas (sin fecha, sin teléfono, maquila sin proveedor…): una orden a la que le faltan dos cosas salía en dos listas sin decirlo, y Lupita la abría dos
+veces.
+
+**Qué se cambió.** Cada renglón dice también lo demás que le falta a ESA orden («También le falta: costo del proveedor»), el precio incluido, para llenarlo
+todo al editarla una vez. «Vencida» no es un dato: no entra.
+
+**Cómo se probó.** Tanda `salud`: dp-46. Vuelta 1 contra v10.84.149: ningún renglón decía lo demás que le falta (P-0650, maquila sin proveedor ni costo, salía en
+dos listas sin decirlo).
+
+**En producción:** (pendiente)
+
+## v10.84.154 — «Datos Pendientes»: el pulso, un renglón por persona con sus estancadas — 17-oct-2026
+
+**Qué pasaba.** Una pregunta de la critique de «Datos Pendientes» (v10.84.123) que no tenía recomendación; Marcelo, 17-oct: «si hazlo». El pulso por
+responsable era una tarjeta por persona con su número en grande (la plantilla de tarjetas iguales que la critique marcó) y «Sin movimiento: hasta N h», las
+horas de su orden más quieta, que contaban también lo que espera su fecha de entrega en Salidas o recibido de maquila (no está atorado).
+
+**Qué se cambió.** Un renglón por persona: cuántas lleva y, en su tinta, sus vencidas, urgentes y ESTANCADAS (la regla de «Estancadas», `getStale`; la
+cuenta se rehace al caer o reparar una máquina, `maintKey`), «al día» si no tiene nada de eso, «Tú» en la propia, y «Ver las N».
+
+**Cómo se probó.** Tanda `salud` (con la 155): 3 nuevas. Vuelta 1 contra v10.84.149: fallaban las 2 (cinco tarjetas de 160 a 178 px con su número grande;
+«Sin movimiento: hasta …» y ninguna estancada). Vuelta 2: el doble clic en «Ver las N» abría y volvía a plegar (dp-45): arreglado con la guarda del doble clic.
+
+**En producción:** (pendiente)
+
+## v10.84.153 — «Cancelaciones» empieza por las activas — 17-oct-2026
+
+**Qué pasaba.** Una de las preguntas de la critique de «Cancelaciones» (v10.84.144). Marcelo, 17-oct: «escojo tus recomendaciones». La lista para elegir
+traía TODAS las órdenes no canceladas, también las entregadas y facturadas, 30 a la vez y por fecha de captura: lo que de verdad se cancela (lo que sigue
+en la planta) quedaba revuelto con lo ya entregado, que además sólo Dirección puede cancelar (nota de crédito).
+
+**Qué se cambió.** La lista empieza por las activas; las entregadas se ven con «Ver también las entregadas (N)» y se esconden con «Sólo las activas» (lo
+elegido se queda elegido). Si lo buscado sólo está entre las entregadas, dice «Sin órdenes activas que coincidan» con el mismo botón.
+
+**Cómo se probó.** Tanda `cancelaciones-vista`: 4 nuevas. Vuelta 1 contra v10.84.149: fallaban las 3 (las entregadas revueltas, sin el botón, lo buscado sin
+ofrecer). Vuelta 2: el doble clic en «Ver también las entregadas» pasaba de suerte (el botón se recorre al abrirse la lista): lleva la guarda del doble clic de
+la app. `elegir` de la tanda trae las entregadas cuando la que se quiere no está en la lista; cnv-25 buscaba «(1)» en el botón del lote, que sólo dice el
+número con dos o más: corregido (la elegida se ve en su etiqueta, «P-0802 · F-120»).
+
+**En producción:** (pendiente)
+
+## v10.84.152 — El «Archivo» del vendedor enseña sólo lo suyo — 17-oct-2026
+
+**Qué pasaba.** Una de las preguntas de la critique del «Archivo» (v10.84.145). Marcelo, 17-oct: «escojo tus recomendaciones». Con «Todas» arriba, el
+vendedor veía las entregadas y canceladas de todos (las ajenas sin su importe) y su ingreso contaba sólo lo suyo: dos cuentas distintas en la misma
+pantalla («Entregadas: 5», ingreso de 2).
+
+**Qué se cambió.** Para el vendedor, el Archivo es lo suyo: lo que capturó o lleva como vendedor (`esDelVendedor`, la regla de la ficha y del historial
+del cliente, v10.84.148), aunque arriba esté «Todas», y lo dice («Sólo tus órdenes: las que capturaste o llevas como vendedor»). Los demás roles, igual.
+
+**Cómo se probó.** Tanda `archivo`: 3 nuevas. Vuelta 1 contra v10.84.149: fallaban las 2 (Genaro veía «Entregadas: 5» con las de Manuel y la cancelada; nada
+decía que eran sólo las suyas). Vuelta 2: Lupita sigue viendo todo. arc-16 (Genaro veía la de Manuel sin su importe) se fue con la decisión: ya no la ve.
+
+**En producción:** (pendiente)
+
+## v10.84.151 — «Auditoría» audita las series de hoy; las de Alpha, aparte — 17-oct-2026
+
+**Qué pasaba.** Una de las preguntas de la critique de «Auditoría» (v10.84.146). Marcelo, 17-oct: «escojo tus recomendaciones». La pantalla juntaba en la
+misma cuenta las series de hoy (F- y RS-, que timbra SYGMA desde el corte del 1-sep) con las de Alpha (D- y R-, que corrieron hasta septiembre): sus
+huecos son historia que ya no se corrige aquí, y revueltos con los de hoy hacían ruido; los botones decían «Facturas (D-XXXX)» y «Remisiones (R-XXXX)».
+
+**Qué se cambió.** Se auditan las de hoy (`SERIES_DE_HOY`: F- para facturas, RS- para remisiones): folios, huecos, duplicados, compartidos, el rango y el
+CSV. Las de Alpha (y cualquier otra serie) se ven aparte con «Alpha · D-» / «Alpha · R-», para consultarlas; sin folios de Alpha en el periodo, dice que
+Alpha timbró hasta septiembre y que «Todo el historial» los trae. Lo buscado que está en el otro conjunto se ofrece («Coinciden N en Alpha: verlas»). La
+clave dice dónde se busca lo faltante (CobranzaFlow para las de hoy, Alpha para las de Alpha).
+
+**Cómo se probó.** Tanda `auditoria`: 10 nuevas (el banco con `remalpha=1`: dos remisiones de Alpha con un hueco). Vuelta 1 contra v10.84.149: fallaban las
+6 (Alpha revuelta en la cuenta, sin «Alpha», buscar «D-6190» sin decir dónde, el CSV con Alpha, las R- revueltas con las RS-, sin decir dónde están las de
+Alpha). Vuelta 2: Alpha se queda al cambiar a remisiones, de Alpha a lo de hoy, el doble clic en «verlas» no abre una orden, los compartidos de su conjunto:
+sin fallas. aud-27 tenía un supuesto mío equivocado (un `\b` entre cifras que el texto de la página junta, «folios1 hueco»): corregido.
+
+**En producción:** (pendiente)
+
+## v10.84.150 — «Ya pidió factura» le abre a Karla «Asignar folio y entregar» — 17-oct-2026
+
+**Qué pasaba.** Una de las preguntas de la critique de «En espera» (v10.84.143). Marcelo, 17-oct: «escojo tus recomendaciones» (la recomendación: para
+Karla, que es quien folia; para los demás, como hoy). «Ya pidió factura» regresaba la orden a Salidas y Karla tenía que ir a buscarla a su cola para
+foliarla. Y al revisar las puertas: eran cinco (la ficha, su menú «Más», el botón de Karla en la ficha, el detalle y «Esperan factura del cliente» al pie de
+su cola, que llamaba directo a reactivar); un doble clic reactivaba dos veces (dos «🔔 Reactivada» en la bitácora: en «En espera» la ficha se va con 200 ms
+de animación y el segundo clic alcanzaba el botón).
+
+**Qué se cambió.** Para Karla, el botón dice «Ya pidió factura · Asignar folio»: reactiva y, si la base lo guardó, abre de una vez «Asignar folio y
+entregar» con la orden ya reactivada (si no tiene precio, primero se lo pide, como siempre). Sólo lo que ese botón folia (`seFoliaConAsignar`: lista, con su
+P-, sin folio ni partes ni plan ni folio agrupado, y que no sea un re-trabajo cubierto); lo demás y los demás roles, como antes. Las cinco puertas por la
+misma acción; `unsnoozeOrder` devuelve la orden reactivada (o null) y no reactiva dos veces la misma.
+
+**Cómo se probó.** Tanda `sesion` (la app REAL compilada contra una base de mentira): 9 nuevas, escritas antes del arreglo. Vuelta 1 contra v10.84.149:
+fallaban 3 de 6 (el botón no abría el folio, tampoco desde «Esperan factura del cliente» de su cola, y el doble clic reactivaba dos veces: dos «🔔
+Reactivada» en la bitácora) y pasaban las 3 que vigilan lo que no cambia (si la base no la reactivó no abre nada; Dirección y el re-trabajo cubierto, como
+antes). Vuelta 2, por donde no se diseñó: sin precio pide primero el precio, Esc con el folio abierto deja la orden reactivada en su cola, la maquila recibida
+también: sin fallas. La base simulada aprendió `escrituraFalla` (una tabla cuyas escrituras contestan 503). det-122 (el detalle dice lo mismo que la ficha)
+esperaba «· Reactivar» para Karla: cambia con la decisión. El banco del detalle copia a mano: ahora también `seFoliaConAsignar` y `etiquetaYaPidio`.
+
+**En producción:** (pendiente)
+
 ## v10.84.149 — «A tiempo» es haber quedado lista a tiempo, con o sin la pausa (y lo de hoy dice lo mismo) — 17-oct-2026
 
 **Qué pasaba.** La pregunta que dejó v10.84.140: en 120 días, 45 entregas quedaron listas a tiempo y se marcaron entregadas unos 4.6 días después SIN
