@@ -604,14 +604,14 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // CANCELADA rojo, folio fiscal índigo, venta-stock gris); se quitó su párrafo "Cómo interpretar". La sub-sección H-
 // pasa de muro de párrafo a una nota compacta de contexto (serie vieja + hint de badges). Cierra los 2 "idiomas de
 // explicación" que el re-critique marcó (Lupita, que vive en el tab P-, ya no recibe la versión de 2ª clase).
-// v10.72.78 — /impeccable polish (pase final del arco de Auditoría): (a) el toggle "¿Qué significan los badges?" gana
+// v10.72.78 — /impeccable polish (pase final del arco de Auditoría): (a) el toggle "¿Qué significa cada etiqueta?" gana
 // estado hover (fondo C.sf + color C.tx) y mejor touch target (padding 5×9, radius 8); (b) mientras concilia, el
 // número de "Gaps detectados" se atenúa (opacity .45, transición .25s) → ata el loading state a la métrica afectada:
 // el conteo provisional se "asienta" a la vista del usuario en vez de saltar en seco. Cierra el arco v10.72.74-78.
 // v10.72.77 — /impeccable distill (P3 del critique de Auditoría): la leyenda "Cómo interpretar" (un párrafo de ~150
 // palabras al fondo, no escaneable) se reemplazó por una CLAVE compacta colapsable ARRIBA de la lista, agrupada por
 // el contrato de color (verde=contabilizado/en-sistema, gris=inerte, ámbar=revisar, rojo=acción). Default cerrada
-// ("¿Qué significan los badges?"). Al quitar el muro del fondo, la lista vuelve a ser el cierre de pantalla (peak-end).
+// ("¿Qué significa cada etiqueta?"). Al quitar el muro del fondo, la lista vuelve a ser el cierre de pantalla (peak-end).
 // v10.72.76 — /impeccable harden (P3 del critique de Auditoría): la conciliación async ya no se vive como "los
 // números se mueven solos" ni se traga errores. Estado loading/error por cada RPC (Corona + cartera CobranzaFlow):
 // mientras cargan se muestra "Conciliando con CobranzaFlow…"; si una fuente falla, banner rojo con aviso explícito
@@ -18659,9 +18659,10 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
 // monte/desmonte con el modal (cerrar con Esc) y el estado expandido se resetee al reabrir.
 function SharedFoliosModal({sharedOCs, folioOrders, tColor, onNavigateToOC, onNavigateToOrder, onClose}){
   useEscClose(onClose);
+  useDevolverFoco(); const panelComp=useRef(null); useLayoutEffect(()=>{panelComp.current?.focus({preventScroll:true});},[]); // v10.84.146 (vuelta 3)
   const [expanded,setExpanded]=useState(null);
   return <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:16}}>
-    <div onClick={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Folios compartidos" style={{background:C.bg,borderRadius:20,padding:24,maxWidth:660,width:"96%",maxHeight:"85vh",overflowY:"auto"}}>
+    <div onClick={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Folios compartidos" ref={panelComp} tabIndex={-1} onKeyDown={atraparTab} style={{outline:"none",background:C.bg,borderRadius:20,padding:24,maxWidth:660,width:"96%",maxHeight:"85vh",overflowY:"auto"}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:6}}>
         <div style={{display:"flex",alignItems:"center",gap:8,fontSize:16,fontWeight:800}}><FileTextIcon size={17} weight="bold"/>Folios compartidos · {sharedOCs.length} OC{sharedOCs.length!==1?"s":""}</div>
         <button onClick={onClose} aria-label="Cerrar" style={{width:36,height:36,borderRadius:10,border:"0.5px solid "+C.bd,background:C.sf,color:C.t2,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center"}}><XIcon size={16} weight="bold"/></button>
@@ -19150,7 +19151,9 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
       const po=(purchaseOrders||[]).find(p=>p.id===group[0].purchase_order_id);
       return po && po.shared_invoice_folio===folio;
     };
-    const dupes=numbers.filter(n=>map[n].length>1 && !isSharedGroup(map[n]));
+    // v10.84.146 — duplicado es el mismo folio DENTRO de su serie (antes por número pelado: F-3 y C-3 contaban como duplicado; dormido mientras las
+    //   series no se enciman: hoy F-1 a F-191 y D-5791 a D-6198, R-1184 a R-1298 y RS-1 a RS-53)
+    const dupes=[];series.forEach(se=>Object.keys(bySerie[se]).forEach(k=>{const g=bySerie[se][k];if(g.length>1&&!isSharedGroup(g))dupes.push(se+"-"+k);}));
     let sharedCnt=0;
     if(numbers.length===0)return {sequence:[],gaps:[],duplicates:[],total:0,latest:null,oldest:null,sharedCount:0};
     const seq=[];const gapList=[];
@@ -19182,7 +19185,7 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
       const nums=Object.keys(bySerie[se]).map(x=>parseInt(x,10)).sort((a,b)=>a-b);
       return {serie:se,oldest:se+"-"+nums[0],latest:se+"-"+nums[nums.length-1]};
     });
-    return {sequence:seq,gaps:gapList,duplicates:dupes,total:numbers.length,rangos,
+    return {sequence:seq,gaps:gapList,duplicates:dupes,total:series.reduce((s,se)=>s+Object.keys(bySerie[se]).length,0),rangos,
             latest:rangos.length?rangos[rangos.length-1].latest:null,
             oldest:rangos.length?rangos[0].oldest:null,sharedCount:sharedCnt};
   },[folioOrders,sharedFolioStrings,purchaseOrders]);
@@ -19206,7 +19209,7 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
     // v10.43.30 — Columnas extras para Corona OC
     const rows=[["Folio","Status","Origen","Cliente","Producción/PO Corona","OrdenID","Asignado","Por","Anticipado","Cancelada","Monto c/IVA"]];
     sequence.forEach(item=>{
-      if(item.status==="gap"){rows.push([item.folio,"GAP","","","","","","","","",""])}
+      if(item.status==="gap"){rows.push([item.folio,"HUECO","","","","","","","","",""])}
       else{item.orders.forEach(o=>{
         const origen=o.isCoronaOC?"OC Crédito Corona":(o.isCobranza?(o.cobranzaKind==='externa'?(o.cobranzaStatus==='auto_zero'?"Auto-factura $0 (PADILLA)":o.cobranzaStatus==='pagada_alpha'?"Pagada directo en Alpha":"Cancelada en AlphaERP"):"CobranzaFlow (cartera)"):"Orden producción");
         const refProd=o.isCoronaOC?(o.coronaPoRef||""):(o.production_number||"");
@@ -19225,7 +19228,11 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
   const TIcon=type==="factura"?FileTextIcon:ReceiptIcon;
   return <div>
     <h2 style={{display:"flex",alignItems:"center",gap:8,fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px"}}><FilesIcon size={19} weight="bold"/>Auditoría</h2>
-    <p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Detección de gaps y duplicados · Read-only</p>
+    {/* v10.84.146 — /impeccable critique de «Auditoría» (17-oct; ~24/40): duplicados por serie, los folios P- y H- con sus ceros (la búsqueda armaba
+         «P-601» y buscar «P-0601», como se escribe, no encontraba nada; las filas y los huecos decían «P-601»), las filas y «Compartidos» con el teclado,
+         «huecos» en vez de «gaps», la clave con las series de hoy (F- y RS- las timbra SYGMA desde el 1-sep: no se buscan en Alpha), las cifras en un
+         renglón en vez de tarjetas de 22 px, tintas con AA. */}
+    <p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>Huecos y duplicados de los consecutivos. Sólo lectura.</p>
     {/* v10.43.16 — Tabs principales: folios fiscales (D-/R-) vs órdenes de producción (P-XXXX) */}
     {/* v10.72.82 — al cambiar de tab solo resetea statusChip (los chips difieren por tab); el search se PRESERVA (es texto agnóstico folio/cliente, para cruzar entre tabs sin perder la query). Antes (v10.43.20) reseteaba ambos. */}
     <div style={{display:"flex",gap:0,marginBottom:16,borderBottom:"1.5px solid "+C.bd}}>
@@ -19248,7 +19255,7 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
     </div>
     {tab==="folios"&&<>
     <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
-      {["factura","remision"].map(t=><button key={t} onClick={()=>setType(t)} style={{background:type===t?(t==="factura"?C.fac:C.live):C.bg,color:type===t?"#fff":C.tx,border:"1px solid "+(type===t?(t==="factura"?C.fac:C.live):C.bd),borderRadius:8,padding:"8px 14px",fontSize:12,fontWeight:700,display:"inline-flex",alignItems:"center",gap:6,cursor:"pointer"}}>{t==="factura"?<><FileTextIcon size={13} weight="bold"/>Facturas (D-XXXX)</>:<><ReceiptIcon size={13} weight="bold"/>Remisiones (R-XXXX)</>}</button>)}
+      {["factura","remision"].map(t=><button key={t} onClick={()=>setType(t)} style={{background:type===t?(t==="factura"?C.fac:C.okInk):C.bg,color:type===t?"#fff":C.tx,border:"1px solid "+(type===t?(t==="factura"?C.fac:C.okInk):C.bd),borderRadius:8,padding:"8px 14px",fontSize:12,fontWeight:700,display:"inline-flex",alignItems:"center",gap:6,cursor:"pointer"}}>{t==="factura"?<><FileTextIcon size={13} weight="bold"/>Facturas (D-XXXX)</>:<><ReceiptIcon size={13} weight="bold"/>Remisiones (R-XXXX)</>}</button>)}
       <button onClick={exportCSV} disabled={total===0} style={{...bt(C.ac),fontSize:11,padding:"6px 12px",opacity:total===0?0.4:1,cursor:total===0?"not-allowed":"pointer",marginLeft:"auto"}}><DownloadSimpleIcon size={13} weight="bold"/>Exportar CSV</button>
     </div>
     {/* v10.43.18 QW1 — Búsqueda por folio o cliente */}
@@ -19258,70 +19265,44 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
     </div>
     {/* v10.43.18 QW2 — Chips de filtro por status */}
     <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap"}}>
-      {[{id:"all",l:"Todos",c:C.ac},{id:"gap",l:<><WarningIcon size={11} weight="fill"/>Solo gaps</>,c:C.dn},{id:"duplicate",l:"Duplicados",c:C.wn},{id:"cancelled",l:"Canceladas",c:C.dn},{id:"preassigned",l:<><LightningIcon size={11} weight="fill"/>Pre-asignados</>,c:C.wn}].map(chip=>
-        <button key={chip.id} onClick={()=>setStatusChip(chip.id)} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:14,border:"1px solid "+(statusChip===chip.id?chip.c:C.bd),background:statusChip===chip.id?chip.c+"15":"transparent",color:statusChip===chip.id?chip.c:C.t2,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"'Geist',sans-serif"}}>{chip.l}</button>
+      {[{id:"all",l:"Todos",c:C.ac},{id:"gap",l:<><WarningIcon size={11} weight="fill"/>Sólo huecos</>,c:C.dn},{id:"duplicate",l:"Duplicados",c:C.wn},{id:"cancelled",l:"Canceladas",c:C.dn},{id:"preassigned",l:<><LightningIcon size={11} weight="fill"/>Anticipados</>,c:C.wn}].map(chip=>
+        <button key={chip.id} onClick={()=>setStatusChip(chip.id)} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:14,border:"1px solid "+(statusChip===chip.id?chip.c:C.bd),background:statusChip===chip.id?chip.c+"15":"transparent",color:statusChip===chip.id?tintaAA(chip.c):C.t2,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"'Geist',sans-serif"}}>{chip.l}</button>
       )}
     </div>
-    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:8,marginBottom:14}}>
-      <div style={{background:C.card,borderRadius:14,padding:"10px 14px",border:"1.5px solid "+tColor+"66",boxShadow:C.sh2}}>
-        <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Total emitidos</div>
-        <div style={{fontSize:22,fontWeight:800,color:tColor}}>{total}</div>
-      </div>
-      <div style={{background:C.card,borderRadius:14,padding:"10px 14px",border:"1.5px solid "+((reconciling||reconcileError)?C.t3:(gaps.length?C.dn:C.ok))+"66",boxShadow:C.sh2,transition:"border-color .25s ease"}}>
-        <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Gaps detectados</div>
-        {/* v10.72.80 — harden P1: mientras concilia (o si falla) NO mostrar el entero rojo provisional, que es accionable antes de ser confiable. Placeholder (reloj/"?") + borde neutro hasta que el dato cuadre. minHeight evita layout shift. */}
-        <div style={{fontSize:22,fontWeight:800,color:reconcileError?C.t3:(gaps.length?C.dn:C.ok),display:"flex",alignItems:"center",minHeight:27}} title={reconcileError?"Conteo no confiable: falló la conciliación, reintenta arriba":reconciling?"Conciliando con CobranzaFlow… el conteo aún no es definitivo":undefined}>{reconcileError?<span style={{color:C.t3}}>?</span>:reconciling?<HourglassIcon size={17} weight="bold" color={C.t3}/>:gaps.length}</div>
-      </div>
-      <div style={{background:C.card,borderRadius:14,padding:"10px 14px",border:"1.5px solid "+(duplicates.length?C.dn:C.ok)+"66",boxShadow:C.sh2}}>
-        <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Duplicados</div>
-        <div style={{fontSize:22,fontWeight:800,color:duplicates.length?C.dn:C.ok}}>{duplicates.length}</div>
-      </div>
-      {/* v10.72.82 — discoverability: entre 4 cards inertes esta es la única clickeable. Hint en pill de acento + hover con elevación (translateY+sombra) para que lea como botón. */}
-      <div onClick={sharedOCs.length?()=>setShowShared(true):undefined} title={sharedOCs.length?"Ver folios compartidos y sus órdenes vinculadas":undefined} onMouseEnter={sharedOCs.length?e=>{e.currentTarget.style.borderColor=C.ok;e.currentTarget.style.boxShadow="0 4px 12px -4px "+C.ok+"55";e.currentTarget.style.transform="translateY(-1px)"}:undefined} onMouseLeave={sharedOCs.length?e=>{e.currentTarget.style.borderColor=C.ok+"66";e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}:undefined} style={{background:C.card,borderRadius:14,padding:"10px 14px",border:"1.5px solid "+(sharedOCs.length?C.ok:C.t3)+"66",boxShadow:C.sh2,cursor:sharedOCs.length?"pointer":"default",transition:"border-color .15s, box-shadow .15s, transform .15s"}}>
-        <div style={{fontSize:10,color:C.t2,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"space-between",gap:4}}>Compartidos{sharedOCs.length>0&&<span style={{fontSize:8.5,color:C.ac,fontWeight:800,background:C.ac+"14",padding:"1px 5px",borderRadius:4,display:"inline-flex",alignItems:"center",gap:2,textTransform:"uppercase",letterSpacing:.3}}>Ver<CaretRightIcon size={8} weight="bold"/></span>}</div>
-        <div style={{fontSize:22,fontWeight:800,color:sharedOCs.length?C.ok:C.t3}}>{sharedOCs.length}</div>
-      </div>
-      <div style={{background:C.card,borderRadius:14,padding:"10px 14px",border:"1.5px solid "+C.t3+"66",boxShadow:C.sh2}}>
-        <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Rango</div>
-        {/* v10.77.1 — un renglon POR SERIE. Con una sola serie se ve igual que siempre; con D- y F-
-            conviviendo (post-corte) cada consecutivo muestra su propio rango, en vez de un rango
-            mezclado que no corresponde a ninguna de las dos. */}
-        {!(rangos||[]).length
-          ? <div style={{fontSize:13,fontWeight:700,lineHeight:1.3}}>—</div>
-          : (rangos||[]).map(r=>
-            <div key={r.serie} style={{fontSize:13,fontWeight:700,lineHeight:1.3,marginTop:rangos.length>1?4:0}}>
-              {rangos.length>1&&<span style={{fontSize:9.5,color:C.t2,fontWeight:700,marginRight:4}}>{r.serie}</span>}
-              {r.oldest}{r.latest!==r.oldest?<><br/>↓<br/>{r.latest}</>:""}
-            </div>)}
-      </div>
+    <div style={{display:"flex",flexWrap:"wrap",alignItems:"baseline",gap:"6px 22px",margin:"0 0 14px",fontSize:13,color:C.t2}}>
+      <span><b style={{fontSize:15,fontWeight:800,color:C.tx}}>{total}</b> {total===1?"folio":"folios"}</span>
+      <span title={reconcileError?"La cuenta no es confiable: falló la conciliación con CobranzaFlow (reintenta abajo)":reconciling?"Conciliando con CobranzaFlow: la cuenta todavía no es definitiva":undefined}>{reconcileError?<><b style={{fontSize:15,fontWeight:800,color:C.tx}}>?</b> huecos (sin conciliar)</>:reconciling?<>huecos: conciliando…</>:<><b style={{fontSize:15,fontWeight:800,color:gaps.length?C.dnInk:C.tx}}>{gaps.length}</b> {gaps.length===1?"hueco":"huecos"}</>}</span>
+      <span><b style={{fontSize:15,fontWeight:800,color:duplicates.length?C.dnInk:C.tx}}>{duplicates.length}</b> {duplicates.length===1?"duplicado":"duplicados"}</span>
+      <span><b style={{fontSize:15,fontWeight:800,color:C.tx}}>{sharedOCs.length}</b> {sharedOCs.length===1?"compartido":"compartidos"}{sharedOCs.length>0&&<button type="button" onClick={()=>setShowShared(true)} aria-label={"Compartidos: ver "+(sharedOCs.length===1?"el folio que cubre":"los "+sharedOCs.length+" folios que cubren")+" varias órdenes de una OC"} style={{marginLeft:6,background:"none",border:"none",padding:0,color:C.ac,fontWeight:700,fontSize:13,cursor:"pointer",textDecoration:"underline",fontFamily:"inherit"}}>ver cuáles</button>}</span>
+      {(rangos||[]).length>0&&<span>Rango: <b style={{color:C.tx,fontWeight:700}}>{rangos.map(r=>r.oldest===r.latest?r.oldest:r.oldest+" a "+r.latest).join(" · ")}</b></span>}
     </div>
     {/* v10.72.76 — harden: estado de conciliación. Mientras cargan los RPCs el conteo de gaps es provisional; si una fuente falla, aviso explícito (gaps falsos posibles) + reintento, en vez de tragarse el error. */}
     {reconcileError
       ? <div role="alert" style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",background:C.dn+"0c",border:"1px solid "+C.dn+"35",borderRadius:10,padding:"10px 12px",marginBottom:14}}>
           <WarningIcon size={15} weight="fill" color={C.dn} style={{flexShrink:0}}/>
-          <span style={{fontSize:11.5,color:C.tx,fontWeight:600,flex:"1 1 240px",minWidth:0,lineHeight:1.45}}>No se pudo conciliar con CobranzaFlow. El conteo de gaps puede estar inflado: algunos folios marcados <b style={{color:C.dn}}>FALTANTE</b> quizá ya estén en cartera o cancelados.</span>
+          <span style={{fontSize:11.5,color:C.tx,fontWeight:600,flex:"1 1 240px",minWidth:0,lineHeight:1.45}}>No se pudo conciliar con CobranzaFlow. La cuenta de huecos puede estar inflada: algunos folios marcados <b style={{color:C.dnInk}}>FALTANTE</b> quizá ya estén en cartera o cancelados.</span>
           <button onClick={retryReconcile} style={{...bs(C.dn),flexShrink:0}}><ArrowsClockwiseIcon size={13} weight="bold"/>Reintentar</button>
         </div>
       : reconciling
-      ? <div style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,color:C.t2,fontWeight:600,marginBottom:14,padding:"6px 10px",background:C.sf,borderRadius:8}}><HourglassIcon size={12} weight="bold"/>Conciliando con CobranzaFlow… el conteo de gaps puede bajar en un momento.</div>
+      ? <div style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,color:C.t2,fontWeight:600,marginBottom:14,padding:"6px 10px",background:C.sf,borderRadius:8}}><HourglassIcon size={12} weight="bold"/>Conciliando con CobranzaFlow… la cuenta de huecos puede bajar en un momento.</div>
       : null}
     {/* v10.72.73 — la sección inline de folios compartidos se movió a un MODAL (se abre desde la stat-card "Compartidos"); listaba todas las OCs inline y ocupaba demasiado espacio. El modal está al final del componente. */}
     {/* v10.72.77 — /impeccable distill: clave de badges colapsable, agrupada por el contrato de color (verde/gris/ámbar/rojo). Reemplaza el párrafo-leyenda de ~150 palabras que vivía al fondo; default cerrada (la mayoría ya conoce los badges). */}
     <div style={{marginBottom:12}}>
-      <button onClick={()=>setShowKey(s=>!s)} onMouseEnter={e=>{e.currentTarget.style.background=C.sf;e.currentTarget.style.color=C.tx}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=C.t2}} style={{display:"inline-flex",alignItems:"center",gap:5,background:"transparent",border:"none",color:C.t2,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"'Geist',sans-serif",padding:"5px 9px",borderRadius:8,marginLeft:-9,transition:"background .12s, color .12s"}}>¿Qué significan los badges?{showKey?<CaretUpIcon size={10} weight="bold"/>:<CaretDownIcon size={10} weight="bold"/>}</button>
+      <button aria-expanded={showKey} onClick={()=>setShowKey(s=>!s)} onMouseEnter={e=>{e.currentTarget.style.background=C.sf;e.currentTarget.style.color=C.tx}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=C.t2}} style={{display:"inline-flex",alignItems:"center",gap:5,background:"transparent",border:"none",color:C.t2,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"'Geist',sans-serif",padding:"5px 9px",borderRadius:8,marginLeft:-9,transition:"background .12s, color .12s"}}>¿Qué significa cada etiqueta?{showKey?<CaretUpIcon size={10} weight="bold"/>:<CaretDownIcon size={10} weight="bold"/>}</button>
       {showKey&&<div style={{marginTop:6,padding:"12px 14px",background:C.bg,borderRadius:10,border:"1px solid "+C.bd,display:"flex",flexDirection:"column",gap:11}}>
         {[
-          {dot:C.ok,tier:"Contabilizado · en el sistema",items:[["COMPARTIDO","1 factura cubre varias órdenes de una OC"],["EN COBRANZAFLOW","ya en cartera, facturada directo en Alpha"],["OC CRÉDITO CORONA","OC a crédito Corona, no orden de producción"]]},
+          {dot:C.ok,tier:"Contabilizado · en el sistema",items:[["COMPARTIDO","1 factura cubre varias órdenes de una OC"],["EN COBRANZAFLOW","en la cartera de CobranzaFlow sin orden aquí: por partes, del plan matriz o hecha sin orden"],["OC CRÉDITO CORONA","OC a crédito Corona, no orden de producción"]]},
           {dot:C.t3,tier:"Contabilizado · inerte (nada que hacer)",items:[["CANCELADA EN ALPHA","cancelada en Alpha; no sale en vigentes"],["AUTO-FACTURA $0","auto-factura interna de PADILLA en $0"],["PAGADA EN ALPHA","facturada y ya cobrada directo en Alpha"]]},
           {dot:C.wn,tier:"Revisar",items:[["DUPLICADO","mismo folio en varias órdenes sin razón fiscal"],["ANTICIPADO","folio asignado antes de entregar"]]},
-          {dot:C.dn,tier:"Acción",items:[["FALTANTE","hueco real: espera folio, o cancelado/sin capturar en Alpha"]]},
+          {dot:C.dn,tier:"Acción",items:[["FALTANTE","hueco real: el folio se consumió sin orden o se canceló sin registrarse (las series D- y R-, en Alpha)"]]},
         ].map((g,gi)=><div key={gi}>
           <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}><span style={{width:9,height:9,borderRadius:3,background:g.dot,flexShrink:0}}/><span style={{fontSize:10,fontWeight:800,color:C.tx,textTransform:"uppercase",letterSpacing:.3}}>{g.tier}</span></div>
           <div style={{display:"flex",flexDirection:"column",gap:2,paddingLeft:15}}>
             {g.items.map((it,ii)=><div key={ii} style={{fontSize:11,color:C.t2,lineHeight:1.45}}><b style={{color:C.tx,fontWeight:700}}>{it[0]}</b> · {it[1]}</div>)}
           </div>
         </div>)}
-        <div style={{fontSize:10,color:C.t3,borderTop:"1px solid "+C.bd,paddingTop:8}}>Para una auditoría a fondo, exporta el CSV y compáralo contra AlphaERP.</div>
+        <div style={{fontSize:10,color:C.t2,borderTop:"1px solid "+C.bd,paddingTop:8}}>Para revisar a fondo, exporta el CSV y compáralo con CobranzaFlow (y con Alpha, las series D- y R-).</div>
       </div>}
     </div>
     {(()=>{
@@ -19343,12 +19324,12 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
         return false;
       };
       const filteredSeq=sequence.filter(it=>matchesChip(it)&&matchesSearch(it));
-      if(sequence.length===0)return <div style={{textAlign:"center",padding:"40px 20px",color:C.t3,background:C.bg,borderRadius:10,border:"1px solid "+C.bd}}>
+      if(sequence.length===0)return <div style={{textAlign:"center",padding:"40px 20px",color:C.t2,background:C.bg,borderRadius:10,border:"1px solid "+C.bd}}>
         <TIcon size={46} color={C.ph}/>
         <div style={{fontSize:14,fontWeight:700,color:C.tx,marginTop:8}}>Sin folios en este periodo</div>
         <div style={{fontSize:11,color:C.t2,marginTop:4}}>Ajusta el filtro o carga el archivo histórico para ver más</div>
       </div>;
-      if(filteredSeq.length===0)return <div style={{textAlign:"center",padding:"30px 20px",color:C.t3,background:C.bg,borderRadius:10,border:"1px solid "+C.bd}}>
+      if(filteredSeq.length===0)return <div style={{textAlign:"center",padding:"30px 20px",color:C.t2,background:C.bg,borderRadius:10,border:"1px solid "+C.bd}}>
         <MagnifyingGlassIcon size={30} color={C.ph}/>
         <div style={{fontSize:13,fontWeight:600,color:C.tx,marginTop:6}}>Sin resultados con los filtros actuales</div>
         <div style={{fontSize:10,color:C.t2,marginTop:4}}>Limpia búsqueda o cambia el chip de status</div>
@@ -19372,14 +19353,14 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
         if(item.status==="gap"){
           const bk=gapBracket(item.n,item.serie);
           return <div key={"gap-"+item.folio} style={{padding:"10px 14px",borderBottom:"1px solid "+C.bd,background:C.dn+"08",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-            <div style={{display:"flex",alignItems:"center",gap:5,fontSize:14,fontWeight:800,color:C.dn,minWidth:80}}><WarningIcon size={13} weight="fill"/>{item.folio}</div>
-            <div style={{fontSize:12,color:C.dn,fontWeight:600}}>FALTANTE</div>
-            {(bk.prev||bk.next)&&<div style={{fontSize:10,color:C.t2,display:"inline-flex",alignItems:"center",gap:5,flexWrap:"wrap"}} title="Folios vecinos ya registrados — el hueco va entre estas fechas; ahí búscalo en Alpha">{bk.prev&&<span>{bk.prev.folio}{bk.prev.date?" · "+fShort(bk.prev.date):""}</span>}<span style={{color:C.t3}}>→</span>{bk.next&&<span>{bk.next.folio}{bk.next.date?" · "+fShort(bk.next.date):""}</span>}</div>}
+            <div style={{display:"flex",alignItems:"center",gap:5,fontSize:14,fontWeight:800,color:C.dnInk,minWidth:80}}><WarningIcon size={13} weight="fill"/>{item.folio}</div>
+            <div style={{fontSize:12,color:C.dnInk,fontWeight:600}}>FALTANTE</div>
+            {(bk.prev||bk.next)&&<div style={{fontSize:10,color:C.t2,display:"inline-flex",alignItems:"center",gap:5,flexWrap:"wrap"}} title="Folios vecinos ya registrados — el hueco va entre estas fechas; ahí búscalo en Alpha">{bk.prev&&<span>{bk.prev.folio}{bk.prev.date?" · "+fShort(bk.prev.date):""}</span>}<span style={{color:C.t2}}>→</span>{bk.next&&<span>{bk.next.folio}{bk.next.date?" · "+fShort(bk.next.date):""}</span>}</div>}
             {/* v10.77.5 — el subtexto tambien cableaba Alpha. Un hueco de la serie propia (F-) no se
                 busca en Alpha: o se cancelo aqui, o el folio se consumio sin llegar a la orden.
                 v10.80.7 — y la R- TAMBIEN es de Alpha (1,290 folios): comparar solo contra "D"
                 le daba a toda la pestana de Remisiones el texto pensado para la serie propia. */}
-            <div style={{fontSize:10,color:C.t3,marginLeft:"auto",fontStyle:"italic"}}>{(item.serie==="D"||item.serie==="R")?"Búscalo en Alpha: ¿cancelado o sin capturar?":"¿Cancelado, o el folio se consumió sin orden?"}</div>
+            <div style={{fontSize:10,color:C.t2,marginLeft:"auto",fontStyle:"italic"}}>{(item.serie==="D"||item.serie==="R")?"Búscalo en Alpha: ¿cancelado o sin capturar?":"¿Cancelado, o el folio se consumió sin orden?"}</div>
           </div>;
         }
         return item.orders.map((o,i)=>{
@@ -19393,29 +19374,31 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
           // cliente · fecha; el cliente trunca para NO envolver). Línea 2 muteada con la metadata secundaria (producción ·
           // OC · monto · capturó). Las filas simples se quedan en 1 línea; solo las ricas ganan la 2ª → escaneo tipo tabla.
           const hasMeta=o.production_number||(isCorona&&(o.coronaPoRef||o.coronaAmountWithIva))||(isCob&&o.cobranzaKind!=='externa'&&o.cobranzaAmount!=null)||o.invoiced_by;
-          return <div key={item.n+"-"+i} onClick={noNav?undefined:()=>setSelectedProdOrder(o)}
+          return <div key={item.n+"-"+i} onClick={noNav?undefined:()=>setSelectedProdOrder(o)} role={noNav?undefined:"button"} tabIndex={noNav?undefined:0}
+            aria-label={noNav?undefined:("Folio "+o.invoice_folio+(o.client?", "+o.client:"")+(o.production_number?", orden "+o.production_number:"")+". Enter para ver la orden.")}
+            onKeyDown={noNav?undefined:e=>{if((e.key==="Enter"||e.key===" ")&&e.target===e.currentTarget){e.preventDefault();setSelectedProdOrder(o);}}}
             style={{padding:"8px 14px",borderBottom:"1px solid "+C.bd,background:baseBg,cursor:noNav?"default":"pointer",transition:"background 0.12s"}}
             onMouseEnter={e=>{if(!noNav)e.currentTarget.style.background=C.sf}}
             onMouseLeave={e=>{if(!noNav)e.currentTarget.style.background=baseBg}}>
             <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
               <div style={{fontSize:14,fontWeight:800,color:C.tx,minWidth:80,flexShrink:0}}><TIcon size={13} weight="bold" style={{verticalAlign:"-2px",marginRight:3,color:C.t2}}/>{o.invoice_folio}</div>
-              {isCorona&&<div style={{fontSize:10,color:C.ok,fontWeight:700,background:C.ok+"18",padding:"2px 6px",borderRadius:4,display:"inline-flex",alignItems:"center",gap:3,flexShrink:0}}><DiamondIcon size={10} weight="fill"/>OC CRÉDITO CORONA</div>}
+              {isCorona&&<div style={{fontSize:10,color:C.okTx,fontWeight:700,background:C.ok+"18",padding:"2px 6px",borderRadius:4,display:"inline-flex",alignItems:"center",gap:3,flexShrink:0}}><DiamondIcon size={10} weight="fill"/>OC CRÉDITO CORONA</div>}
               {isCob&&(o.cobranzaKind==='externa'
-                ? <div style={{fontSize:10,color:C.t2,fontWeight:700,background:C.t3+"22",padding:"2px 6px",borderRadius:4,display:"inline-flex",alignItems:"center",gap:3,flexShrink:0}} title={o.cobranzaStatus==='auto_zero'?'Auto-factura interna de PADILLA en $0. No entra a cartera (CHECK amount>0). Contabilizada en el consecutivo, NO es un faltante real.':o.cobranzaStatus==='pagada_alpha'?'Factura emitida y YA PAGADA directo en AlphaERP, sin pasar por PrintFlow/CobranzaFlow. No es deuda ni faltante real; se documenta en el consecutivo.':'Folio cancelado en AlphaERP (verificado por Karla). No sale en los exports de vigentes; por eso no está en cartera. Contabilizado en el consecutivo, NO es un faltante real.'}>{o.cobranzaStatus==='pagada_alpha'?<CheckCircleIcon size={10} weight="bold"/>:<XCircleIcon size={10} weight="bold"/>}{o.cobranzaStatus==='auto_zero'?'AUTO-FACTURA $0':o.cobranzaStatus==='pagada_alpha'?'PAGADA EN ALPHA':'CANCELADA EN ALPHA'}</div>
-                : <div style={{fontSize:10,color:C.ok,fontWeight:700,background:C.ok+"18",padding:"2px 6px",borderRadius:4,display:"inline-flex",alignItems:"center",gap:3,flexShrink:0}} title="Factura registrada en CobranzaFlow (cartera), sin orden de producción en PrintFlow — ya no es un faltante real"><ReceiptIcon size={10} weight="bold"/>EN COBRANZAFLOW{o.cobranzaStatus?" · "+String(o.cobranzaStatus).toUpperCase():""}</div>)}
-              {item.status==="duplicate"&&<div style={{fontSize:10,color:C.wn,fontWeight:700,background:C.wn+"15",padding:"2px 6px",borderRadius:4,flexShrink:0}}>DUPLICADO</div>}
-              {item.status==="shared"&&i===0&&<div style={{fontSize:10,color:C.ok,fontWeight:700,background:C.ok+"20",padding:"2px 6px",borderRadius:4,display:"inline-flex",alignItems:"center",gap:3,flexShrink:0}}><FileTextIcon size={10} weight="bold"/>COMPARTIDO · {item.orders.length} órdenes</div>}
-              {item.status==="shared"&&i>0&&<div style={{fontSize:10,color:C.t3,fontWeight:600,fontStyle:"italic",flexShrink:0}}>↳ mismo folio</div>}
-              {o.invoice_pre_assigned&&<div style={{fontSize:10,color:C.wn,fontWeight:700,background:C.wn+"15",padding:"2px 6px",borderRadius:4,display:"inline-flex",alignItems:"center",gap:3,flexShrink:0}}><LightningIcon size={10} weight="fill"/>ANTICIPADO</div>}
-              {o.cancelled_at&&<div style={{fontSize:10,color:C.dn,fontWeight:700,background:C.dn+"15",padding:"2px 6px",borderRadius:4,flexShrink:0}}>CANCELADA{o.nc_emitted?" · NC":""}</div>}
+                ? <div style={{fontSize:10,color:C.tx,fontWeight:700,background:C.sf,padding:"2px 6px",borderRadius:4,display:"inline-flex",alignItems:"center",gap:3,flexShrink:0}} title={o.cobranzaStatus==='auto_zero'?'Auto-factura interna de PADILLA en $0. No entra a cartera (CHECK amount>0). Contabilizada en el consecutivo, NO es un faltante real.':o.cobranzaStatus==='pagada_alpha'?'Factura emitida y YA PAGADA directo en AlphaERP, sin pasar por PrintFlow/CobranzaFlow. No es deuda ni faltante real; se documenta en el consecutivo.':'Folio cancelado en AlphaERP (verificado por Karla). No sale en los exports de vigentes; por eso no está en cartera. Contabilizado en el consecutivo, NO es un faltante real.'}>{o.cobranzaStatus==='pagada_alpha'?<CheckCircleIcon size={10} weight="bold"/>:<XCircleIcon size={10} weight="bold"/>}{o.cobranzaStatus==='auto_zero'?'AUTO-FACTURA $0':o.cobranzaStatus==='pagada_alpha'?'PAGADA EN ALPHA':'CANCELADA EN ALPHA'}</div>
+                : <div style={{fontSize:10,color:C.okTx,fontWeight:700,background:C.ok+"18",padding:"2px 6px",borderRadius:4,display:"inline-flex",alignItems:"center",gap:3,flexShrink:0}} title="Factura registrada en CobranzaFlow (cartera), sin orden de producción en PrintFlow — ya no es un faltante real"><ReceiptIcon size={10} weight="bold"/>EN COBRANZAFLOW{o.cobranzaStatus?" · "+String(o.cobranzaStatus).toUpperCase():""}</div>)}
+              {item.status==="duplicate"&&<div style={{fontSize:10,color:C.wnTx,fontWeight:700,background:C.wn+"15",padding:"2px 6px",borderRadius:4,flexShrink:0}}>DUPLICADO</div>}
+              {item.status==="shared"&&i===0&&<div style={{fontSize:10,color:C.okTx,fontWeight:700,background:C.ok+"20",padding:"2px 6px",borderRadius:4,display:"inline-flex",alignItems:"center",gap:3,flexShrink:0}}><FileTextIcon size={10} weight="bold"/>COMPARTIDO · {item.orders.length} órdenes</div>}
+              {item.status==="shared"&&i>0&&<div style={{fontSize:10,color:C.t2,fontWeight:600,fontStyle:"italic",flexShrink:0}}>↳ mismo folio</div>}
+              {o.invoice_pre_assigned&&<div style={{fontSize:10,color:C.wnTx,fontWeight:700,background:C.wn+"15",padding:"2px 6px",borderRadius:4,display:"inline-flex",alignItems:"center",gap:3,flexShrink:0}}><LightningIcon size={10} weight="fill"/>ANTICIPADO</div>}
+              {o.cancelled_at&&<div style={{fontSize:10,color:C.dnInk,fontWeight:700,background:C.dn+"15",padding:"2px 6px",borderRadius:4,flexShrink:0}}>CANCELADA{o.nc_emitted?" · NC":""}</div>}
               <div style={{fontSize:12,color:C.tx,fontWeight:600,flex:"1 1 auto",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o.client}</div>
-              <div style={{fontSize:10,color:C.t3,flexShrink:0}}>{o.invoiced_at?fDT(o.invoiced_at):"—"}</div>
+              <div style={{fontSize:10,color:C.t2,flexShrink:0}}>{o.invoiced_at?fDT(o.invoiced_at):"—"}</div>
             </div>
-            {hasMeta&&<div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginTop:3,fontSize:10,color:C.t3}}>
+            {hasMeta&&<div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginTop:3,fontSize:10,color:C.t2}}>
               {o.production_number&&<span style={{color:C.ac,fontWeight:600}}>{o.production_number}</span>}
               {isCorona&&o.coronaPoRef&&<span style={{fontFamily:"'Geist Mono',monospace"}}>PO: {o.coronaPoRef}</span>}
               {isCorona&&o.coronaAmountWithIva&&<span style={{color:C.okInk,fontWeight:700}}>${Number(o.coronaAmountWithIva).toLocaleString("es-MX",{minimumFractionDigits:2})} c/IVA</span>}
-              {isCob&&o.cobranzaKind!=='externa'&&o.cobranzaAmount!=null&&<span style={{color:C.t2,fontWeight:700}}>${Number(o.cobranzaAmount).toLocaleString("es-MX",{minimumFractionDigits:2})}{Number(o.cobranzaBalance)>0?<span style={{color:C.dn,fontWeight:700}}> · saldo ${Number(o.cobranzaBalance).toLocaleString("es-MX",{minimumFractionDigits:2})}</span>:null}</span>}
+              {isCob&&o.cobranzaKind!=='externa'&&o.cobranzaAmount!=null&&<span style={{color:C.t2,fontWeight:700}}>${Number(o.cobranzaAmount).toLocaleString("es-MX",{minimumFractionDigits:2})}{Number(o.cobranzaBalance)>0?<span style={{color:C.dnInk,fontWeight:700}}> · saldo ${Number(o.cobranzaBalance).toLocaleString("es-MX",{minimumFractionDigits:2})}</span>:null}</span>}
               {o.invoiced_by&&<span style={{marginLeft:"auto",flexShrink:0}}>capturó {o.invoiced_by==="secretaria"?"Lupita":o.invoiced_by}</span>}
             </div>}
           </div>;
@@ -19423,11 +19406,12 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
       })}
       </div>;
     })()}
-    {/* v10.72.77 — leyenda movida a la clave colapsable "¿Qué significan los badges?" (arriba de la lista). Se quitó el muro de ~150 palabras del fondo; ahora la lista cierra la pantalla (mejor peak-end). */}
+    {/* v10.72.77 — leyenda movida a la clave colapsable "¿Qué significa cada etiqueta?" (arriba de la lista). Se quitó el muro de ~150 palabras del fondo; ahora la lista cierra la pantalla (mejor peak-end). */}
     </>}
 
     {tab==="production"&&(()=>{
       const parsePN=p=>{const m=String(p||"").match(/P-(\d+)/);return m?parseInt(m[1],10):null};
+      const pnTxt=n=>"P-"+String(n).padStart(4,"0"); // v10.84.146 — como se escriben (antes «P-601»)
       const filteredOrders=orders.filter(o=>{
         if(!o.production_number||!o.production_number.startsWith("P-"))return false;
         if(o.client && o.client.startsWith("[SISTEMA]"))return false; // ocultar marcador
@@ -19463,67 +19447,48 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
       };
       const matchesPnSearch=(item)=>{
         if(!sq)return true;
-        const pn="P-"+item.n;
-        if(normSearch(pn).includes(sq))return true;
-        if(item.orders?.some(o=>normSearch(o.client||"").includes(sq)||normSearch(o.invoice_folio||"").includes(sq)))return true;
+        const pn=pnTxt(item.n);
+        if(normSearch(pn).includes(sq)||normSearch("P-"+item.n).includes(sq))return true;
+        if(item.orders?.some(o=>normSearch(o.production_number||"").includes(sq)||normSearch(o.client||"").includes(sq)||normSearch(o.invoice_folio||"").includes(sq)))return true;
         return false;
       };
       const filteredPnSeq=pnSeq.filter(it=>matchesPnChip(it)&&matchesPnSearch(it));
       return <div style={{marginTop:24}}>
         <h3 style={{fontSize:16,fontWeight:800,letterSpacing:"-0.008em",margin:"0 0 4px"}}><ListBulletsIcon size={15} weight="bold" style={{verticalAlign:"-2px",marginRight:6}}/>Consecutivo de Órdenes de Producción</h3>
-        <p style={{fontSize:11,color:C.t2,margin:"0 0 12px"}}>Serie P-XXXX en el periodo seleccionado · Click en una orden para ver detalles y folio fiscal asignado</p>
+        <p style={{fontSize:12,color:C.t2,margin:"0 0 12px"}}>La serie P- del periodo. Toca una orden para ver su detalle y su folio fiscal.</p>
         {/* QW1 búsqueda */}
         <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap",alignItems:"center"}}>
-          <SearchInput wrapStyle={{flex:1,minWidth:200}} style={{...inp,padding:"7px 12px",fontSize:12}} placeholder="Buscar por P-XXXX, cliente o folio fiscal..." value={search} onChange={e=>setSearch(e.target.value)}/>
+          <SearchInput wrapStyle={{flex:1,minWidth:200}} style={{...inp,padding:"7px 12px",fontSize:12}} placeholder="Buscar por orden (P-0601), cliente o folio fiscal…" value={search} onChange={e=>setSearch(e.target.value)}/>
           {search&&<button onClick={()=>setSearch("")} style={{...bt(C.sf,C.t2),padding:"6px 10px",fontSize:11,border:"0.5px solid "+C.bd,display:"inline-flex",alignItems:"center",gap:5}}><XIcon size={12} weight="bold"/>Limpiar</button>}
         </div>
         {/* QW2 chips */}
         <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap"}}>
-          {[{id:"all",l:"Todos",c:C.ac},{id:"gap",l:<><WarningIcon size={11} weight="fill"/>Solo gaps</>,c:C.dn},{id:"cancelled",l:"Canceladas",c:C.dn},{id:"invoiced",l:<><FileTextIcon size={11} weight="bold"/>Con folio fiscal</>,c:C.fac},{id:"no_folio",l:<><CurrencyDollarIcon size={11} weight="bold"/>Sin folio (saldo Corona)</>,c:C.emr}].map(chip=>
-            <button key={chip.id} onClick={()=>setStatusChip(chip.id)} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:14,border:"1px solid "+(statusChip===chip.id?chip.c:C.bd),background:statusChip===chip.id?chip.c+"15":"transparent",color:statusChip===chip.id?chip.c:C.t2,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"'Geist',sans-serif"}}>{chip.l}</button>
+          {[{id:"all",l:"Todos",c:C.ac},{id:"gap",l:<><WarningIcon size={11} weight="fill"/>Sólo huecos</>,c:C.dn},{id:"cancelled",l:"Canceladas",c:C.dn},{id:"invoiced",l:<><FileTextIcon size={11} weight="bold"/>Con folio fiscal</>,c:C.fac},{id:"no_folio",l:<><CurrencyDollarIcon size={11} weight="bold"/>Sin folio (saldo Corona)</>,c:C.emr}].map(chip=>
+            <button key={chip.id} onClick={()=>setStatusChip(chip.id)} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:14,border:"1px solid "+(statusChip===chip.id?chip.c:C.bd),background:statusChip===chip.id?chip.c+"15":"transparent",color:statusChip===chip.id?tintaAA(chip.c):C.t2,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"'Geist',sans-serif"}}>{chip.l}</button>
           )}
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:8,marginBottom:14}}>
-          <div style={{background:C.card,borderRadius:14,padding:"10px 14px",border:"1.5px solid "+C.ac+"66",boxShadow:C.sh2}}>
-            <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Producción (P-)</div>
-            <div style={{fontSize:22,fontWeight:800,color:C.ac}}>{totalPN}</div>
-          </div>
-          <div style={{background:C.card,borderRadius:14,padding:"10px 14px",border:"1.5px solid "+(pnGaps.length?C.dn:C.ok)+"66",boxShadow:C.sh2}}>
-            <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Gaps detectados</div>
-            <div style={{fontSize:22,fontWeight:800,color:pnGaps.length?C.dn:C.ok}}>{pnGaps.length}</div>
-          </div>
-          <div style={{background:C.card,borderRadius:14,padding:"10px 14px",border:"1.5px solid "+C.fac+"66",boxShadow:C.sh2}}>
-            <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Con folio fiscal</div>
-            <div style={{fontSize:22,fontWeight:800,color:C.fac}}>{invoicedCount}</div>
-          </div>
-          <div style={{background:C.card,borderRadius:14,padding:"10px 14px",border:"1.5px solid "+C.dn+"66",boxShadow:C.sh2}}>
-            <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Canceladas</div>
-            <div style={{fontSize:22,fontWeight:800,color:C.dn}}>{cancelledCount}</div>
-          </div>
-          {stockSaleCount>0&&<div style={{background:C.card,borderRadius:14,padding:"10px 14px",border:"1.5px solid "+C.t3+"66",boxShadow:C.sh2}}>
-            <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Ventas de stock</div>
-            <div style={{fontSize:22,fontWeight:800,color:C.t3}}>{stockSaleCount}</div>
-            <div style={{fontSize:8,color:C.t3,marginTop:1}}>folio P- anulado · no es producción</div>
-          </div>}
-          <div style={{background:C.card,borderRadius:14,padding:"10px 14px",border:"1.5px solid "+C.t3+"66",boxShadow:C.sh2}}>
-            <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Rango</div>
-            <div style={{fontSize:14,fontWeight:800}}>P-{min} → P-{max}</div>
-          </div>
+        <div style={{display:"flex",flexWrap:"wrap",alignItems:"baseline",gap:"6px 22px",margin:"0 0 14px",fontSize:13,color:C.t2}}>
+          <span><b style={{fontSize:15,fontWeight:800,color:C.tx}}>{totalPN}</b> {totalPN===1?"orden":"órdenes"}</span>
+          <span><b style={{fontSize:15,fontWeight:800,color:pnGaps.length?C.dnInk:C.tx}}>{pnGaps.length}</b> {pnGaps.length===1?"hueco":"huecos"}</span>
+          <span><b style={{fontSize:15,fontWeight:800,color:C.tx}}>{invoicedCount}</b> con folio fiscal</span>
+          <span><b style={{fontSize:15,fontWeight:800,color:C.tx}}>{cancelledCount}</b> {cancelledCount===1?"cancelada":"canceladas"}</span>
+          {stockSaleCount>0&&<span><b style={{fontSize:15,fontWeight:800,color:C.tx}}>{stockSaleCount}</b> {stockSaleCount===1?"venta":"ventas"} de stock (su folio P- se anuló: no es producción)</span>}
+          <span>Rango: <b style={{color:C.tx,fontWeight:700}}>{pnTxt(min)} a {pnTxt(max)}</b></span>
         </div>
         {/* v10.72.79 — /impeccable distill (P2): clave de badges colapsable (antes párrafo "Cómo interpretar" al fondo); comparte showKey con Folios. Refleja los colores reales del tab Producción. */}
         <div style={{marginBottom:12}}>
-          <button onClick={()=>setShowKey(s=>!s)} onMouseEnter={e=>{e.currentTarget.style.background=C.sf;e.currentTarget.style.color=C.tx}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=C.t2}} style={{display:"inline-flex",alignItems:"center",gap:5,background:"transparent",border:"none",color:C.t2,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"'Geist',sans-serif",padding:"5px 9px",borderRadius:8,marginLeft:-9,transition:"background .12s, color .12s"}}>¿Qué significan los badges?{showKey?<CaretUpIcon size={10} weight="bold"/>:<CaretDownIcon size={10} weight="bold"/>}</button>
+          <button aria-expanded={showKey} onClick={()=>setShowKey(s=>!s)} onMouseEnter={e=>{e.currentTarget.style.background=C.sf;e.currentTarget.style.color=C.tx}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=C.t2}} style={{display:"inline-flex",alignItems:"center",gap:5,background:"transparent",border:"none",color:C.t2,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"'Geist',sans-serif",padding:"5px 9px",borderRadius:8,marginLeft:-9,transition:"background .12s, color .12s"}}>¿Qué significa cada etiqueta?{showKey?<CaretUpIcon size={10} weight="bold"/>:<CaretDownIcon size={10} weight="bold"/>}</button>
           {showKey&&<div style={{marginTop:6,padding:"12px 14px",background:C.bg,borderRadius:10,border:"1px solid "+C.bd,display:"flex",flexDirection:"column",gap:7}}>
             {[
               [C.dn,"FALTANTE","número de producción borrado (no es cancelada)"],
               [C.dn,"CANCELADA","conserva su P-XXXX, no es un hueco"],
-              [C.fac,"Con folio fiscal D-/R-","ya pasó por facturación"],
-              [C.t3,"VENTA STOCK · FOLIO P ANULADO","tachada; no es producción, se cobra por su folio fiscal D-/R-"],
+              [C.fac,"Con folio fiscal","F- o RS- (antes D- o R-): ya pasó por facturación"],
+              [C.t3,"VENTA STOCK · FOLIO P ANULADO","tachada; no es producción, se cobra por su folio fiscal"],
             ].map((it,ii)=><div key={ii} style={{display:"flex",alignItems:"flex-start",gap:8,fontSize:11,lineHeight:1.45}}><span style={{width:9,height:9,borderRadius:3,background:it[0],flexShrink:0,marginTop:3}}/><div><b style={{color:C.tx,fontWeight:700}}>{it[1]}</b> <span style={{color:C.t2}}>· {it[2]}</span></div></div>)}
-            <div style={{fontSize:10,color:C.t3,borderTop:"1px solid "+C.bd,paddingTop:8}}>Las órdenes vigentes muestran su etapa de producción actual (y MAQ si es maquila).</div>
+            <div style={{fontSize:10,color:C.t2,borderTop:"1px solid "+C.bd,paddingTop:8}}>Las órdenes vigentes muestran su etapa de producción actual (y MAQ si es maquila).</div>
           </div>}
         </div>
-        {filteredPnSeq.length===0?<div style={{textAlign:"center",padding:"30px 20px",color:C.t3,background:C.bg,borderRadius:10,border:"1px solid "+C.bd}}>
+        {filteredPnSeq.length===0?<div style={{textAlign:"center",padding:"30px 20px",color:C.t2,background:C.bg,borderRadius:10,border:"1px solid "+C.bd}}>
           <MagnifyingGlassIcon size={30} color={C.ph}/>
           <div style={{fontSize:13,fontWeight:600,color:C.tx,marginTop:6}}>Sin resultados con los filtros actuales</div>
           <div style={{fontSize:10,color:C.t2,marginTop:4}}>Limpia búsqueda o cambia el chip de status</div>
@@ -19531,8 +19496,8 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
           {filteredPnSeq.map(item=>{
             if(item.gap){
               return <div key={"pgap-"+item.n} style={{padding:"10px 14px",borderBottom:"1px solid "+C.bd,background:C.dn+"08",display:"flex",alignItems:"center",gap:10}}>
-                <div style={{display:"flex",alignItems:"center",gap:5,fontSize:14,fontWeight:800,color:C.dn,minWidth:90}}><WarningIcon size={13} weight="fill"/>P-{item.n}</div>
-                <div style={{fontSize:12,color:C.dn,fontWeight:600}}>FALTANTE</div>
+                <div style={{display:"flex",alignItems:"center",gap:5,fontSize:14,fontWeight:800,color:C.dnInk,minWidth:90}}><WarningIcon size={13} weight="fill"/>{pnTxt(item.n)}</div>
+                <div style={{fontSize:12,color:C.dnInk,fontWeight:600}}>FALTANTE</div>
               </div>;
             }
             return item.orders.map((o,i)=>{
@@ -19540,18 +19505,19 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
               const isStockSale=o.stock_role==="sale"; // v10.72.63 — venta de stock: el folio P- quedó mal asignado, se muestra anulado (la venta se cobra por su D-/R-)
               const stClr=SM[o.stage]?.c||C.t3;
               const rowBg=isStockSale?C.t3+"10":(isCancelled?C.dn+"08":(o.invoice_folio?C.fac+"10":"transparent"));
-              return <div key={item.n+"-"+i} onClick={()=>setSelectedProdOrder(o)}
+              return <div key={item.n+"-"+i} onClick={()=>setSelectedProdOrder(o)} role="button" tabIndex={0} aria-label={"Orden "+(o.production_number||pnTxt(item.n))+(o.client?", "+o.client:"")+". Enter para ver su detalle."}
+                onKeyDown={e=>{if((e.key==="Enter"||e.key===" ")&&e.target===e.currentTarget){e.preventDefault();setSelectedProdOrder(o);}}}
                 style={{padding:"10px 14px",borderBottom:"1px solid "+C.bd,background:rowBg,display:"flex",alignItems:"center",gap:10,cursor:"pointer",transition:"background 0.12s"}}
                 onMouseEnter={e=>{e.currentTarget.style.background=C.sf}}
                 onMouseLeave={e=>{e.currentTarget.style.background=rowBg}}>
-                <div style={{display:"flex",alignItems:"center",gap:5,fontSize:14,fontWeight:800,color:isStockSale?C.t3:C.ac,minWidth:90,textDecoration:isStockSale?"line-through":"none"}}><ListBulletsIcon size={13} weight="bold"/>P-{item.n}</div>
-                {isStockSale&&<div style={{fontSize:9,color:C.t2,fontWeight:700,background:C.sf,border:"1px solid "+C.bd,padding:"2px 6px",borderRadius:4}}>VENTA STOCK · FOLIO P ANULADO</div>}
-                {o.order_type==="maquila"&&<div style={{fontSize:9,color:C.maq,fontWeight:700,background:C.maq+"15",padding:"2px 6px",borderRadius:4}}>MAQ</div>}
+                <div style={{display:"flex",alignItems:"center",gap:5,fontSize:14,fontWeight:800,color:isStockSale?C.t3:C.ac,minWidth:90,textDecoration:isStockSale?"line-through":"none"}}><ListBulletsIcon size={13} weight="bold"/>{o.production_number||pnTxt(item.n)}</div>
+                {isStockSale&&<div style={{fontSize:10,color:C.t2,fontWeight:700,background:C.sf,border:"1px solid "+C.bd,padding:"2px 6px",borderRadius:4}}>VENTA STOCK · FOLIO P ANULADO</div>}
+                {o.order_type==="maquila"&&<div style={{fontSize:10,color:tintaAA(C.maq),fontWeight:700,background:C.maq+"15",padding:"2px 6px",borderRadius:4}}>MAQ</div>}
                 <div style={{fontSize:12,color:C.tx,fontWeight:600,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o.client||"—"}</div>
                 {o.invoice_folio&&<div style={{fontSize:10,color:C.fac,fontWeight:700,background:C.fac+"15",padding:"2px 6px",borderRadius:4}}>{o.invoice_type==="factura"?<FileTextIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>:<ReceiptIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>}{o.invoice_folio}</div>}
-                {isCancelled&&<div style={{fontSize:10,color:C.dn,fontWeight:700,background:C.dn+"15",padding:"2px 6px",borderRadius:4}}>CANCELADA</div>}
-                {!isCancelled&&!isStockSale&&<div style={{fontSize:10,color:stClr,fontWeight:600,background:stClr+"15",padding:"2px 6px",borderRadius:4,display:"inline-flex",alignItems:"center"}}><StageLbl stage={o.stage} size={10}/></div>}
-                <div style={{fontSize:10,color:C.t3}}>{o.created_at?fDT(o.created_at):"—"}</div>
+                {isCancelled&&<div style={{fontSize:10,color:C.dnInk,fontWeight:700,background:C.dn+"15",padding:"2px 6px",borderRadius:4}}>CANCELADA</div>}
+                {!isCancelled&&!isStockSale&&<div style={{fontSize:10,color:tintaAA(stClr),fontWeight:600,background:stClr+"15",padding:"2px 6px",borderRadius:4,display:"inline-flex",alignItems:"center"}}><StageLbl stage={o.stage} size={10}/></div>}
+                <div style={{fontSize:10,color:C.t2}}>{o.created_at?fDT(o.created_at):"—"}</div>
               </div>;
             });
           })}
@@ -19565,6 +19531,7 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
       // con las mismas funciones que el consecutivo P-. Serie vieja (pre-corte), separada a propósito.
       // Ignora el filtro de fecha (histórica/congelada); respeta la búsqueda global y su propio chip.
       const parseHN=p=>{const m=String(p||"").match(/H-(\d+)/);return m?parseInt(m[1],10):null};
+      const hTxt=n=>"H-"+String(n).padStart(4,"0");
       const hOrders=orders.filter(o=>o.production_number&&o.production_number.startsWith("H-")&&!(o.client&&o.client.startsWith("[SISTEMA]")));
       const byNumH={};hOrders.forEach(o=>{const n=parseHN(o.production_number);if(n!==null){if(!byNumH[n])byNumH[n]=[];byNumH[n].push(o)}});
       const numsH=Object.keys(byNumH).map(n=>parseInt(n,10)).sort((a,b)=>a-b);
@@ -19576,59 +19543,59 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
       const cancelledCountH=hOrders.filter(o=>o.cancelled_at||o.stage?.includes("cancelled")).length;
       const invoicedCountH=hOrders.filter(o=>o.invoice_folio).length;
       const matchesHChip=(item)=>{if(hStatusChip==="all")return true;if(hStatusChip==="gap")return !!item.gap;if(hStatusChip==="cancelled")return item.orders?.some(o=>o.cancelled_at||o.stage?.includes("cancelled"));if(hStatusChip==="invoiced")return item.orders?.some(o=>o.invoice_folio);if(hStatusChip==="no_folio")return item.orders?.some(o=>!o.invoice_folio&&!(o.cancelled_at||o.stage?.includes("cancelled")));return true};
-      const matchesHSearch=(item)=>{if(!sq)return true;if(normSearch("H-"+item.n).includes(sq))return true;if(item.orders?.some(o=>normSearch(o.client||"").includes(sq)||normSearch(o.invoice_folio||"").includes(sq)))return true;return false};
+      const matchesHSearch=(item)=>{if(!sq)return true;if(normSearch(hTxt(item.n)).includes(sq)||normSearch("H-"+item.n).includes(sq))return true;if(item.orders?.some(o=>normSearch(o.production_number||"").includes(sq)||normSearch(o.client||"").includes(sq)||normSearch(o.invoice_folio||"").includes(sq)))return true;return false};
       const filteredHSeq=hSeq.filter(it=>matchesHChip(it)&&matchesHSearch(it));
       return <div style={{marginTop:18}}>
-        <div onClick={()=>setShowH(!showH)} onMouseEnter={e=>e.currentTarget.style.background=C.bd+"45"} onMouseLeave={e=>e.currentTarget.style.background=C.sf} style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",padding:"11px 14px",background:C.sf,borderRadius:showH?"12px 12px 0 0":12,border:"1px solid "+C.bd,transition:"background .12s"}}>
+        <div onClick={()=>setShowH(!showH)} role="button" tabIndex={0} aria-expanded={showH} onKeyDown={e=>{if((e.key==="Enter"||e.key===" ")&&e.target===e.currentTarget){e.preventDefault();setShowH(!showH);}}} onMouseEnter={e=>e.currentTarget.style.background=C.bd+"45"} onMouseLeave={e=>e.currentTarget.style.background=C.sf} style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",padding:"11px 14px",background:C.sf,borderRadius:showH?"12px 12px 0 0":12,border:"1px solid "+C.bd,transition:"background .12s"}}>
           <ClockCounterClockwiseIcon size={16} weight="bold" color={C.t2}/>
           <div style={{fontSize:14,fontWeight:800,color:C.tx}}>Histórico de producción <span style={{color:C.t2,fontWeight:600}}>(pre-corte · H-XXXX)</span></div>
           <span style={{fontSize:11,color:C.t2,background:C.bg,padding:"2px 9px",borderRadius:10,fontWeight:700}}>{totalHN}</span>
-          {hGaps.length>0&&<span style={{fontSize:11,color:C.dn,background:C.dn+"12",padding:"2px 9px",borderRadius:10,fontWeight:700,display:"inline-flex",alignItems:"center",gap:3}}><WarningIcon size={11} weight="fill"/>{hGaps.length} gap{hGaps.length===1?"":"s"}</span>}
-          {!showH&&<span style={{fontSize:11,fontWeight:600,color:C.ac}}>clic para ver</span>}
+          {hGaps.length>0&&<span style={{fontSize:11,color:C.dnInk,background:C.dn+"12",padding:"2px 9px",borderRadius:10,fontWeight:700,display:"inline-flex",alignItems:"center",gap:3}}><WarningIcon size={11} weight="fill"/>{hGaps.length} {hGaps.length===1?"hueco":"huecos"}</span>}
           <span style={{marginLeft:"auto",fontSize:13,color:C.t2,transform:showH?"rotate(0)":"rotate(-90deg)",transition:"transform .2s",display:"inline-flex"}}><CaretDownIcon size={13} weight="bold"/></span>
         </div>
         {showH&&<div style={{background:C.bg,borderRadius:"0 0 12px 12px",border:"1px solid "+C.bd,borderTop:"none",padding:14}}>
-          {totalHN===0?<div style={{padding:"20px",textAlign:"center",color:C.t3,fontSize:12}}>No hay folios H-XXXX cargados. Carga el archivo histórico completo (botón de arriba) para auditar la serie vieja.</div>:<>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:8,marginBottom:12}}>
-              <div style={{background:C.card,borderRadius:14,padding:"10px 14px",border:"1.5px solid "+C.t3+"66",boxShadow:C.sh2}}><div style={{fontSize:10,color:C.t2,fontWeight:600}}>Total H-XXXX</div><div style={{fontSize:22,fontWeight:800,color:C.t2}}>{totalHN}</div></div>
-              <div style={{background:C.card,borderRadius:14,padding:"10px 14px",border:"1.5px solid "+(hGaps.length?C.dn:C.ok)+"66",boxShadow:C.sh2}}><div style={{fontSize:10,color:C.t2,fontWeight:600}}>Gaps detectados</div><div style={{fontSize:22,fontWeight:800,color:hGaps.length?C.dn:C.ok}}>{hGaps.length}</div></div>
-              <div style={{background:C.card,borderRadius:14,padding:"10px 14px",border:"1.5px solid "+C.fac+"66",boxShadow:C.sh2}}><div style={{fontSize:10,color:C.t2,fontWeight:600}}>Con folio fiscal</div><div style={{fontSize:22,fontWeight:800,color:C.fac}}>{invoicedCountH}</div></div>
-              <div style={{background:C.card,borderRadius:14,padding:"10px 14px",border:"1.5px solid "+C.dn+"66",boxShadow:C.sh2}}><div style={{fontSize:10,color:C.t2,fontWeight:600}}>Canceladas</div><div style={{fontSize:22,fontWeight:800,color:C.dn}}>{cancelledCountH}</div></div>
-              <div style={{background:C.card,borderRadius:14,padding:"10px 14px",border:"1.5px solid "+C.t3+"66",boxShadow:C.sh2}}><div style={{fontSize:10,color:C.t2,fontWeight:600}}>Rango</div><div style={{fontSize:14,fontWeight:800}}>H-{minH} → H-{maxH}</div></div>
+          {totalHN===0?<div style={{padding:"20px",textAlign:"center",color:C.t2,fontSize:12}}>No hay folios H-XXXX cargados. Carga el archivo histórico completo (botón de arriba) para auditar la serie vieja.</div>:<>
+            <div style={{display:"flex",flexWrap:"wrap",alignItems:"baseline",gap:"6px 22px",margin:"0 0 12px",fontSize:13,color:C.t2}}>
+              <span><b style={{fontSize:15,fontWeight:800,color:C.tx}}>{totalHN}</b> {totalHN===1?"orden":"órdenes"} H-</span>
+              <span><b style={{fontSize:15,fontWeight:800,color:hGaps.length?C.dnInk:C.tx}}>{hGaps.length}</b> {hGaps.length===1?"hueco":"huecos"}</span>
+              <span><b style={{fontSize:15,fontWeight:800,color:C.tx}}>{invoicedCountH}</b> con folio fiscal</span>
+              <span><b style={{fontSize:15,fontWeight:800,color:C.tx}}>{cancelledCountH}</b> {cancelledCountH===1?"cancelada":"canceladas"}</span>
+              <span>Rango: <b style={{color:C.tx,fontWeight:700}}>{hTxt(minH)} a {hTxt(maxH)}</b></span>
             </div>
             <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}}>
-              {[{id:"all",l:"Todos",c:C.ac},{id:"gap",l:<><WarningIcon size={11} weight="fill"/>Solo gaps</>,c:C.dn},{id:"cancelled",l:"Canceladas",c:C.dn},{id:"invoiced",l:<><FileTextIcon size={11} weight="bold"/>Con folio fiscal</>,c:C.fac},{id:"no_folio",l:<><CurrencyDollarIcon size={11} weight="bold"/>Sin folio</>,c:C.emr}].map(chip=>
-                <button key={chip.id} onClick={()=>setHStatusChip(chip.id)} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:14,border:"1px solid "+(hStatusChip===chip.id?chip.c:C.bd),background:hStatusChip===chip.id?chip.c+"15":"transparent",color:hStatusChip===chip.id?chip.c:C.t2,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"'Geist',sans-serif"}}>{chip.l}</button>
+              {[{id:"all",l:"Todos",c:C.ac},{id:"gap",l:<><WarningIcon size={11} weight="fill"/>Sólo huecos</>,c:C.dn},{id:"cancelled",l:"Canceladas",c:C.dn},{id:"invoiced",l:<><FileTextIcon size={11} weight="bold"/>Con folio fiscal</>,c:C.fac},{id:"no_folio",l:<><CurrencyDollarIcon size={11} weight="bold"/>Sin folio</>,c:C.emr}].map(chip=>
+                <button key={chip.id} onClick={()=>setHStatusChip(chip.id)} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:14,border:"1px solid "+(hStatusChip===chip.id?chip.c:C.bd),background:hStatusChip===chip.id?chip.c+"15":"transparent",color:hStatusChip===chip.id?tintaAA(chip.c):C.t2,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"'Geist',sans-serif"}}>{chip.l}</button>
               )}
             </div>
-            {filteredHSeq.length===0?<div style={{textAlign:"center",padding:"24px 20px",color:C.t3,background:C.bg,borderRadius:10,border:"1px solid "+C.bd}}><MagnifyingGlassIcon size={28} color={C.ph}/><div style={{fontSize:12,fontWeight:600,color:C.tx,marginTop:6}}>Sin resultados con los filtros actuales</div></div>:<div style={{background:C.bg,borderRadius:10,overflow:"hidden",border:"1px solid "+C.bd,maxHeight:460,overflowY:"auto"}}>
+            {filteredHSeq.length===0?<div style={{textAlign:"center",padding:"24px 20px",color:C.t2,background:C.bg,borderRadius:10,border:"1px solid "+C.bd}}><MagnifyingGlassIcon size={28} color={C.ph}/><div style={{fontSize:12,fontWeight:600,color:C.tx,marginTop:6}}>Sin resultados con los filtros actuales</div></div>:<div style={{background:C.bg,borderRadius:10,overflow:"hidden",border:"1px solid "+C.bd,maxHeight:460,overflowY:"auto"}}>
               {filteredHSeq.map(item=>{
                 if(item.gap){
                   return <div key={"hgap-"+item.n} style={{padding:"10px 14px",borderBottom:"1px solid "+C.bd,background:C.dn+"08",display:"flex",alignItems:"center",gap:10}}>
-                    <div style={{display:"flex",alignItems:"center",gap:5,fontSize:14,fontWeight:800,color:C.dn,minWidth:90}}><WarningIcon size={13} weight="fill"/>H-{item.n}</div>
-                    <div style={{fontSize:12,color:C.dn,fontWeight:600}}>FALTANTE</div>
+                    <div style={{display:"flex",alignItems:"center",gap:5,fontSize:14,fontWeight:800,color:C.dnInk,minWidth:90}}><WarningIcon size={13} weight="fill"/>{hTxt(item.n)}</div>
+                    <div style={{fontSize:12,color:C.dnInk,fontWeight:600}}>FALTANTE</div>
                   </div>;
                 }
                 return item.orders.map((o,i)=>{
                   const isCancelled=o.cancelled_at||o.stage?.includes("cancelled");
                   const stClr=SM[o.stage]?.c||C.t3;
-                  return <div key={item.n+"-"+i} onClick={()=>setSelectedProdOrder(o)}
+                  return <div key={item.n+"-"+i} onClick={()=>setSelectedProdOrder(o)} role="button" tabIndex={0} aria-label={"Orden "+(o.production_number||hTxt(item.n))+(o.client?", "+o.client:"")+". Enter para ver su detalle."}
+                    onKeyDown={e=>{if((e.key==="Enter"||e.key===" ")&&e.target===e.currentTarget){e.preventDefault();setSelectedProdOrder(o);}}}
                     style={{padding:"10px 14px",borderBottom:"1px solid "+C.bd,background:isCancelled?C.dn+"08":(o.invoice_folio?C.fac+"10":"transparent"),display:"flex",alignItems:"center",gap:10,cursor:"pointer",transition:"background 0.12s"}}
                     onMouseEnter={e=>{e.currentTarget.style.background=C.sf}}
                     onMouseLeave={e=>{e.currentTarget.style.background=isCancelled?C.dn+"08":(o.invoice_folio?C.fac+"10":"transparent")}}>
-                    <div style={{display:"flex",alignItems:"center",gap:5,fontSize:14,fontWeight:800,color:C.t2,minWidth:90}}><ClockCounterClockwiseIcon size={12} weight="bold"/>H-{item.n}</div>
-                    {o.order_type==="maquila"&&<div style={{fontSize:9,color:C.maq,fontWeight:700,background:C.maq+"15",padding:"2px 6px",borderRadius:4}}>MAQ</div>}
+                    <div style={{display:"flex",alignItems:"center",gap:5,fontSize:14,fontWeight:800,color:C.t2,minWidth:90}}><ClockCounterClockwiseIcon size={12} weight="bold"/>{o.production_number||hTxt(item.n)}</div>
+                    {o.order_type==="maquila"&&<div style={{fontSize:10,color:tintaAA(C.maq),fontWeight:700,background:C.maq+"15",padding:"2px 6px",borderRadius:4}}>MAQ</div>}
                     <div style={{fontSize:12,color:C.tx,fontWeight:600,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o.client||"—"}</div>
                     {o.invoice_folio&&<div style={{fontSize:10,color:C.fac,fontWeight:700,background:C.fac+"15",padding:"2px 6px",borderRadius:4}}>{o.invoice_type==="factura"?<FileTextIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>:<ReceiptIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>}{o.invoice_folio}</div>}
-                    {isCancelled&&<div style={{fontSize:10,color:C.dn,fontWeight:700,background:C.dn+"15",padding:"2px 6px",borderRadius:4}}>CANCELADA</div>}
-                    {!isCancelled&&<div style={{fontSize:10,color:stClr,fontWeight:600,background:stClr+"15",padding:"2px 6px",borderRadius:4,display:"inline-flex",alignItems:"center"}}><StageLbl stage={o.stage} size={10}/></div>}
-                    <div style={{fontSize:10,color:C.t3}}>{o.created_at?fDT(o.created_at):"—"}</div>
+                    {isCancelled&&<div style={{fontSize:10,color:C.dnInk,fontWeight:700,background:C.dn+"15",padding:"2px 6px",borderRadius:4}}>CANCELADA</div>}
+                    {!isCancelled&&<div style={{fontSize:10,color:tintaAA(stClr),fontWeight:600,background:stClr+"15",padding:"2px 6px",borderRadius:4,display:"inline-flex",alignItems:"center"}}><StageLbl stage={o.stage} size={10}/></div>}
+                    <div style={{fontSize:10,color:C.t2}}>{o.created_at?fDT(o.created_at):"—"}</div>
                   </div>;
                 });
               })}
             </div>}
             {/* v10.72.79 — nota compacta (distill P2): contexto de la serie vieja + hint de badges, sin el muro de párrafo. */}
-            <div style={{marginTop:10,padding:"9px 12px",background:C.bg,borderRadius:10,border:"1px solid "+C.bd,fontSize:10.5,color:C.t2,lineHeight:1.5}}>Serie <b style={{color:C.tx}}>vieja</b> de producción (renombrada H- en el corte). <b style={{color:C.dn}}>FALTANTE</b> = folio borrado o no migrado; <b style={{color:C.dn}}>CANCELADA</b> = conserva su H-. Carga el archivo histórico completo para completar la serie.</div>
+            <div style={{marginTop:10,padding:"9px 12px",background:C.bg,borderRadius:10,border:"1px solid "+C.bd,fontSize:10.5,color:C.t2,lineHeight:1.5}}>Serie <b style={{color:C.tx}}>vieja</b> de producción (renombrada H- en el corte). <b style={{color:C.dnInk}}>FALTANTE</b> = folio borrado o no migrado; <b style={{color:C.dnInk}}>CANCELADA</b> = conserva su H-. Carga el archivo histórico completo para completar la serie.</div>
           </>}
         </div>}
       </div>;
@@ -19645,6 +19612,7 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
 // v10.43.18 — props onNavigateToOC / onNavigateToOrder para cross-link
 function ProductionOrderDetailModal({order, purchaseOrders, onNavigateToOC, onNavigateToOrder, onClose}){
   useEscClose(onClose);
+  useDevolverFoco(); const panelDet=useRef(null); useLayoutEffect(()=>{panelDet.current?.focus({preventScroll:true});},[]); // v10.84.146 (vuelta 3)
   const isCancelled=order.cancelled_at||order.stage?.includes("cancelled");
   const oc=order.purchase_order_id?(purchaseOrders||[]).find(p=>p.id===order.purchase_order_id):null;
   const stClr=SM[order.stage]?.c||C.t3;
@@ -19653,7 +19621,7 @@ function ProductionOrderDetailModal({order, purchaseOrders, onNavigateToOC, onNa
     <span style={{color:color||C.tx,fontWeight:600,textAlign:"right",overflow:"hidden",textOverflow:"ellipsis"}}>{value}</span>
   </div>:null;
   return <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:20}}>
-    <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:0,maxWidth:560,width:"100%",maxHeight:"90vh",display:"flex",flexDirection:"column"}}>
+    <div onClick={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label={"Orden "+(order.production_number||order.id)} ref={panelDet} tabIndex={-1} onKeyDown={atraparTab} style={{outline:"none",background:C.bg,borderRadius:20,padding:0,maxWidth:560,width:"100%",maxHeight:"90vh",display:"flex",flexDirection:"column"}}>
       <div style={{padding:"18px 22px",borderBottom:"0.5px solid "+C.bd,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
         <div>
           <h3 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:0,color:C.ac,display:"flex",alignItems:"center",gap:6}}><ClipboardTextIcon size={18} weight="bold"/>{order.production_number}</h3>

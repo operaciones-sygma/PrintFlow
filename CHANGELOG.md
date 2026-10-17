@@ -12,6 +12,38 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.146 — «Auditoría»: buscar una orden como se escribe, duplicados por serie y la clave con las series de hoy — 17-oct-2026
+
+**Qué pasaba.** La pasada de `/impeccable critique` de la madrugada del 17-oct sobre «Auditoría» (`AuditoriaView`: los consecutivos fiscales y de órdenes;
+22/40, snapshot `.impeccable/critique/2026-10-17T07-41-36Z__src-app-jsx-auditoria.md`). Con los datos reales la serie F no tiene huecos de verdad (191 folios: 142 en órdenes y 49 en la
+cartera de CobranzaFlow), pero la pantalla: en la pestaña de órdenes **buscar «P-0601» —como se escribe— no encontraba nada** (armaba «P-601» y no buscaba
+en el folio de la orden) y escribía «P-601» en las filas, los huecos y el rango (lo mismo el histórico H-); los **duplicados se contaban por número pelado**
+(F-3 y C-3 serían un «duplicado»; dormido mientras las series no se enciman); la clave decía que lo de la cartera está «facturado directo en Alpha» y mandaba
+a comparar con AlphaERP, cuando la F- y la RS- las timbra SYGMA desde el 1-sep; ni las filas ni «Compartidos» (la única tarjeta que se tocaba, un div) ni el
+encabezado del histórico se abrían con el teclado, y el detalle no se anunciaba como diálogo ni se llevaba el foco; «gaps», «Read-only», «Click en»; cinco
+tarjetas de 22 px por pestaña; etiquetas de semáforo como texto (verde a 3.0:1, ámbar a 2.6:1, rojo a 4.3:1, las etapas a 2.8-3.3:1).
+
+**Qué se cambió** (sólo `AuditoriaView` y sus dos ventanas):
+- Los folios P- y H- con sus ceros («P-0601») en las filas, los huecos y el rango; la búsqueda los encuentra como se escriben y también por el folio de la orden.
+- Duplicado es el mismo folio dentro de su serie (y el total cuenta folios por serie).
+- La clave: lo de la cartera de CobranzaFlow sin orden aquí (por partes, del plan matriz o hecha sin orden); revisar a fondo con CobranzaFlow (y con Alpha,
+  las series D- y R-); «Con folio fiscal: F- o RS- (antes D- o R-)». «Huecos», «sólo lectura», «Anticipados»; el CSV dice «HUECO».
+- Las cifras en un renglón por pestaña («11 folios · 1 hueco · 1 duplicado · 1 compartido, ver cuáles · Rango…»), en lugar de las tarjetas.
+- Teclado: las filas que abren su orden, «ver cuáles» de los compartidos y el encabezado del histórico; el detalle y los compartidos son diálogos que se llevan
+  el foco, no dejan salir al Tab y al cerrar lo regresan. Tintas con AA (las etiquetas sobre su tinte, los huecos, las fechas, las etapas, el botón de
+  Remisiones activo), nada de menos de 10 px.
+
+**Cómo se probó.** Tanda nueva `auditoria` (22; banco `gen-auditoria.mjs`, montado con la línea de App; la cartera de CobranzaFlow y las OC de Corona
+simuladas). Vuelta 1 contra v10.84.145: fallaban 9 de 14; una prueba era mía (la clave se comparte entre pestañas y el segundo clic la cerraba: no veía la de
+órdenes); en el arreglo, las etiquetas sobre su tinte no llegaban a 4.5:1 con las tintas de texto sobre blanco (ahora las de texto sobre tinte). Vuelta 2,
+por donde no se diseñó: las remisiones, un periodo sin folios, buscar un folio por su orden, Esc en el detalle, el histórico con el teclado y el CSV: sin
+fallas. Vuelta 3: el detalle no se llevaba el foco y el Tab se salía a la página de atrás (arreglado); vuelta 4: lo mismo en los compartidos, sin fallas.
+Ahora 22 de 22; contra v10.84.145 fallan 15. El detector de la skill: antes, el verde (3.0:1), gris sobre gris (1.1:1), el rojo (4.3:1), el ámbar (2.6:1), las
+etapas (3.3:1, 13 veces) y renglones de ~202 caracteres; después, sólo un falso positivo (toma un tinte translúcido como sólido) y la letra de la app. Los 29
+bancos se generan con el App.jsx nuevo; build y `probar-alcance` en verde.
+
+**En producción:** (pendiente)
+
 ## v10.84.145 — «Archivo»: el ingreso se llama como es, el vendedor cuenta lo que lleva y la cancelada va por su fecha — 17-oct-2026
 
 **Qué pasaba.** La pasada de `/impeccable critique` de la madrugada del 17-oct sobre el «Archivo» (`Archive`: lo entregado y lo cancelado por año → mes →
