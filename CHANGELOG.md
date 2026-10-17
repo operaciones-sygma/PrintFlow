@@ -34,9 +34,11 @@ lista del bucket). Vuelta 1 contra v10.84.144: fallaban 8 de 14; una prueba era 
 pegados en el texto); en el arreglo, la cuenta del año sobre la carpeta abierta y el folio morado sobre la ficha cancelada no llegaban a 4.5:1 (ajustados).
 Vuelta 2, por donde no se diseñó: la entregada a las 23:30 del último día del mes (en UTC ya es el siguiente), la semana de un solo día («El 31» de mayo) y
 el vendedor con una orden ajena (sin su importe): sin fallas del arreglo (una prueba mía no reconocía «El 31»). Ahora 17 de 17; contra v10.84.144 fallan
-10. El detector de la skill: sólo la letra de la app, antes y después. Los 28 bancos se generan con el App.jsx nuevo; build y `probar-alcance` en verde.
+10. El detector de la skill: sólo la letra de la app, antes y después. Los 28 bancos se generan con el App.jsx nuevo; build y `probar-alcance` en verde. Candado: 2335 de 2335 (17 nuevas), de a 4, 15.6 min, a la primera y sin inestables.
 
-**En producción:** (pendiente)
+**En producción:** 17-oct, READY `dpl_445aGqwRikj44oNGJSDGSCrh6t1A`, commit `c4748d8`; vuelta atrás: promover `dpl_5MWG7tYG5Rhhsv6EnwBAypAjp79c` (el código de v10.84.144) o
+`git revert c4748d8`; la base no cambió. Revisado en producción: el código servido (`index-D8uNEMK4.js`) trae lo nuevo; el recorrido de los 8 roles:
+nada truena (contra la app publicada). La vista sólo se abre con el archivo completo cargado: el recorrido llega a su botón de cargar; la pantalla nueva la prueba el banco.
 
 ## v10.84.144 — «Cancelaciones»: el lote pregunta antes de cancelar y dice qué cae con cada orden — 17-oct-2026
 

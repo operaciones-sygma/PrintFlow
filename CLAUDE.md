@@ -120,7 +120,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2318 pruebas, ~15 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2335 pruebas, ~15 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Las tandas con banco van de a 7 a la vez (`PROBAR_PARALELO`; con 11 juntas,
@@ -197,7 +197,11 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.144 (17-oct, READY `dpl_7RKf9QXdjgGEgUqJ6mK2Rbas9hmp`, commit `0d859ae`; vuelta atrás: promover `dpl_FPnNs2rmC66xzqgVGHQfN8W6xfQ8` (el código de
+- **LIVE:** v10.84.145 (17-oct, READY `dpl_445aGqwRikj44oNGJSDGSCrh6t1A`, commit `c4748d8`; vuelta atrás: promover `dpl_5MWG7tYG5Rhhsv6EnwBAypAjp79c` (el código de
+  v10.84.144) o `git revert c4748d8`; la base no cambió; candado 2335 de 2335 (17 nuevas), de a 4, 15.6 min, a la primera y sin inestables). El «Archivo» (22/40): «Ingreso, lo entregado sin IVA» (decía
+  «Facturado total»), el vendedor cuenta lo que lleva como vendedor (`isVendedorOwnerByAgent`), la cancelada por su fecha de cancelación, las semanas con sus
+  días, las fichas con el teclado. Banco `gen-archivo.mjs`, tanda `archivo` (no confundir con `archivos`).
+  v10.84.144 (17-oct, READY `dpl_7RKf9QXdjgGEgUqJ6mK2Rbas9hmp`, commit `0d859ae`; vuelta atrás: promover `dpl_FPnNs2rmC66xzqgVGHQfN8W6xfQ8` (el código de
   v10.84.143) o `git revert 0d859ae`; la base no cambió; candado 2318 de 2318 (25 nuevas), de a 4, 15.7 min; una inestable (ses-47, net::ERR_NO_BUFFER_SPACE de Windows al abrir la app: sola 3 de 3, revisada)). «Cancelaciones» (22/40): el lote ya no cancela con el primer clic:
   «Revisar y cancelar» dice qué cae con cada orden (las piezas de «Cancelar orden» del detalle) y pide «Sí, cancelar las N»; lo cancelado en otra sesión no se
   manda; mientras se lee el saldo no deja confirmar (tope de 8 s). Banco `gen-cancelaciones-vista.mjs`, tanda `cancelaciones-vista`.
