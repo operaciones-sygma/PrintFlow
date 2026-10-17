@@ -120,7 +120,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2268 pruebas, ~15 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2293 pruebas, ~15 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Las tandas con banco van de a 7 a la vez (`PROBAR_PARALELO`; con 11 juntas,
@@ -197,7 +197,12 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.142 (16-oct, READY `dpl_3NsBE5PgVM8bEsnjnNa8zEpg8mqF`, commit `efa2a44`; vuelta atrás: promover `dpl_91tDTAaLRo9vZVyLx9hUbuKgERLS` (el código de
+- **LIVE:** v10.84.143 (17-oct, READY `dpl_GybptQzVnx98kbQu8DwFMUnRfeAu`, commit `ecad72d`; vuelta atrás: promover `dpl_E3SMuBwWT8HY4SpUy54okgf9RE9N` (el código de
+  v10.84.142) o `git revert ecad72d`; la base no cambió; candado 2293 de 2293 (25 nuevas), de a 4, 14.9 min, a la primera y sin inestables). «En espera» (20/40): sin «Reactivar las N» para las listas que
+  esperan la factura del cliente (cada cliente pide la suya), el lote del taller fuera del `<summary>`, la más vieja primero, la ficha que espera al cliente
+  con su agente, su WhatsApp y su importe; la franja de la pausa con tintas en todas las vistas. Banco `gen-espera.mjs` (copia el bloque de App), tanda
+  `espera`.
+  v10.84.142 (16-oct, READY `dpl_3NsBE5PgVM8bEsnjnNa8zEpg8mqF`, commit `efa2a44`; vuelta atrás: promover `dpl_91tDTAaLRo9vZVyLx9hUbuKgERLS` (el código de
   v10.84.141) o `git revert efa2a44`; la base no cambió; candado 2268 de 2268 (32 nuevas), de a 4, 14.8 min, a la primera y sin inestables). «Dinero en Proceso» (`WIPDashboard`, 17/40): lo listo que espera al
   cliente va aparte de lo que está en proceso (`esperaAlCliente`), sin lectura no dice «$0», días en la etapa, teclado, AA; «En Stock» y lo cancelado ya no
   suman. Banco `gen-wip.mjs`, tanda `wip`.

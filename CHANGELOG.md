@@ -45,9 +45,11 @@ donde no se diseñó: el grupo revuelto (6 que esperan al cliente y 4 que corrig
 con el teclado, la que se entrega con la vista abierta, el vendedor con una orden de otro (no ve su contacto ni su importe), la maquila con su precio al
 cliente (no el costo) y buscar: ninguna falla nueva. Ahora 25 de 25; contra v10.84.142 fallan 14. El detector de la skill en el navegador: los renglones
 del subtítulo (~202 → ~80 caracteres) y el interlineado del motivo; no vio el contraste (lo midió la tanda componiendo los tintes). Build y
-`probar-alcance` en verde.
+`probar-alcance` en verde. Los 26 bancos se generan con el App.jsx nuevo. Candado: 2293 de 2293 (25 nuevas), de a 4, 14.9 min, a la primera y sin inestables.
 
-**En producción:** (pendiente)
+**En producción:** 17-oct, READY `dpl_GybptQzVnx98kbQu8DwFMUnRfeAu`, commit `ecad72d`; vuelta atrás: promover `dpl_E3SMuBwWT8HY4SpUy54okgf9RE9N` (el código de v10.84.142) o
+`git revert ecad72d`; la base no cambió. Revisado en producción: el código servido (`index-DsFH941i.js`) trae lo nuevo; el recorrido de los 8 roles:
+nada truena (contra la app publicada). Con los datos reales (Karla): las 14 de Salidas de la más vieja a la más nueva (P-0070 de Castores, 113 días en espera y $21,700, con su agente y su WhatsApp), sin «Reactivar las 14». En «Dinero en Proceso» la misma P-0070 dice 82: ahí son días hábiles en la etapa; aquí, días naturales desde la pausa.
 
 ## v10.84.142 — «Dinero en Proceso»: lo listo que espera al cliente va aparte, y sin lectura no dice «$0» — 16-oct-2026
 
