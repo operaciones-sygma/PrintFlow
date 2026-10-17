@@ -76,6 +76,7 @@ function simulada() {
     rpcFalla: null,    // v10.84.94 — el nombre de una RPC que contesta 500 (la base que falla al escribir)
     retraso: {},       // v10.84.95 — { tabla: ms }: la base tarda en contestar esa tabla (la primera lectura lenta)
     rpcRespuestas: {}, // v10.84.96 — { rpc: valor }: lo que contesta esa RPC (por omisión, null)
+    escrituraFalla: null, // v10.84.150 — una tabla cuyas escrituras (PATCH, POST) contestan 503: la base que no guarda
   };
 }
 const b64u = o => Buffer.from(JSON.stringify(o)).toString("base64url");
@@ -166,6 +167,7 @@ async function rutear(ctx, s) {
       // PostgREST sólo revisa la firma y el vencimiento del JWT: con una sesión muerta en Auth, las lecturas siguen pasando.
       // Como anónimo, nada (la app de verdad recibe «permission denied»).
       if (quien !== "usuario") return J(401, { code: "42501", message: "permission denied for table " + ruta.split("/").pop(), details: null, hint: null });
+      if (s.escrituraFalla && m !== "GET" && m !== "HEAD" && ruta === "/rest/v1/" + s.escrituraFalla) return J(503, { message: "upstream connect error (prueba)" });
       if (m === "GET" || m === "HEAD") {
         const tabla = ruta.slice("/rest/v1/".length), filas = s.filas[tabla];
         if (s.retraso[tabla]) await new Promise(r => setTimeout(r, s.retraso[tabla]));
@@ -1588,6 +1590,99 @@ await caso("ses-97-en-espera-no-dice-vencida", async ({ p, s }) => {
   const t = await texto(p), dice = (t.match(/\d+ vencida/) || [""])[0];
   // (en «En espera» la ficha es la compacta, sin «Entrega:»: su «RETRASO» va junto al folio; P-0930 es la única en espera)
   ok("ses-97-en-espera-no-dice-vencida", /P-0930/.test(t) && !dice && !/RETRASO/.test(t), `la vista «En espera» con P-0930 (espera la factura del cliente): ${dice ? "DICE «" + dice + "»" : "no dice «vencida»"}; ${/RETRASO/.test(t) ? "su ficha DICE «RETRASO»" : /P-0930/.test(t) ? "su ficha sin «RETRASO»" : "P-0930 NO SALE"}`);
+});
+
+// ── v10.84.150 (Marcelo, 17-oct: «escojo tus recomendaciones»): «Ya pidió factura» de Karla la regresa a Salidas y abre de una vez «Asignar folio y
+//   entregar», con la orden ya reactivada (antes la regresaba y Karla tenía que ir a buscarla a su cola). Si la base no la reactivó, no abre nada; un doble
+//   clic reactiva una sola vez; Dirección y lo que ese botón no folia (el re-trabajo cubierto por otro folio), como antes. Escritas antes del arreglo ──
+const YA_PIDIO = (x = {}) => ordenK("P-0940", { stage: "salidas", due_date: haceDias(2), snooze_reason: "El cliente aún no ha pedido factura/remisión",
+  snooze_kind: "awaiting_client_invoice", snooze_stage: "salidas", snoozed_by: "karla", snoozed_at: haceH(50), ...x });
+const abrirEnEspera = async (p, s, quien) => {
+  await abrirYEntrar(p, s, quien); await esperarMenu(p, /^En espera/); await despertar(p);
+  await p.locator('button[title^="En espera"]').first().click(); await p.waitForTimeout(900);
+};
+const botonYaPidio = p => p.getByRole("button", { name: /^Ya pidió factura/ }).first();
+const etiquetaYaPidio = async p => ((await botonYaPidio(p).innerText().catch(() => "")) || "").replace(/\s+/g, " ").trim();
+const ventanaDeFolio = (p, ms = 4000) => p.locator("#invoice-modal-title").first().waitFor({ timeout: ms }).then(() => true, () => false);
+const escriturasA = (s, t0, ruta, m) => s.peticiones.filter(x => x.t >= t0 && x.ruta === ruta && x.m === m).length;
+await caso("ses-98-karla-ya-pidio-factura-abre-asignar-folio", async ({ p, s }) => {
+  s.filas = { orders: [YA_PIDIO()] };
+  await abrirEnEspera(p, s, "karla");
+  const etiqueta = await etiquetaYaPidio(p);
+  const t0 = Date.now(); await botonYaPidio(p).click();
+  const abrio = await ventanaDeFolio(p), patch = escriturasA(s, t0, "/rest/v1/orders", "PATCH");
+  ok("ses-98-karla-ya-pidio-factura-abre-asignar-folio", abrio && patch === 1 && /Asignar folio/.test(etiqueta),
+    `Karla en «En espera», P-0940 (lista, espera la factura del cliente): el botón dice «${etiqueta}»; al tocarlo, ${patch} reactivación en la base y «Asignar folio y entregar» ${abrio ? "se abre" : "NO se abre (hay que ir a buscarla a su cola)"}`);
+});
+await caso("ses-99-si-la-base-no-la-reactivo-no-abre-el-folio", async ({ p, s }) => {
+  s.filas = { orders: [YA_PIDIO()] };
+  await abrirEnEspera(p, s, "karla");
+  s.escrituraFalla = "orders";
+  await botonYaPidio(p).click();
+  const abrio = await ventanaDeFolio(p, 3000), t = await texto(p);
+  ok("ses-99-si-la-base-no-la-reactivo-no-abre-el-folio", !abrio && /P-0940/.test(t),
+    `la base no guardó la reactivación (503): «Asignar folio y entregar» ${abrio ? "SE ABRE (para una orden que sigue en espera)" : "no se abre"}; P-0940 ${/P-0940/.test(t) ? "sigue en «En espera»" : "ya no sale"}`);
+});
+await caso("ses-100-doble-clic-reactiva-una-vez", async ({ p, s }) => {
+  s.filas = { orders: [YA_PIDIO()] };
+  await abrirEnEspera(p, s, "karla");
+  const t0 = Date.now(); await botonYaPidio(p).dblclick(); await p.waitForTimeout(2500);
+  const patch = escriturasA(s, t0, "/rest/v1/orders", "PATCH"), bitacora = escriturasA(s, t0, "/rest/v1/order_timeline", "POST");
+  ok("ses-100-doble-clic-reactiva-una-vez", patch === 1 && bitacora === 1, `doble clic en «Ya pidió factura»: ${patch} reactivaciones en la base y ${bitacora} renglones «🔔 Reactivada» en la bitácora (debe 1 y 1)`);
+});
+await caso("ses-101-direccion-reactiva-como-antes", async ({ p, s }) => {
+  s.filas = { orders: [YA_PIDIO()] };
+  await abrirEnEspera(p, s, "marcelo");
+  const etiqueta = await etiquetaYaPidio(p);
+  const t0 = Date.now(); await botonYaPidio(p).click();
+  const abrio = await ventanaDeFolio(p, 3000), patch = escriturasA(s, t0, "/rest/v1/orders", "PATCH");
+  ok("ses-101-direccion-reactiva-como-antes", !!etiqueta && patch === 1 && !abrio, `Dirección, «${etiqueta}»: ${patch} reactivación y «Asignar folio y entregar» ${abrio ? "SE ABRE" : "no se abre (como antes: folia Karla)"}`);
+});
+await caso("ses-102-lo-que-ese-boton-no-folia-sigue-como-antes", async ({ p, s }) => {
+  s.filas = { orders: [YA_PIDIO({ return_covered_by_folio: "F-120" })] };
+  await abrirEnEspera(p, s, "karla");
+  const etiqueta = await etiquetaYaPidio(p);
+  const t0 = Date.now(); await botonYaPidio(p).click();
+  const abrio = await ventanaDeFolio(p, 3000), patch = escriturasA(s, t0, "/rest/v1/orders", "PATCH");
+  ok("ses-102-lo-que-ese-boton-no-folia-sigue-como-antes", !!etiqueta && !/Asignar folio/.test(etiqueta) && patch === 1 && !abrio,
+    `P-0940 es un re-trabajo cubierto por F-120 (se entrega sin folio nuevo): el botón dice «${etiqueta}»; ${patch} reactivación; «Asignar folio y entregar» ${abrio ? "SE ABRE (pediría un folio que no lleva)" : "no se abre"}`);
+});
+// (la otra puerta: «Esperan factura del cliente», al pie de su cola; su botón llamaba directo a reactivar)
+await caso("ses-103-desde-su-cola-tambien", async ({ p, s }) => {
+  s.filas = { orders: [YA_PIDIO()] };
+  await abrirYEntrar(p, s, "karla"); await esperarMenu(p, /^Pendientes/); await despertar(p);
+  await p.locator('button[title^="Pendientes"]').first().click(); await p.waitForTimeout(900);
+  const etiqueta = await etiquetaYaPidio(p);
+  const t0 = Date.now(); await botonYaPidio(p).click();
+  const abrio = await ventanaDeFolio(p), patch = escriturasA(s, t0, "/rest/v1/orders", "PATCH");
+  ok("ses-103-desde-su-cola-tambien", abrio && patch === 1 && /Asignar folio/.test(etiqueta),
+    `Karla en «Pendientes de Folio» («Esperan factura del cliente»): el botón dice «${etiqueta}»; ${patch} reactivación; «Asignar folio y entregar» ${abrio ? "se abre" : "NO se abre"}`);
+});
+
+// ── vuelta 2 (v10.84.150): sin precio, Esc con el folio abierto, la maquila recibida ──
+await caso("ses-104-sin-precio-pide-el-precio-primero", async ({ p, s }) => {
+  s.filas = { orders: [YA_PIDIO({ price: 0 })] };
+  await abrirEnEspera(p, s, "karla");
+  await botonYaPidio(p).click();
+  const precio = await p.locator("#pricecapture-modal-title").first().waitFor({ timeout: 4000 }).then(() => true, () => false);
+  ok("ses-104-sin-precio-pide-el-precio-primero", precio, `P-0940 sin precio: «Ya pidió factura» ${precio ? "pide primero el precio (como «Asignar folio y entregar» de siempre)" : "NO pide el precio"}`);
+});
+await caso("ses-105-esc-cierra-el-folio-y-la-orden-queda-reactivada", async ({ p, s }) => {
+  s.filas = { orders: [YA_PIDIO()] };
+  await abrirEnEspera(p, s, "karla");
+  await botonYaPidio(p).click();
+  const abrio = await ventanaDeFolio(p);
+  await p.keyboard.press("Escape"); await p.waitForTimeout(900);
+  const sigue = await p.locator("#invoice-modal-title").count(), t = await texto(p);
+  ok("ses-105-esc-cierra-el-folio-y-la-orden-queda-reactivada", abrio && !sigue && !/P-0940/.test(t),
+    `con «Asignar folio y entregar» ${abrio ? "abierta" : "SIN ABRIR"}, Esc: ${sigue ? "SIGUE abierta" : "se cierra"}; P-0940 ${/P-0940/.test(t) ? "SIGUE en «En espera»" : "ya no está en espera (quedó reactivada, en su cola)"}`);
+});
+await caso("ses-106-la-maquila-recibida-tambien", async ({ p, s }) => {
+  s.filas = { orders: [YA_PIDIO({ stage: "maq_received", order_type: "maquila", price: 0, maq_price: 1450, maq_cost: 800, maq_provider: "PEÑA", snooze_stage: "maq_received" })] };
+  await abrirEnEspera(p, s, "karla");
+  await botonYaPidio(p).click();
+  const abrio = await ventanaDeFolio(p);
+  ok("ses-106-la-maquila-recibida-tambien", abrio, `la maquila recibida que esperaba la factura: «Asignar folio y entregar» ${abrio ? "se abre" : "NO se abre"}`);
 });
 
 await browser.close();

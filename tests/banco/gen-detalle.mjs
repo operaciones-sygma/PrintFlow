@@ -59,6 +59,8 @@ const partes = [
   ...opcional(L.some(l => l.startsWith("const vencidaAhora=")), () => [line(/^const ETAPAS_LISTA=/, "ETAPAS_LISTA"), line(/^const esperaAlCliente=/, "esperaAlCliente"),
     ...(L.some(l => l.startsWith("const listaATiempo=")) ? [line(/^const listaEn=/, "listaEn"), line(/^const finDeLaEntrega=/, "finDeLaEntrega"), line(/^const listaATiempo=/, "listaATiempo")] : []),
     line(/^const vencidaAhora=/, "vencidaAhora")].join("\n")),
+  // v10.84.150 — la franja de la pausa del detalle dice «Ya pidió factura · Asignar folio» a Karla (`etiquetaYaPidio`, con `seFoliaConAsignar`): si el App.jsx las trae
+  ...opcional(L.some(l => l.startsWith("const etiquetaYaPidio=")), () => [line(/^const seFoliaConAsignar=/, "seFoliaConAsignar"), line(/^const etiquetaYaPidio=/, "etiquetaYaPidio")].join("\n")),
   multi(/^const ETAPA_NOMBRE = \{/, "ETAPA_NOMBRE"), multi(/^const etapaPreviaDeshacer = /, "etapaPreviaDeshacer"),
   multi(/^const vuelveAlDeshacer = /, "vuelveAlDeshacer"), multi(/^const liquidadaConSaldoAFavor = /, "liquidadaConSaldoAFavor", /\)\);\s*$/),
   // v10.84.112 — quién corrige el precio y de qué orden (si el App.jsx lo trae)

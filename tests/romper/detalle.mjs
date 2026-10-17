@@ -740,8 +740,9 @@ await caso("det-121-agregar-nota", "caso=factura&rol=admin", async p => {
 });
 await caso("det-122-reactivar-con-la-palabra-de-la-ficha", "caso=espera&rol=karla", async p => {
   await p.evaluate(() => window.__cambiar({ snooze_kind: "awaiting_client_invoice" })); await espera(p, 300);
-  const n = await dlg(p).getByRole("button", { name: /Ya pidió factura · Reactivar/ }).count();
-  ok("det-122-reactivar-con-la-palabra-de-la-ficha", n === 1, n ? "esperaba la factura: «Ya pidió factura · Reactivar», como en la ficha" : "esperaba la factura y dice «Quitar espera» (la ficha: «Ya pidió factura · Reactivar»)");
+  // (desde v10.84.150 la ficha y el detalle le dicen a Karla «Ya pidió factura · Asignar folio» cuando ese botón la folia; antes, «· Reactivar»)
+  const b = dlg(p).getByRole("button", { name: /Ya pidió factura · (Asignar folio|Reactivar)/ }), n = await b.count(), dice = n ? ((await b.first().innerText()) || "").replace(/\s+/g, " ").trim() : "";
+  ok("det-122-reactivar-con-la-palabra-de-la-ficha", n === 1 && /Asignar folio/.test(dice), n ? `esperaba la factura: «${dice}» (a Karla, como en la ficha: «Ya pidió factura · Asignar folio»)` : "esperaba la factura y dice «Quitar espera» (la ficha: «Ya pidió factura · …»)");
 });
 await caso("det-123-vendedor-ajeno-sin-acciones", "caso=salidas&rol=vendedor&login=otro", async p => {
   const t = await textoMas(p);
