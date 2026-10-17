@@ -3,7 +3,8 @@
 // Se anota en #log: «db <función> <dato>», «aviso <texto>» (el showToast de App), «cerrar».
 // Uso: node gen-inventario.mjs <App.jsx> <dirSalida>
 // Variantes por URL: rol=admin|karla|secretaria|produccion (admin) · falla=productos|movimientos|historial|clientes (siempre) o productos-una (sólo la
-// primera lectura; también movimientos-una…) o quitar (la base no quita del catálogo) · caso=vacio (catálogo sin productos de verdad)
+// primera lectura; también movimientos-una…) o quitar (la base no quita del catálogo) · caso=vacio (catálogo sin productos de verdad) ·
+// falla=apartado (v10.84.156: la lectura de lo que se llevó cada cliente del apartado; apartado-una, sólo la primera)
 import fs from "node:fs";
 import path from "node:path";
 import { LIGA_FUENTES, copiarFuentes } from "./fuentes.mjs";
@@ -44,10 +45,18 @@ const HIST = CASO === "vacio" ? [] : [
   { id: "OP-P-0660", production_number: "P-0660", client: "CUADRA SA", client_id: "c1", product: "Volante Cuadra carta", quantity: 1000, price: 2500, stage: "stocked", stock_role: "production", stock_loaded: true, client_product_id: "p1", created_at: T("2026-10-10T10:00:00-06:00") },
   { id: "OP-V-1", production_number: null, client: "CUADRA LEÓN", client_id: "c2", product: "Volante Cuadra carta", quantity: 200, price: 500, stage: "delivered", stock_role: "sale", client_product_id: "p1", invoice_folio: "F-201", invoice_type: "factura", invoiced_by: "karla", created_at: T("2026-10-14T10:00:00-06:00") },
 ];
+// v10.84.156 — las salidas del apartado (pool1), con el cliente de su orden: «Cuadra León » cuenta junto con «CUADRA LEÓN»; una sin orden
+const SALIDAS = CASO === "vacio" ? [] : [
+  { id: "s4", qty: -25, created_at: T("2026-10-01T10:00:00-06:00"), order_id: null, client_products: { stock_pool_id: "pool1" }, orders: null },
+  { id: "s1", qty: -200, created_at: T("2026-10-10T10:00:00-06:00"), order_id: "OP-V-2", client_products: { stock_pool_id: "pool1" }, orders: { client: "CUADRA LEÓN" } },
+  { id: "s2", qty: -100, created_at: T("2026-10-12T10:00:00-06:00"), order_id: "OP-V-3", client_products: { stock_pool_id: "pool1" }, orders: { client: "Cuadra León " } },
+  { id: "s3", qty: -50, created_at: T("2026-10-13T10:00:00-06:00"), order_id: "OP-V-4", client_products: { stock_pool_id: "pool1" }, orders: { client: "CUADRA SA" } },
+];
 const CLIENTES = [{ id: "c1", name: "CUADRA SA" }, { id: "c2", name: "CUADRA LEÓN", stock_pool_id: "pool1", pool_name: "Grupo Cuadra" }];
 const db = {
   loadClientProducts: async () => { await espera(60); if (falla("productos")) throw new Error("loadClientProducts: la base no contestó"); anota("db loadClientProducts"); return PRODUCTOS.map(x => ({ ...x })); },
   loadStockMovements: async () => { await espera(60); if (falla("movimientos")) throw new Error("loadStockMovements: la base no contestó"); return MOVS.map(x => ({ ...x })); },
+  loadSalidasDelApartado: async () => { await espera(60); if (falla("apartado")) throw new Error("loadSalidasDelApartado: la base no contestó"); return SALIDAS.map(x => ({ ...x })); },
   loadCuadraOrdersHistory: async () => { await espera(60); if (falla("historial")) throw new Error("loadCuadraOrdersHistory: la base no contestó"); return HIST.map(x => ({ ...x })); },
   deleteClientProduct: async id => { await espera(150); if (FALLA === "quitar") { anota("db deleteClientProduct " + id + " FALLÓ"); throw new Error("deleteClientProduct: la base no contestó"); } anota("db deleteClientProduct " + id); PRODUCTOS = PRODUCTOS.filter(p => p.id !== id); },
   saveClientProduct: async () => { await espera(60); anota("db saveClientProduct"); },

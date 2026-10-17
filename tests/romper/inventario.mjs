@@ -180,6 +180,34 @@ await caso("inv-20-telefono", "", async p => {
   ok("inv-20-telefono", !ancha && !!r && r.x + r.width <= 390, `a 390 px: ${ancha ? "la página se sale a lo ancho" : "cabe"}; «Historial» ${r ? "llega a " + Math.round(r.x + r.width) + " px" : "no está"}`);
 }, { viewport: { width: 390, height: 844 } });
 
+// ── vuelta 3 (v10.84.156; Marcelo, 17-oct: «si hazlo»): lo que se llevó cada cliente del apartado compartido (antes el pool sólo decía «📦 Pool …»).
+//   Escritas antes del arreglo ──
+const apartado = p => p.locator("[data-apartado]").first();
+const abrirApartado = async p => { const hay = await apartado(p).count(); if (hay) { await apartado(p).locator("summary").click(); await espera(p); } return hay > 0; };
+await caso("inv-21-lo-que-se-llevo-cada-cliente", "rol=karla", async p => {
+  const hay = await abrirApartado(p);
+  const filas = await p.locator("[data-cliente-apartado]").evaluateAll(es => es.map(e => e.innerText.replace(/\s+/g, " ")));
+  const sum = hay ? (await apartado(p).locator("summary").innerText()).replace(/\s+/g, " ") : "";
+  ok("inv-21-lo-que-se-llevo-cada-cliente", hay && filas.length === 3 && /CUADRA LEÓN/.test(filas[0]) && /\b300\b/.test(filas[0]) && /2 salidas/.test(filas[0])
+    && /CUADRA SA/.test(filas[1]) && /\b50\b/.test(filas[1]) && /\(sin orden\)/.test(filas[2]) && /3 clientes/.test(sum),
+    `${hay ? "«" + sum + "»: " + JSON.stringify(filas) : "NO DICE quién se llevó lo del apartado"} (debe: CUADRA LEÓN 300 pzas en 2 salidas —«Cuadra León » cuenta junto—, CUADRA SA 50 en 1, (sin orden) 25 en 1)`);
+});
+await caso("inv-22-si-no-se-pudo-leer-lo-dice", "falla=apartado", async p => {
+  const hay = await abrirApartado(p), t = hay ? (await apartado(p).innerText()).replace(/\s+/g, " ") : "";
+  ok("inv-22-si-no-se-pudo-leer-lo-dice", hay && /No se pudo leer/.test(t) && /Reintentar/.test(t) && !/Nadie se ha llevado/.test(t),
+    `la lectura del apartado falla: ${hay ? "«" + t.slice(0, 160) + "»" : "NO SALE el apartado"}`);
+});
+
+// ── vuelta 4 (v10.84.156): «Reintentar» trae lo del apartado ──
+await caso("inv-23-reintentar-trae-lo-del-apartado", "falla=apartado-una", async p => {
+  const hay = await abrirApartado(p);
+  const r = hay ? apartado(p).getByRole("button", { name: "Reintentar" }).first() : null, hayR = r ? await r.count() : 0;
+  if (hayR) { await r.click(); await espera(p, 600); }
+  if (!(await p.locator("[data-cliente-apartado]").count()) && (await apartado(p).count())) { const ab = await apartado(p).getAttribute("open"); if (ab === null) { await apartado(p).locator("summary").click(); await espera(p); } }
+  const filas = await p.locator("[data-cliente-apartado]").count();
+  ok("inv-23-reintentar-trae-lo-del-apartado", hay && hayR > 0 && filas === 3, `la primera lectura falla: ${hay ? (hayR ? "«Reintentar» → " + filas + " clientes (debe 3)" : "SIN «Reintentar»") : "NO SALE el apartado"}`);
+});
+
 await browser.close();
 for (const r of res) console.log(r);
 const fallan = res.filter(r => r.startsWith("FALLA")).length;

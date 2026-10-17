@@ -186,6 +186,19 @@ async function recorrerRol(navegador, base, rol) {
       for (let i = 0; i < 2; i++) { await page.keyboard.press("Escape"); await page.waitForTimeout(150); }
     }
   }
+  // v10.84.156 — el Inventario Cuadra (una ventana, no una vista del menú): Dirección, Karla, Lupita y Gerardo. Sólo lee (también lo que se llevó cada cliente
+  //   del apartado, la lectura nueva)
+  const inventario = page.locator('button[aria-label^="Inventario Cuadra"]').first();
+  if (await inventario.count()) {
+    await paso("Inventario Cuadra", async () => {
+      await inventario.click();
+      await page.getByText("Inventario Cuadra", { exact: true }).first().waitFor({ timeout: 15000 });
+      await asentar();
+      const ap = page.locator("[data-apartado] summary").first();
+      if (await ap.count()) { await ap.click(); await asentar(); }
+    });
+    for (let i = 0; i < 2; i++) { await page.keyboard.press("Escape"); await page.waitForTimeout(150); }
+  }
   if (raros.length) filas.push({ rol, vista: "(sin recorrer)", errores: [], cortes: new Set(), ms: 0, nota: "botones con título que no están en VISTAS: " + raros.slice(0, 8).join(", ") });
   await ctx.close();
   return filas;

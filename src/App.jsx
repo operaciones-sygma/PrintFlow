@@ -2516,6 +2516,13 @@ const db = {
     if(error)throw new Error("loadStockMovements: "+error.message);
     return data||[];
   },
+  // v10.84.156 — lo que se llevó cada cliente del apartado compartido: TODAS las salidas (SOLD) de los productos de un pool, con el cliente de su orden
+  //   (por páginas: la regla 11). Sólo lee
+  async loadSalidasDelApartado() {
+    const {data,error}=await todasLasFilas(()=>supabase.from("stock_movements").select("id,qty,created_at,order_id,client_products!inner(stock_pool_id),orders(client)").eq("kind","SOLD").not("client_products.stock_pool_id","is",null).order("created_at").order("id"));
+    if(error)throw new Error("loadSalidasDelApartado: "+error.message);
+    return data||[];
+  },
   // ─── Corona: saldo a favor (v10.43.0) ───
   async listAnticipoClients() {
     const {data,error}=await supabase.rpc("list_anticipo_clients");
@@ -5717,9 +5724,10 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
   const [movements,setMovements]=useState([]);
   const [history,setHistory]=useState([]); // v10.46.0 — historial órdenes Cuadra
   const [stockClients,setStockClients]=useState([]); // v10.42.1
+  const [salidasApartado,setSalidasApartado]=useState([]); // v10.84.156 — las salidas del apartado compartido, con el cliente de su orden
   const [loading,setLoading]=useState(true);
   // v10.84.130 — si cada lectura se hizo (null = leyendo; true = sí; false = falló): sin esto, una falla decía «Sin productos en stock»
-  const [lectura,setLectura]=useState({productos:null,movimientos:null,historial:null,clientes:null});
+  const [lectura,setLectura]=useState({productos:null,movimientos:null,historial:null,clientes:null,apartado:null});
   const [quitar,setQuitar]=useState(null);           // v10.84.130 — el producto que se pregunta si quitar del catálogo (en la app, no con confirm())
   const [quitando,setQuitando]=useState(false);
   const quitandoRef=useRef(false);
@@ -5738,19 +5746,21 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
     // v10.84.130 — cada lectura por su lado (la regla 12): la que falla lo dice en su pestaña con «Reintentar», las demás siguen y lo último bueno se
     //   queda. Antes, con Promise.all, una falla dejaba el catálogo en cero y decía «Sin productos en stock · Da de alta tu primer producto», y la de los
     //   clientes se tragaba su error (la regla 2: salían «—»).
-    const [prods,movs,scs,hist]=await Promise.allSettled([
+    const [prods,movs,scs,hist,apar]=await Promise.allSettled([
       db.loadClientProducts(),
       db.loadStockMovements(null,80),
       supabase.rpc("list_stock_clients").then(({data,error})=>{if(error)throw new Error(error.message);return data||[]}),
-      db.loadCuadraOrdersHistory(80)
+      db.loadCuadraOrdersHistory(80),
+      db.loadSalidasDelApartado()   // v10.84.156
     ]);
     const bien=x=>x.status==="fulfilled";
     if(bien(prods))setProducts(prods.value);
     if(bien(movs))setMovements(movs.value);
     if(bien(scs))setStockClients(scs.value);
     if(bien(hist))setHistory(hist.value);
-    for(const [n,x] of [["catálogo",prods],["movimientos",movs],["clientes",scs],["historial",hist]])if(!bien(x))console.warn("[InventoryModal] "+n+":",x.reason?.message);
-    setLectura({productos:bien(prods),movimientos:bien(movs),clientes:bien(scs),historial:bien(hist)});
+    if(bien(apar))setSalidasApartado(apar.value);
+    for(const [n,x] of [["catálogo",prods],["movimientos",movs],["clientes",scs],["historial",hist],["apartado",apar]])if(!bien(x))console.warn("[InventoryModal] "+n+":",x.reason?.message);
+    setLectura({productos:bien(prods),movimientos:bien(movs),clientes:bien(scs),historial:bien(hist),apartado:bien(apar)});
     setLoading(false);
   };
   // v10.84.130 — quitar del catálogo con la pregunta en la app (antes confirm() del navegador) y una sola vez aunque haya doble clic
@@ -5772,6 +5782,14 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
     }
     return clientName(p.client_id);
   };
+  // v10.84.156 — lo que se llevó cada cliente del apartado compartido (Marcelo, 17-oct: «si hazlo»; antes el pool sólo decía «📦 Pool Cuadra» y nadie sabía
+  //   quién se lo llevaba): por el cliente de su orden, piezas, salidas y la última; «(sin orden)» lo que salió sin una
+  const porCliente=useMemo(()=>{const g=new Map();for(const m of salidasApartado){const c=String(m.orders?.client||"").trim()||"(sin orden)",k=claveTexto(c);
+    const x=g.get(k)||{cliente:c,piezas:0,salidas:0,ultima:null};x.piezas+=Math.abs(Number(m.qty)||0);x.salidas++;if(!x.ultima||m.created_at>x.ultima)x.ultima=m.created_at;g.set(k,x)}
+    return [...g.values()].sort((a,b)=>b.piezas-a.piezas||a.cliente.localeCompare(b.cliente))},[salidasApartado]);
+  const primeraSalida=salidasApartado.reduce((m,x)=>!m||x.created_at<m?x.created_at:m,null);
+  const elApartado=(()=>{const m=stockClients.find(x=>x.pool_name);return m?"Pool "+m.pool_name:"apartado compartido"})();
+  const hayApartado=products.some(p=>p.stock_pool_id)||salidasApartado.length>0||lectura.apartado===false;
   const filtered=products.filter(p=>{
     if(!filterProducts.trim())return true;
     const q=filterProducts.toLowerCase();
@@ -5807,6 +5825,18 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
           {tab==="products"&&<>
             {lectura.productos===false&&<FallaDelInventario que="el catálogo" onReintentar={reload}/>}
             {lectura.clientes===false&&lectura.productos!==false&&<FallaDelInventario que="de qué cliente es cada producto" onReintentar={reload}/>}
+            {hayApartado&&<details data-apartado style={{marginBottom:10,padding:"10px 12px",borderRadius:12,background:C.sf,border:"0.5px solid "+C.bd}}>
+              <summary style={{cursor:"pointer",fontSize:12,fontWeight:700,color:C.tx}}>Lo que se llevó cada cliente del {elApartado}{lectura.apartado!==false&&porCliente.length?" ("+enPlural(porCliente.length,"cliente","clientes")+")":""}</summary>
+              {lectura.apartado===false?<div style={{marginTop:8}}><FallaDelInventario que="lo que se llevó cada cliente del apartado" onReintentar={reload}/></div>:
+               porCliente.length===0?<div style={{fontSize:12,color:C.t2,padding:"8px 0 0"}}>Nadie se ha llevado nada del apartado todavía.</div>:
+               <div style={{marginTop:8}}>
+                 {porCliente.map(x=><div key={x.cliente} data-cliente-apartado={x.cliente} style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:10,fontSize:12,padding:"6px 0",borderTop:"0.5px solid "+C.bd}}>
+                   <span style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontWeight:600,color:C.tx}}>{x.cliente}</span>
+                   <span style={{whiteSpace:"nowrap",color:C.t2}}><strong style={{color:C.tx,fontFamily:"'Geist Mono',monospace"}}>{x.piezas.toLocaleString("es-MX")}</strong> pzas · {enPlural(x.salidas,"salida","salidas")} · la última el {fD(x.ultima)}</span>
+                 </div>)}
+                 <div style={{fontSize:11,color:C.t2,marginTop:6}}>Todas las salidas del apartado desde el {fD(primeraSalida)}, por el cliente de su orden.</div>
+               </div>}
+            </details>}
             <SearchInput wrapStyle={{marginBottom:10}} style={{...inp}} value={filterProducts} onChange={e=>setFilterProducts(e.target.value)} placeholder="Filtrar por nombre, SKU o cliente" aria-label="Filtrar productos del catálogo"/>
             {filtered.length===0?(products.length===0?(lectura.productos===false?null:<EmptyState icon={PackageIcon} title="Sin productos en stock" hint="Da de alta tu primer producto con Nuevo Producto, o cárgalo desde una orden Cuadra de producción." action={{label:"Nuevo Producto",icon:PlusIcon,onClick:()=>setEditing({mode:"new"})}}/>):<div style={{textAlign:"center",padding:30,color:C.t2,fontSize:12}}>Sin coincidencias</div>):
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
