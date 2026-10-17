@@ -120,7 +120,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2203 pruebas, ~15 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2236 pruebas, ~15 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Las tandas con banco van de a 7 a la vez (`PROBAR_PARALELO`; con 11 juntas,
@@ -197,7 +197,14 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.139 (16-oct, ~19:51; READY `dpl_Gqc4jUaXVsSsoz8ARuBYEUk1hFY7`, commits `1a5da83` (136), `48d5ad3` (137), `3b5ef93` (138) y `1c04b4e`
+- **LIVE:** v10.84.141 (16-oct, ~21:42; READY `dpl_GkN7WBuX8PwaUZZQPFMAzP82yDrd`, commits `fe3ed20` (140), `ca13734` (141) y `3435867`; vuelta atrás: promover
+  `dpl_ECBRhjRons3AWv25hxdHnhmtCx1Q` (el código de v10.84.139) o `git revert 3435867 ca13734 fe3ed20`; la base no cambió; candado 2236 de 2236, de a 4).
+  🔑 **Lo atrasado** (v10.84.140, Marcelo 16-oct): la orden LISTA (Salidas o recibida de maquila) «En espera: el cliente no ha pedido factura» no está
+  vencida: `vencidaAhora` (lo de hoy: calendario «Espera al cliente», «Con retraso hoy», «Vencidas», fichas, filtro «Retrasos») y `entregadaATiempo`
+  (Analytics: a tiempo si quedó lista a tiempo y esperó la factura; la pausa se lee de la bitácora). Toda pantalla nueva que diga «vencida» o «a tiempo»
+  usa esas dos. v10.84.141: «Aplicar saldo» (Corona) ya no promete descubierto (la base no lo deja). Pendiente de Marcelo: las 45 entregas listas a
+  tiempo sin la pausa (¿cuentan a tiempo?).
+  v10.84.139 (16-oct, ~19:51; READY `dpl_Gqc4jUaXVsSsoz8ARuBYEUk1hFY7`, commits `1a5da83` (136), `48d5ad3` (137), `3b5ef93` (138) y `1c04b4e`
   (139), subidas juntas; vuelta atrás: promover `dpl_7VmAzMK28kCahmAvT9q4iv7YgGzo` (el código de v10.84.135) o `git revert 1c04b4e 3b5ef93 48d5ad3 1a5da83`;
   candado 2203 de 2203, de a 4). Decisiones de Marcelo del 16-oct: «Datos Pendientes (N)» con lo urgente (`datosUrgentes`) y sin dinero en «Cómo va la
   planta» para Lupita y Karla; la Torre pide la fecha sólo de lo que ya corre en la planta (`YA_EN_LA_PLANTA`); la hoja impresa en dos hojas legibles

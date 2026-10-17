@@ -27,7 +27,13 @@ alcanza el saldo: faltan $X sin IVA, y así no se puede aplicar. Primero Tesorer
 
 **Cómo se probó.** La tanda `folio` (216, de dinero: sin segunda oportunidad en el candado). Vuelta 1 contra v10.84.140: fallaban inv-26 (dice que no alcanza, cuánto falta y no deja seguir), inv-96 (Ctrl+Enter tampoco lleva a la vista previa) e inv-183 (con factura sí se sigue), y pasaban las de guarda: el saldo justo (queda en $0.00) y medio centavo abajo (la base acepta hasta −$0.01) dejan seguir (inv-181 y 182), y con un saldo que alcanza, el color de «Continuar», las dos columnas y lo facturado por adelantado sin verde (inv-57, 77 y 112, con el banco nuevo `saldoCorona`). Cinco pruebas viejas daban por bueno el descubierto: inv-26 y 96 lo pedían en pantalla, inv-57, 77 y 112 llegaban a la vista previa con el saldo que no alcanza; se ajustaron a la decisión. Con el arreglo, 216 de 216.
 
-**En producción:** (pendiente)
+**En producción:** 16-oct, ~21:42, junto con v10.84.140; READY `dpl_GkN7WBuX8PwaUZZQPFMAzP82yDrd`, commits `fe3ed20` (140), `ca13734` (141) y `3435867` (el banco de
+«detalle»); vuelta atrás: promover `dpl_ECBRhjRons3AWv25hxdHnhmtCx1Q` (el código de v10.84.139) o `git revert 3435867 ca13734 fe3ed20`; la base no
+cambió. 🔥 El primer candado FRENÓ (21:06): la tanda `detalle` pasó de 12 minutos sin reportar (las demás, 2023 de 2023). Su banco copia trozos de
+App a mano y la ficha que copia ahora pregunta `vencidaAhora`, que no traía: página en blanco y cada caso esperando su tope. Arreglado el banco
+(`3435867`), revisados todos los bancos con el App.jsx nuevo (era el único), y `detalle` sola 213 de 213. El segundo candado: 2236 de 2236 (33
+nuevas), de a 4, 14.6 min, a la primera y sin inestables. Revisado en producción: el código servido (`index-Cnden8UU.js`) trae lo de las dos; el
+recorrido de los 8 roles: nada truena (ya sin el 404 de las fichas de «Planta»: la tabla está aplicada).
 
 ## v10.84.140 — La orden lista que espera a que el cliente pida su factura ya no cuenta como atrasada — 16-oct-2026
 
@@ -61,7 +67,7 @@ pausa. ¿Cuentan a tiempo? Si sí, el «a tiempo» se mediría para todas por el
 
 **Cómo se probó.** Tanda nueva `atrasos` (19, sin navegador: `vencidaAhora`, `esperaAlCliente`, `entregadaATiempo` y `getIncompleteData` sacadas vivas de App.jsx con `extraer.mjs`, el reloj fijo en el 16-oct): la espera de factura en Salidas y en la maquila recibida, sin la espera, con otra pausa, la pausa de otra etapa, entregada, cancelada, sin fecha, la fecha rota, la de hoy; y en los reportes, lista a tiempo con y sin la espera, lista tarde, las pausas escritas a mano (y las que no son de factura), la pausa puesta después de entregar, lista a las 23:30 o a las 00:30, de regreso a producción, sin bitácora, y la maquila. Vuelta 1 contra v10.84.139: fallaban las 19. 🔥 Con la primera versión del arreglo fallaban 3: la expresión de la pausa buscaba «pid…» (pide, piden, pidió) y el botón de Karla dice «no ha **pedido** factura»; corregida (`ESPERA_DE_FACTURA`). En pantalla: `entregas` (ent-20 a 23: la que espera no es «Retrasada», tampoco la recibida tarde de maquila, la de Salidas sin espera sí, la leyenda), `dashboard` (db-20: «Con retraso hoy» igual con o sin ella), `salud` (dp-41, Lupita y Dirección: «Vencidas (1)»), `analytics` (an-35: 57 %, 4 de 7, con la nota; an-36: sin ellas no sale la nota) y `sesion`, con la app entera (ses-96: en «Pendientes de Folio» de Karla la fecha de la que espera no va en rojo y la otra sí; ses-97: «En espera» sin «RETRASO» ni «vencida»). Vuelta 1: fallaban 11 y pasaban las 2 de guarda. Tres pruebas se corrigieron antes de contar: db-20 leía el número pegado al texto de al lado («3» y «1…» daban «31»), ses-97 buscaba «Entrega:» y en «En espera» la ficha es la compacta (su «RETRASO» va junto al folio), y ses-96 tomaba la primera caja con el folio, que envolvía también a la otra ficha; las tres, probadas otra vez contra v10.84.139 (fallan por lo que deben) y con el arreglo (pasan). Con el arreglo: `atrasos` 19, `entregas` 23, `dashboard` 21, `salud` 45, `analytics` 50, y sin cambios `chips` 14, `tablero` 163, `todas` 15 y `despertador` 32.
 
-**En producción:** (pendiente)
+**En producción:** 16-oct, ~21:42, junto con v10.84.141 (ver su entrada).
 
 ## v10.84.139 — «Planta»: cada máquina con su ficha (lo de su placa) — 16-oct-2026
 
