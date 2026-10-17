@@ -18516,6 +18516,14 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
     { key: "sinTelefono", label: "Sin teléfono del cliente", tono: "baja", list: incomplete.sinTelefono, alwaysExpanded: false },
     { key: "sinEmail", label: "Sin correo del cliente", tono: "baja", list: incomplete.sinEmail, alwaysExpanded: false }
   ].filter(x => x.list.length > 0);
+  // v10.84.155 — lo que le falta a cada orden, junto (Marcelo, 17-oct: «si hazlo»): cada renglón dice también lo demás que le falta a ESA orden, para
+  //   llenarlo todo de una vez al editarla (antes una maquila sin proveedor ni costo salía en dos listas sin decirlo). «Vencida» no es un dato: no entra
+  const QUE_FALTA = { sinPrecio: "precio", porEntregarSinFecha: "fecha de entrega", sinCantidad: "cantidad", maquilaSinProveedor: "proveedor de la maquila",
+    maquilaSinCosto: "costo del proveedor", sinFecha: "fecha de entrega", sinArchivoStageAvanzado: "archivo", sinAgente: "vendedor", sinTelefono: "teléfono del cliente",
+    sinEmail: "correo del cliente" };
+  const faltasDe = new Map();
+  [["sinPrecio", ordersWithoutPriceList], ...incompletas.map(x => [x.key, x.list])].forEach(([k, lista]) => { if (!QUE_FALTA[k]) return;
+    (lista || []).forEach(o => { const a = faltasDe.get(o.id) || []; if (!a.includes(QUE_FALTA[k])) a.push(QUE_FALTA[k]); faltasDe.set(o.id, a); }); });
   const secIncompletos = (
     <>
       <h3 style={titulo}><WarningCircleIcon size={16} weight="fill"/>Datos incompletos</h3>
@@ -18534,16 +18542,19 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
                   </button>}
               {expanded && (
                 <div style={{ padding: "4px 14px 10px" }}>
-                  {section.list.slice(0, todas ? section.list.length : 10).map(o => (
+                  {section.list.slice(0, todas ? section.list.length : 10).map(o => { const otras = (faltasDe.get(o.id) || []).filter(x => x !== QUE_FALTA[section.key]); return (
                     <div key={o.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "0.5px solid " + C.bd, gap: 8 }}>
                       <button type="button" onClick={() => onAction(o.id, "detail")} style={{ ...fila, borderBottom: "none", color: C.t2, padding: "5px 0", minWidth: 0, flex: 1 }}>
-                        <span style={recorta} title={(o.client || "").trim()}><strong style={{ color: C.tx }}>{o.production_number || "—"}</strong> · {(o.client || "—").trim()} · <StageLbl stage={o.stage} size={10}/></span>
+                        <span style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 1 }}>
+                          <span style={recorta} title={(o.client || "").trim()}><strong style={{ color: C.tx }}>{o.production_number || "—"}</strong> · {(o.client || "—").trim()} · <StageLbl stage={o.stage} size={10}/></span>
+                          {otras.length > 0 && <span data-tambien style={{ ...recorta, fontSize: 10.5, color: C.t2 }}>También le falta: {otras.join(", ")}</span>}
+                        </span>
                       </button>
                       <button type="button" onClick={() => onAction(o.id, "edit")} aria-label={"Editar " + (o.production_number || "la orden") + " (" + section.label.toLowerCase() + ")"} style={{ fontSize: 11, fontWeight: 600, padding: "3px 10px", background: C.sf, color: C.tx, border: "1px solid " + C.bd, borderRadius: 6, cursor: "pointer", flexShrink: 0, fontFamily: "inherit", display: "inline-flex", alignItems: "center", gap: 3 }}>
                         <NotePencilIcon size={11} weight="bold"/>Editar
                       </button>
                     </div>
-                  ))}
+                  ); })}
                   {section.list.length > 10 && (
                     <button type="button" onClick={() => setExpandedSection(s => ({ ...s, ["todas_" + section.key]: !s["todas_" + section.key] }))} aria-expanded={todas} style={{ marginTop: 6, padding: "4px 0", fontSize: 11, fontWeight: 600, background: "none", border: "none", color: C.ac, cursor: "pointer", fontFamily: "inherit" }}>
                       {todas ? "Ver sólo las primeras 10" : "Ver las " + section.list.length}
