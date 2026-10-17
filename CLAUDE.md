@@ -120,7 +120,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2388 pruebas, ~15 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2408 pruebas, ~15 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Las tandas con banco van de a 7 a la vez (`PROBAR_PARALELO`; con 11 juntas,
@@ -197,7 +197,12 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.148 (17-oct, READY `dpl_2VXpTmUZiEChyigKSh4ZgUJvus9E`, commit `d8f4bde`; vuelta atrás: promover `dpl_7gAwrH1VEjLWheU4cLxBmMzQhyfo` (el código de
+- **LIVE:** v10.84.149 (17-oct, READY `dpl_8grLbR2htd6RaTb7n97fikvuW8Af`, commit `c862bbc`; vuelta atrás: promover `dpl_GfuaE3A4KaAkRo3qozFYNWY6MiK1` (el código de
+  v10.84.148) o `git revert c862bbc`; la base no cambió; candado 2408 de 2408 (24 nuevas), de a 4, 15.8 min, a la primera y sin inestables). 🔑 **«A tiempo» es
+  haber quedado LISTA a tiempo, con o sin la pausa** (Marcelo, 17-oct, sobre las 45 entregas sin la pausa: «sí, cuentan como a tiempo»): `entregadaATiempo`
+  sin la pausa, y lo de hoy dice lo mismo (`listaATiempo` en `vencidaAhora` y en `diagnoseOrder`: calendario «Lista a tiempo», Torre, Despertador, Datos
+  Pendientes, fichas); el «A tiempo» de la semana del Dashboard con la misma regla. Toda pantalla que diga «vencida» o «a tiempo» usa esas dos.
+  v10.84.148 (17-oct, READY `dpl_2VXpTmUZiEChyigKSh4ZgUJvus9E`, commit `d8f4bde`; vuelta atrás: promover `dpl_7gAwrH1VEjLWheU4cLxBmMzQhyfo` (el código de
   v10.84.147) o `git revert d8f4bde`; la base no cambió; candado 2388 de 2388 (12 nuevas), de a 4, 15.8 min, a la primera y sin inestables). El historial del cliente (22/40): 🔑 para el vendedor, lo suyo es lo que
   capturó o lo que lleva como vendedor (`esDelVendedor`, la regla de la ficha), también en la puerta (`veHistorialDelCliente`); un diálogo con foco. Banco
   `gen-historial.mjs`, tanda `historial`.

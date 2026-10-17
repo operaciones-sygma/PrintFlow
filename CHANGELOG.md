@@ -36,9 +36,12 @@ daba 63 % en vez de 88 % y «0%» sin fechas; «Vencidas (2)» en vez de 1). Vue
 con Karla… tú llevas lo de Manuel» por la de Manuel lista a tiempo; arreglado) y la vista del mes del calendario (ent-26). Vuelta 3, la que regresa a máquina y
 vuelve a Salidas a tiempo o tarde: sin fallas. Ahora todas pasan; contra v10.84.148 fallan 17 de las 24. **atr-13, atr-14, atr-15 y an-35 se fueron con la
 decisión:** afirmaban la regla de antes (la lista a tiempo sin la pausa, tarde). El banco del detalle copia a mano `vencidaAhora`: ahora también `listaEn`,
-`finDeLaEntrega` y `listaATiempo` (si no, se quedaba en blanco). Los 31 bancos se generan con el App.jsx nuevo; build y `probar-alcance` en verde.
+`finDeLaEntrega` y `listaATiempo` (si no, se quedaba en blanco). Los 31 bancos se generan con el App.jsx nuevo; build y `probar-alcance` en verde. Candado:
+2408 de 2408 (24 nuevas), de a 4, 15.8 min, a la primera y sin inestables.
 
-**En producción:** (pendiente)
+**En producción:** 17-oct, ~10:24, READY `dpl_8grLbR2htd6RaTb7n97fikvuW8Af`, commit `c862bbc`; vuelta atrás: promover `dpl_GfuaE3A4KaAkRo3qozFYNWY6MiK1` (el código de v10.84.148) o
+`git revert c862bbc`; la base no cambió. Revisado en producción: el código servido (`index-DSrq6Ql_.js`) trae «Lista a tiempo» y la nota nueva de Analytics, y ya
+no la de «esperaron a que el cliente pidiera su factura»; el recorrido de los 8 roles (95 pasos): nada truena.
 
 ## v10.84.148 — El historial del cliente: el vendedor abre y ve lo que lleva como vendedor — 17-oct-2026
 
