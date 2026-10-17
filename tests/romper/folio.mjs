@@ -202,9 +202,12 @@ await caso("inv-25 «Atrás» conserva lo capturado", "", async p => {
   await continuar(p).click(); await espera(p); await p.getByRole("button", { name: /Atrás/ }).click(); await espera(p);
   ok("inv-25 «Atrás» desde la vista previa conserva tipo y pagos", (await p.getByLabel("Monto del pago 1").inputValue()) === "66004" && !(await continuar(p).isDisabled()));
 });
-await caso("inv-26 Corona: saldo que queda negativo", "cliente=corona", async p => {
+await caso("inv-26 Corona: saldo que no alcanza", "cliente=corona", async p => {
+  // (v10.84.141: decía «El saldo quedará negativo… se permite descubierto», y la base no lo deja: apply_credit_no_folio frena con «Saldo Corona
+  //   insuficiente… Registra el depósito antes»; Marcelo, 16-oct: «No, como está la base»)
   await inv(p); await p.getByRole("button", { name: /^Aplicar saldo/ }).click(); await espera(p);
-  ok("inv-26 Corona con saldo menor que la orden: avisa que queda negativo", await ve(p, /El saldo quedará negativo/) && await ve(p, /−\$56,900\.00/));
+  ok("inv-26 Corona con saldo menor que la orden: dice que no alcanza, cuánto falta, y no deja seguir", await ve(p, /No alcanza el saldo/) && await ve(p, /faltan \$26,900\.00/) && await ve(p, /−\$56,900\.00/)
+    && !(await ve(p, /se permite|descubierto/i)) && await continuar(p).isDisabled());
 });
 await caso("inv-27 Cuadra de punta a punta", "cliente=cuadra", async p => {
   await inv(p); await p.getByRole("button", { name: /^Sin factura · Stock/ }).click(); await espera(p, 400);
@@ -503,7 +506,7 @@ await caso("inv-56 «Continuar» apagado dice por qué y se lee", "", async p =>
   // (vuelta 1: el contraste sin la opacidad daba 4.70; el botón estaba al 40% y se leía a 1.7:1. Un estado no se dice con opacidad.)
   ok("inv-56 «Continuar» apagado: se lee (≥ 4.5:1, sin transparencia) y una línea dice qué falta (tipo, luego el pago)", col.opacidad >= 0.99 && contraste(col.fg, col.bg) >= 4.5 && razon1 && razon2, "opacidad=" + col.opacidad + " · contraste=" + contraste(col.fg, col.bg).toFixed(2) + " · razón tipo=" + razon1 + " · razón pago=" + razon2);
 });
-await caso("inv-57 un solo color para la acción", "cliente=corona", async p => {
+await caso("inv-57 un solo color para la acción", "cliente=corona&saldoCorona=60000", async p => {
   await inv(p); await tipo(p, "Factura").click(); await espera(p); await pagoNo(p).click(); await espera(p);
   const fac = (await colores(continuar(p))).bg;
   await tipo(p, "Remisión").click(); await espera(p); const q = p.getByRole("dialog", { name: /Cambiar el tipo/ }); if (await q.count()) await p.getByRole("button", { name: /^Cambiar/ }).click(); await espera(p); await pagoNo(p).click(); await espera(p);
@@ -654,10 +657,11 @@ await caso("inv-76 las flechas en los extremos", "", async p => {
   const foco = await p.evaluate(() => document.activeElement?.getAttribute("role"));
   ok("inv-76 ← desde el primero va al último («Otro»), Inicio regresa al primero («Efectivo»), y el foco sigue en el grupo", /Otro/.test(ultimo) && /Efectivo/.test(primero) && foco === "radio", `← «${ultimo.trim()}» · Inicio «${primero.trim()}» · foco ${foco}`);
 });
-await caso("inv-77 Corona en dos columnas", "cliente=corona", async p => {
+await caso("inv-77 Corona en dos columnas", "cliente=corona&saldoCorona=60000", async p => {
+  // (v10.84.141: con el saldo que no alcanza ya no se llega aquí; el signo del saldo negativo lo mide inv-26 en el primer paso)
   await inv(p); await p.getByRole("button", { name: /^Aplicar saldo/ }).click(); await espera(p, 300);
   await continuar(p).click(); await espera(p, 700);
-  ok("inv-77 «Aplicar saldo» dice la acción y el monto («Descontar $56,900.00…») y el saldo negativo con su signo", await ve(p, /Descontar \$56,900\.00 de lo facturado por adelantado/) && await ve(p, /−\$26,900\.00/) && !(await ve(p, /\$-26,900/)));
+  ok("inv-77 «Aplicar saldo» dice la acción y el monto («Descontar $56,900.00…») y el saldo después", await ve(p, /Descontar \$56,900\.00 de lo facturado por adelantado/) && await ve(p, /\$3,100\.00/) && !(await ve(p, /No alcanza/)));
 });
 await caso("inv-78 Cuadra en dos columnas", "cliente=cuadra", async p => {
   await inv(p); await p.getByRole("button", { name: /^Sin factura · Stock/ }).click(); await espera(p, 400);
@@ -765,9 +769,11 @@ await caso("inv-95 agregar un pago lleva a él", "", async p => {
   const enfocado = await p.evaluate(() => { const a = document.activeElement; return a?.getAttribute("role") === "radio" && /Método de pago 2/.test(a.closest('[role="radiogroup"]')?.getAttribute("aria-label") || ""); });
   ok("inv-95 «Agregar otro pago» deja el foco en el método del pago 2", enfocado);
 }, { width: 1366, height: 657 });
-await caso("inv-96 Corona negativo en la vista previa", "cliente=corona", async p => {
-  await inv(p); await p.getByRole("button", { name: /^Aplicar saldo/ }).click(); await espera(p, 300); await continuar(p).click(); await espera(p, 700);
-  ok("inv-96 la vista previa de «Aplicar saldo» repite que el saldo queda negativo", await ve(p, /queda(rá)? negativo/));
+await caso("inv-96 Corona: con saldo que no alcanza no se llega a la vista previa", "cliente=corona", async p => {
+  // (v10.84.141: era «la vista previa repite que el saldo queda negativo»; con la decisión no se llega a la vista previa: ni con el botón ni con Ctrl+Enter)
+  await inv(p); await p.getByRole("button", { name: /^Aplicar saldo/ }).click(); await espera(p, 300);
+  await p.keyboard.press("Control+Enter"); await espera(p, 700);
+  ok("inv-96 con saldo que no alcanza, Ctrl+Enter tampoco lleva a la vista previa", await continuar(p).isDisabled() && !(await ve(p, /Descontar \$56,900\.00 de lo facturado por adelantado/)) && await ve(p, /No alcanza el saldo/));
 });
 
 // ───────────── v10.84.70, tercera revisión independiente (30/40), el P1: el segundo clic de un doble clic caía en lo que la ventana
@@ -905,16 +911,16 @@ await caso("inv-111 el aviso de «Otro» es corto", "", async p => {
     return el ? { palabras: el.innerText.trim().split(/\s+/).length, negritas: el.querySelectorAll("b,strong").length } : null; });
   ok("inv-111 «¿Es efectivo?» en 30 palabras o menos y con 2 negritas o menos", !!m && m.palabras <= 30 && m.negritas <= 2, JSON.stringify(m));
 });
-await caso("inv-112 Corona: lo facturado por adelantado no va en verde", "cliente=corona", async p => {
+await caso("inv-112 Corona: lo facturado por adelantado no va en verde", "cliente=corona&saldoCorona=60000", async p => {   // (v10.84.141: con un saldo que alcanza, para llegar a la vista previa)
   await inv(p); await espera(p, 300);
   await p.getByRole("button", { name: /Aplicar saldo/ }).click(); await espera(p, 600);
-  const color = () => p.evaluate(() => { const el = [...document.querySelectorAll('[role="dialog"] div')].find(d => d.children.length === 0 && /^\$30,000\.00$/.test(d.textContent.trim()));
+  const color = () => p.evaluate(() => { const el = [...document.querySelectorAll('[role="dialog"] div')].find(d => d.children.length === 0 && /^\$60,000\.00$/.test(d.textContent.trim()));
     return el ? getComputedStyle(el).color : null; });
   const verde = c => !c || c === "rgb(4, 120, 87)" || c === "rgb(16, 185, 129)";
   const c1 = await color();
   await continuar(p).click(); await espera(p, 800);
   const c2 = await color();
-  ok("inv-112 «$30,000.00» (lo facturado por adelantado, no dinero del cliente) no va en esmeralda, ni al elegir ni en la vista previa", !verde(c1) && !verde(c2), "al elegir " + c1 + " · vista previa " + c2);
+  ok("inv-112 «$60,000.00» (lo facturado por adelantado, no dinero del cliente) no va en esmeralda, ni al elegir ni en la vista previa", !!c1 && !!c2 && !verde(c1) && !verde(c2), "al elegir " + c1 + " · vista previa " + c2);
 });
 await caso("inv-113 folio a mano: la serie de remisiones en una factura lo dice", "emisor=off", async p => {
   await inv(p); await tipo(p, "Factura").click(); await espera(p, 600);
@@ -1650,6 +1656,23 @@ await caso("inv-180 foliada: si la timbran con la ventana abierta, arriba ya no 
     cerrado = await dlgCorr(p).getByLabel(/Precio correcto/).isDisabled(); } catch (e) { t = "(" + e.message.split("\n")[0] + ")"; }
   ok("inv-180 la timbraron con la ventana abierta: ya no dice «sin timbrar» (lo de hoy es «ya está timbrada», una vez) y el precio se cierra",
     /ya está timbrada ante el SAT/.test(t) && !/sin timbrar/.test(t) && t.split("ya está timbrada").length === 2 && cerrado === true, `cerrado ${cerrado} · «${t.slice(0, 320)}»`);
+});
+
+// ── v10.84.141: «Aplicar saldo» como la base: sin descubierto ──
+await caso("inv-181 Corona: alcanza justo", "cliente=corona&saldoCorona=56900", async p => {
+  await inv(p); await p.getByRole("button", { name: /^Aplicar saldo/ }).click(); await espera(p);
+  ok("inv-181 con el saldo justo (queda en $0.00) deja seguir y no dice que falte", !(await continuar(p).isDisabled()) && !(await ve(p, /No alcanza/)));
+});
+await caso("inv-182 Corona: un centavo de redondeo no frena", "cliente=corona&saldoCorona=56899.995", async p => {
+  await inv(p); await p.getByRole("button", { name: /^Aplicar saldo/ }).click(); await espera(p);
+  ok("inv-182 medio centavo abajo (la base acepta hasta −$0.01) deja seguir", !(await continuar(p).isDisabled()) && !(await ve(p, /No alcanza/)));
+});
+await caso("inv-183 Corona: sin saldo, con factura sí", "cliente=corona", async p => {
+  await inv(p); await p.getByRole("button", { name: /^Aplicar saldo/ }).click(); await espera(p);
+  const apagado = await continuar(p).isDisabled();
+  await tipo(p, "Factura").click(); await espera(p); const q = p.getByRole("dialog", { name: /Cambiar el tipo/ }); if (await q.count()) await p.getByRole("button", { name: /^Cambiar/ }).click(); await espera(p);
+  await pagoNo(p).click(); await espera(p);
+  ok("inv-183 con saldo que no alcanza, «Aplicar saldo» no deja seguir, pero con factura sí (no pagada)", apagado && !(await continuar(p).isDisabled()) && !(await ve(p, /No alcanza/)));
 });
 
 await browser.close();

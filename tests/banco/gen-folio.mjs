@@ -101,7 +101,8 @@ const db = {
   getFolioEmitterEnabled: async () => { emisorLlamadas++; if (EMISOR === "falla") return null; if (EMISOR === "falla1") return emisorLlamadas === 1 ? null : true; return EMISOR !== "off"; },
   getNextFolioSuggestion: async t => t === "factura" ? "F-137" : "RS-1250",
   getClientBillingInfo: async () => { if (LENTA) await new Promise(r => setTimeout(r, 10000));   // (v10.84.70) más que el tope de 8 s
-    return CLIENTE === "corona" ? { billing_mode: "anticipo", current_balance: 30000 } : CLIENTE === "cuadra" ? { billing_mode: "stock", current_balance: 0, stock_pool_id: "pool1" } : { billing_mode: "normal", current_balance: CLIENTE === "saldo" ? Number(Q.get("saldo") || 5000) : 0 }; },
+    // (v10.84.141: saldoCorona=N, el saldo del cliente Corona; por omisión $30,000, menos que la orden de $56,900)
+    return CLIENTE === "corona" ? { billing_mode: "anticipo", current_balance: Number(Q.get("saldoCorona") || 30000) } : CLIENTE === "cuadra" ? { billing_mode: "stock", current_balance: 0, stock_pool_id: "pool1" } : { billing_mode: "normal", current_balance: CLIENTE === "saldo" ? Number(Q.get("saldo") || 5000) : 0 }; },
   loadClientProducts: async () => [{ id: "sku1", name: "Etiqueta Cuadra", sku: "CU-1", stock_actual: 120 }],
 };
 // simulados: BillToSection (el de verdad trae el buscador de clientes) y StageLbl (el mapa de etapas)

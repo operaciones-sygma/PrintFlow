@@ -11257,7 +11257,11 @@ function InvoiceModal({order,onConfirm,onClose,cargarCandidatas=null,onLigar=nul
   const fmtMx=n=>Number(n||0).toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2});
   const conIvaTotal=Math.round(orderBaseAmount*116)/100;
   const colorTipo=C.ac;   // v10.84.70 — el tipo ya no se pinta con los colores del pago (violeta era Parcial, verde Pagada): la acción va en slate
-  const puedeSeguir=!ligando&&!!type&&folioValid&&paymentValid&&stockLoadValid&&!(billTo&&billTo.incomplete)&&cands!==undefined&&!(cands===null&&!revisoSinOrden)&&!bloqueaMismo;
+  // v10.84.141 — «Aplicar saldo» con saldo que no alcanza: la base lo frena (apply_credit_no_folio: «Saldo Corona insuficiente… Registra el depósito antes de
+  //   aplicar el saldo», si quedaría por debajo de −$0.01; y cobranza.client_credit_ledger tiene CHECK de no sobregirar). La pantalla decía «se permite
+  //   descubierto; Tesorería deberá registrar el depósito faltante», y no: al dar el clic, el rechazo. Marcelo (16-oct): «No, como está la base».
+  const saldoNoAlcanza=isCorona&&isNoFolio&&((coronaInfo?.current_balance||0)-orderBaseAmount)< -0.01;
+  const puedeSeguir=!ligando&&!!type&&folioValid&&paymentValid&&stockLoadValid&&!(billTo&&billTo.incomplete)&&cands!==undefined&&!(cands===null&&!revisoSinOrden)&&!bloqueaMismo&&!saldoNoAlcanza;
   const puedeLigar=ligando&&!faltaReconocer;
   // v10.84.70 (segunda revisión) — el botón final dice lo que hace (era «Confirmar» para todo)
   const verboFinal=ligando?"Ligar "+facturaPorLigar.doc_number+" y entregar"
@@ -11501,7 +11505,7 @@ function InvoiceModal({order,onConfirm,onClose,cargarCandidatas=null,onLigar=nul
             // el bridge ya NO consume saldo automático — Karla decide cómo se cobra.
             const ledgerDeduct=orderBaseAmount;
             const newBalance=(coronaInfo.current_balance||0)-ledgerDeduct;
-            const negative=newBalance<0;
+            const negative=newBalance< -0.01;   // v10.84.141 — como la base (−$0.01 de tolerancia por el redondeo)
             // v10.84.72 (tercera revisión) — en neutro: lo facturado por adelantado NO es dinero del cliente (iba en esmeralda, el color de lo a favor)
             return <div style={{background:C.sf,border:"1px solid "+C.bd,borderRadius:12,padding:14,marginTop:8,marginBottom:4}}>
               <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:700,color:C.t2,textTransform:"uppercase",marginBottom:6}}><CurrencyDollarIcon size={12} weight="bold"/>Descontar de lo facturado por adelantado (Corona) · sin folio fiscal</div>
@@ -11510,7 +11514,7 @@ function InvoiceModal({order,onConfirm,onClose,cargarCandidatas=null,onLigar=nul
                 <div><div style={{color:C.t2,fontSize:10,textTransform:"uppercase"}}>Esta orden (subtotal)</div><div style={{fontSize:14,fontWeight:800}}>−${ledgerDeduct.toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
                 <div><div style={{color:C.t2,fontSize:10,textTransform:"uppercase"}}>Saldo después</div><div style={{fontSize:14,fontWeight:800,color:negative?C.dnInk:C.tx}}>{fmtSigno(newBalance)}</div></div>
               </div>
-              {negative&&<div style={{display:"flex",alignItems:"flex-start",gap:5,fontSize:11,color:C.dnInk,marginTop:8,padding:"6px 8px",background:C.dn+"08",borderRadius:6,lineHeight:1.45}}><WarningIcon size={11} weight="fill" color={C.dn} style={{flexShrink:0,marginTop:2}}/>El saldo quedará negativo. Sigue siendo válido (se permite descubierto); Tesorería deberá registrar el depósito faltante.</div>}
+              {negative&&<div role="alert" data-saldo-no-alcanza style={{display:"flex",alignItems:"flex-start",gap:5,fontSize:11.5,color:C.dnInk,marginTop:8,padding:"6px 8px",background:C.dn+"08",borderRadius:6,lineHeight:1.45}}><WarningIcon size={11} weight="fill" color={C.dn} style={{flexShrink:0,marginTop:2}}/><span>No alcanza el saldo: faltan <b>${fmtMx(-newBalance)}</b> sin IVA, y así no se puede aplicar. Primero Tesorería registra el depósito que falta; o entrégala con factura o remisión.</span></div>}
               <div style={{fontSize:11,color:C.t2,marginTop:6,lineHeight:1.45}}>Sin folio fiscal: la orden se entrega y el monto se descuenta del saldo directamente. No se crea factura ni remisión.</div>
             </div>;
           })()
@@ -11576,7 +11580,7 @@ function InvoiceModal({order,onConfirm,onClose,cargarCandidatas=null,onLigar=nul
             </div>
           </div>
           {/* v10.84.70 (segunda revisión) — el saldo negativo se repite aquí (sólo lo decía el primer paso) */}
-          {((coronaInfo?.current_balance||0)-coronaConsumoAmount)<0&&<div style={{display:"flex",alignItems:"flex-start",gap:6,fontSize:12,color:C.dnInk,margin:"0 0 12px",padding:"8px 10px",background:C.dn+"08",border:"1px solid "+C.dn+"30",borderRadius:8,lineHeight:1.45}}><WarningIcon size={13} weight="fill" color={C.dn} style={{flexShrink:0,marginTop:2}}/><span>El saldo queda negativo ({fmtSigno((coronaInfo?.current_balance||0)-coronaConsumoAmount)}). Se permite; Tesorería registra el depósito que falta.</span></div>}
+          {((coronaInfo?.current_balance||0)-coronaConsumoAmount)< -0.01&&<div role="alert" style={{display:"flex",alignItems:"flex-start",gap:6,fontSize:12,color:C.dnInk,margin:"0 0 12px",padding:"8px 10px",background:C.dn+"08",border:"1px solid "+C.dn+"30",borderRadius:8,lineHeight:1.45}}><WarningIcon size={13} weight="fill" color={C.dn} style={{flexShrink:0,marginTop:2}}/><span>No alcanza el saldo (faltarían ${fmtMx(coronaConsumoAmount-(coronaInfo?.current_balance||0))} sin IVA): la base no deja aplicarlo. Primero Tesorería registra el depósito que falta.</span></div>}
           <p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>La orden quedará <strong style={{color:C.okInk}}>Entregada</strong> sin folio fiscal individual. El subtotal se descuenta del saldo Corona en ese momento.</p>
         </> : <>
           {/* v10.84.34 — la vista previa dice CUÁNTO y a QUIÉN (antes: «🔢 Folio automático (Factura)» y nada de importe) */}
