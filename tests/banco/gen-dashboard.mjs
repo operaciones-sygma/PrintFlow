@@ -6,7 +6,9 @@
 // Uso: node gen-dashboard.mjs <App.jsx> <dirSalida>
 // Variantes por URL: rol=secretaria|produccion|karla|admin|vendedor · lectura=no (todavía no se ha leído nada de la base) · caso=temprano (también hay
 //   órdenes en Validar, Diseño y Aprobación) | vacio (se leyó y no hay activas) | muchas (las 12 etapas con órdenes) | espera (v10.84.140: más una lista
-//   en Salidas que espera a que el cliente pida su factura, vencida el 8)
+//   en Salidas que espera a que el cliente pida su factura, vencida el 8) | lista (v10.84.149: más una en Salidas SIN la pausa que llegó el 7 y vencía el
+//   8, y tres entregadas el 13 que vencían antes: P-0505 lista a tiempo, P-0506 entregada a las 18:00 del día de su fecha y P-0507 lista tarde) |
+//   sinfecha (las entregadas de la semana, sin fecha de entrega)
 import fs from "node:fs";
 import path from "node:path";
 import { LIGA_FUENTES, copiarFuentes } from "./fuentes.mjs";
@@ -77,7 +79,12 @@ const ENTREGADAS = [entregada("P-0500", "10"), entregada("P-0501", "11"), entreg
   o("P-0490", { stage: "delivered", delivered_at: T("2026-09-24T13:00:00-06:00"), price: 99000 })];
 const ESPERA_FACTURA = o("P-0645", { stage: "salidas", client: "KFC ESPERA FACTURA", due_date: "2026-10-08", snooze_reason: "El cliente aún no ha pedido factura/remisión", snooze_kind: "awaiting_client_invoice", snoozed_by: "karla", snooze_until: null, snooze_stage: "salidas",
   timeline: [{ to: "salidas", date: T("2026-10-07T12:00:00-06:00") }, { action: "🧾 En espera: el cliente no ha pedido factura", date: T("2026-10-09T10:00:00-06:00") }] });
-const ORDENES = SIN_LECTURA ? [] : CASO === "espera" ? [...ACTIVAS, ESPERA_FACTURA, ...ENTREGADAS] : CASO === "vacio" ? ENTREGADAS : CASO === "temprano" ? [...TEMPRANAS, ...ACTIVAS, ...ENTREGADAS]
+const LISTA_A_TIEMPO = o("P-0646", { stage: "salidas", client: "LISTA A TIEMPO SIN PAUSA", due_date: "2026-10-08", timeline: [{ to: "salidas", date: T("2026-10-07T12:00:00-06:00") }] });
+const ENTREGADAS_TARDE = [entregada("P-0505", "13", { due_date: "2026-10-10", timeline: [{ to: "salidas", date: T("2026-10-09T12:00:00-06:00") }] }),
+  o("P-0506", { stage: "delivered", delivered_at: T("2026-10-13T18:00:00-06:00"), due_date: "2026-10-13", price: 10000 }),
+  entregada("P-0507", "13", { due_date: "2026-10-10", timeline: [{ to: "salidas", date: T("2026-10-12T12:00:00-06:00") }] })];
+const ORDENES = SIN_LECTURA ? [] : CASO === "lista" ? [...ACTIVAS, LISTA_A_TIEMPO, ...ENTREGADAS, ...ENTREGADAS_TARDE] : CASO === "sinfecha" ? [...ACTIVAS, ...ENTREGADAS.map(x => ({ ...x, due_date: null }))]
+  : CASO === "espera" ? [...ACTIVAS, ESPERA_FACTURA, ...ENTREGADAS] : CASO === "vacio" ? ENTREGADAS : CASO === "temprano" ? [...TEMPRANAS, ...ACTIVAS, ...ENTREGADAS]
   : CASO === "muchas" ? [...TODAS_LAS_ETAPAS, ...ACTIVAS, ...ENTREGADAS] : [...ACTIVAS, ...ENTREGADAS];`,
   `// ── extraído de App.jsx por extraer.mjs ──\n` + codigo,
   `function Banco() {

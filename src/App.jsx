@@ -3352,22 +3352,27 @@ function snoozeActive(o){
 //   reportes y aparece roja en el calendario»; las ponen «En espera» con esa razón). Aquí «entregada» se marca al foliar: sin factura pedida, la orden
 //   se queda en Salidas (o recibida de maquila) aunque ya esté lista. El reloj se para cuando quedó lista; lo de después es del cliente. Ese día eran las
 //   7 «atrasadas» de toda la planta. Una regla para todas las pantallas: `vencidaAhora` (lo de hoy) y `entregadaATiempo` (los reportes).
+// v10.84.149 — y la pausa ya no hace falta (Marcelo, 17-oct, sobre las 45 entregas de 120 días que quedaron listas a tiempo y se marcaron entregadas unos
+//   4.6 días después SIN ponerlas «En espera»: «sí, cuentan como a tiempo»). A tiempo es haber quedado LISTA (llegó a Salidas o regresó de maquila) a más
+//   tardar el día de su entrega. Lo de hoy dice lo mismo que el reporte: la que quedó lista a tiempo y espera foliarse no es «vencida» (ni roja en el
+//   calendario, ni «Vencida» en la Torre); la que llegó a Salidas después de su fecha, sí. Sin su bitácora no se sabe cuándo quedó lista: cuenta como antes.
+//   (Se fueron `ESPERA_DE_FACTURA` y `esperoAlCliente`: leían la pausa de la bitácora sólo para esto.)
 const ETAPAS_LISTA=["salidas","maq_received"];
 const esperaAlCliente=o=>!!o&&ETAPAS_LISTA.includes(o.stage)&&o.snooze_kind==="awaiting_client_invoice"&&snoozeActive(o);
-// vencida HOY: con fecha que ya pasó, sin entregar ni cancelar, y que no sea una lista que espera la factura del cliente
-const vencidaAhora=o=>!!o&&!!o.due_date&&isOverdue(o.due_date)&&!esperaAlCliente(o)&&!/delivered|cancelled/.test(String(o.stage||""))&&!o.cancelled_at;
 // la última vez que quedó lista (llegó a Salidas o regresó de maquila) hasta `hasta` (ms), de su bitácora; null si no hay registro
 const listaEn=(o,hasta)=>{let m=null;for(const e of (o&&o.timeline)||[]){if(!e||!ETAPAS_LISTA.includes(e.to))continue;const x=Date.parse(e.date);if(!isNaN(x)&&(hasta==null||x<=hasta)&&(m===null||x>m))m=x}return m};
-// si esperó a que el cliente pidiera su factura: la pausa «🧾 En espera: el cliente no ha pedido factura» (y las que se escribían a mano antes de v10.72.36,
-//   «todavía no pide factura el cliente», «no piden factura»)
-const ESPERA_DE_FACTURA=/en espera.*no (han? )?(pide|piden|pidi[oó]|pedido) (su )?factura/i;
-const esperoAlCliente=(o,hasta)=>((o&&o.timeline)||[]).some(e=>!!e&&ESPERA_DE_FACTURA.test(String(e.action||""))&&(hasta==null||Date.parse(e.date)<=hasta));
-// entregada a tiempo (los reportes): el día que se marcó entregada; o, si esperó la factura del cliente, el día que quedó lista
+// el fin del día de su entrega (las 23:59:59), en ms
+const finDeLaEntrega=o=>new Date(String(o.due_date).slice(0,10)+"T23:59:59").getTime();
+// lista a tiempo: está lista (en Salidas o recibida de maquila) y quedó lista a más tardar el día de su entrega
+const listaATiempo=o=>!!o&&!!o.due_date&&ETAPAS_LISTA.includes(o.stage)&&(l=>l!==null&&l<=finDeLaEntrega(o))(listaEn(o));
+// vencida HOY: con fecha que ya pasó, sin entregar ni cancelar, y que no esté lista a tiempo ni sea una lista que espera la factura del cliente
+const vencidaAhora=o=>!!o&&!!o.due_date&&isOverdue(o.due_date)&&!esperaAlCliente(o)&&!listaATiempo(o)&&!/delivered|cancelled/.test(String(o.stage||""))&&!o.cancelled_at;
+// entregada a tiempo (los reportes): el día que se marcó entregada o, si se marcó después (aquí «entregada» se marca al foliar), el día que quedó lista
 const entregadaATiempo=o=>{
   if(!o||!o.due_date)return false;
-  const fin=new Date(String(o.due_date).slice(0,10)+"T23:59:59").getTime(),ent=Date.parse(o.delivered_at||o.deliveredAt);
-  if(!isNaN(ent)&&ent<=fin)return true;
-  if(isNaN(ent)||!esperoAlCliente(o,ent))return false;
+  const fin=finDeLaEntrega(o),ent=Date.parse(o.delivered_at||o.deliveredAt);
+  if(isNaN(ent))return false;
+  if(ent<=fin)return true;
   const l=listaEn(o,ent);return l!==null&&l<=fin;
 };
 // Días REALES en la etapa actual (la última entrada de timeline que LLEGÓ a este
@@ -3409,7 +3414,7 @@ function diagnoseOrder(o){
   //   Torre) mientras isOverdue la trata como SIN fecha → divergencia tarjeta-vs-Torre. Implausible = null = no-late.
   const _dueEnd=o.due_date?new Date(String(o.due_date).slice(0,10)+"T23:59:59"):null;
   const dueEnd=_dueEnd&&duePlausible(_dueEnd.getTime())?_dueEnd:null;
-  const late=dueEnd&&dueEnd<new Date();
+  const late=dueEnd&&dueEnd<new Date()&&!listaATiempo(o);   // v10.84.149 — la que quedó lista a tiempo no está vencida (Marcelo, 17-oct)
   const lateDays=late?Math.max(1,Math.floor((Date.now()-dueEnd.getTime())/86400000)+1):0;
   const worst=Math.max(d,lateDays);
   const mkSev=(money)=>(worst>=3||money)?"red":(worst>=1?"orange":"yellow");
@@ -3544,7 +3549,7 @@ function getWakeupItems(role, userLogin, orders){
     // v10.58.64 M2: el rescate de Manuel (agente sin usuario → Lupita persigue) se basa
     // en el VENCIMIENTO real, no en diag.key==='late' (no_folio/validation ganaban antes
     // y Lupita perdía las vencidas más viejas de Manuel).
-    const overdue = isOverdue(o.due_date);// v10.73.85 (ultracode) — reusar isOverdue (guard duePlausible de L13); antes el cálculo crudo divergía de diagnoseOrder con fechas corruptas
+    const overdue = vencidaAhora(o);// v10.73.85 (ultracode) — reusar isOverdue (guard duePlausible de L13); antes el cálculo crudo divergía de diagnoseOrder con fechas corruptas; v10.84.149 — con la regla de lo vencido (`vencidaAhora`, que usa isOverdue): la de Manuel lista a tiempo, que sólo espera su folio (de Karla), ya no le sale a Lupita como «tú llevas lo de Manuel»
     const viaManuel = isSec(role) && overdue && ag && !VENDEDORES_CON_USUARIO.has(ag.toLowerCase());
     let mine=false;
     if(role==="admin") mine=true;
@@ -12639,10 +12644,11 @@ function Calendar({orders,onChangeDate,role,userLogin}) {
         <span aria-current={isT?"date":undefined} title={isT?"Hoy":undefined} style={{fontSize:isWeekView?13:12,fontWeight:700,color:isT?"#fff":C.tx,background:isT?C.ac:"transparent",width:isWeekView?26:22,height:isWeekView?26:22,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",marginLeft:isWeekView?0:"auto"}}>{day.getDate()}</span>
       </div>
       {pend.map(o=>{const canEdit=canEditDate(o);const urg=o.priority==="urgente";const nombre=o.client||"(sin cliente)";
-        const espera=esperaAlCliente(o),tarde=isLate&&!espera;   // v10.84.140 — lista y esperando la factura del cliente: no está retrasada
-        const dice="Entrega de "+nombre+(o.production_number?" ("+o.production_number+")":"")+(o.product_type?", "+o.product_type:"")+(o.quantity?", "+Number(o.quantity).toLocaleString("es-MX")+" piezas":"")+(SM[o.stage]?", "+(SM[o.stage].lt||SM[o.stage].l):"")+(tarde?", retrasada "+diasTarde+" día"+(diasTarde===1?"":"s"):espera?", lista: el cliente no ha pedido su factura":"")+(urg&&!espera?", urgente":"")+(canEdit?". Cambiar su fecha":". Sólo quien la capturó puede cambiar su fecha");
+        // v10.84.140 — lista y esperando la factura del cliente: no está retrasada; v10.84.149 — tampoco la que quedó lista a tiempo, con o sin la pausa
+        const espera=esperaAlCliente(o),aTiempo=isLate&&!espera&&listaATiempo(o),tarde=isLate&&!espera&&!aTiempo;
+        const dice="Entrega de "+nombre+(o.production_number?" ("+o.production_number+")":"")+(o.product_type?", "+o.product_type:"")+(o.quantity?", "+Number(o.quantity).toLocaleString("es-MX")+" piezas":"")+(SM[o.stage]?", "+(SM[o.stage].lt||SM[o.stage].l):"")+(tarde?", retrasada "+diasTarde+" día"+(diasTarde===1?"":"s"):espera?", lista: el cliente no ha pedido su factura":aTiempo?", lista a tiempo, falta entregarla":"")+(urg&&!espera&&!aTiempo?", urgente":"")+(canEdit?". Cambiar su fecha":". Sólo quien la capturó puede cambiar su fecha");
         return <button key={o.id} type="button" data-entrega={o.id} aria-label={dice} aria-disabled={!canEdit||undefined} title={canEdit?nombre:nombre+" · sólo quien la capturó puede cambiar su fecha"} onClick={()=>{if(canEdit)setEditOrder(o)}}
-          style={{display:"block",width:"100%",textAlign:"left",fontFamily:"inherit",color:C.tx,background:tarde?C.dn+"10":C.bg,borderRadius:8,padding:isWeekView?"6px 8px":"3px 5px",marginBottom:4,border:"1.5px "+(espera?"dashed ":"solid ")+(tarde?C.dn+"66":espera?C.t3+"99":urg?C.wn+"aa":C.bd),cursor:canEdit?"pointer":"default",transition:"box-shadow .15s"}}
+          style={{display:"block",width:"100%",textAlign:"left",fontFamily:"inherit",color:C.tx,background:tarde?C.dn+"10":C.bg,borderRadius:8,padding:isWeekView?"6px 8px":"3px 5px",marginBottom:4,border:"1.5px "+(espera?"dashed ":"solid ")+(tarde?C.dn+"66":espera?C.t3+"99":urg&&!aTiempo?C.wn+"aa":C.bd),cursor:canEdit?"pointer":"default",transition:"box-shadow .15s"}}
           onMouseEnter={e=>{if(canEdit)e.currentTarget.style.boxShadow="0 2px 8px rgba(0,0,0,.1)"}} onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}>
           <div data-entrega-cliente style={{fontSize:isWeekView?12:11,fontWeight:700,lineHeight:1.3,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden",wordBreak:"break-word"}}>{nombre}</div>
           {isWeekView&&<div style={{fontSize:11,color:C.t2,marginTop:2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString("es-MX")+" pzas":""}</div>}
@@ -12650,7 +12656,8 @@ function Calendar({orders,onChangeDate,role,userLogin}) {
             <span style={{display:"inline-flex",alignItems:"center"}}><StageLbl stage={o.stage} size={isWeekView?10.5:10}/></span>
             {tarde&&<span style={{fontSize:isWeekView?10.5:10,fontWeight:700,color:C.dnInk}}>Retrasada{diasTarde?" "+diasTarde+" d":""}</span>}
             {espera&&<span data-espera-al-cliente style={{fontSize:isWeekView?10.5:10,fontWeight:700,color:C.t2,display:"inline-flex",alignItems:"center",gap:3}}><BellSlashIcon size={isWeekView?11:10} weight="bold" aria-hidden="true"/>Espera al cliente</span>}
-            {urg&&!espera&&<span style={{fontSize:isWeekView?10.5:10,fontWeight:700,color:C.wnInk,display:"inline-flex",alignItems:"center",gap:3}}><CircleIcon size={7} weight="fill"/>Urgente</span>}
+            {aTiempo&&<span data-lista-a-tiempo style={{fontSize:isWeekView?10.5:10,fontWeight:700,color:C.t2,display:"inline-flex",alignItems:"center",gap:3}}><CheckCircleIcon size={isWeekView?11:10} weight="bold" aria-hidden="true"/>Lista a tiempo</span>}
+            {urg&&!espera&&!aTiempo&&<span style={{fontSize:isWeekView?10.5:10,fontWeight:700,color:C.wnInk,display:"inline-flex",alignItems:"center",gap:3}}><CircleIcon size={7} weight="fill"/>Urgente</span>}
           </div>
         </button>})}
       {done.map(o=><div key={o.id} data-entrega={o.id} data-entregada title={(o.client||"")+" · entregada"} style={{background:C.ok+"10",borderRadius:8,padding:isWeekView?"5px 8px":"2px 5px",marginBottom:4,border:"1px solid "+C.ok+"55"}}>
@@ -12725,8 +12732,10 @@ function WeeklyReport({orders,role,chemicals=[],plates=[],maintenance=[],userLog
   const weekMermaPz=delivered.reduce((s,o)=>s+(o.waste_log||[]).reduce((s2,w)=>s2+(w.qty||0),0),0);
   const weekMachineMin=delivered.reduce((s,o)=>s+(o.machine_log||[]).reduce((s2,m)=>s2+(m.minutes||0),0),0);
   const delWithDate=delivered.filter(o=>o.due_date);
-  const weekOnTime=delWithDate.filter(o=>new Date(o.delivered_at||o.deliveredAt)<=parseDate(o.due_date)).length;
-  const otPct=delWithDate.length>0?Math.round((weekOnTime/delWithDate.length)*100):0;
+  // v10.84.149 — con la regla de Analytics (`entregadaATiempo`): antes medía contra el MEDIODÍA del día de entrega (parseDate ancla a las 12:00: la entregada
+  //   a las 18:00 de su día salía tarde) y sin lo que quedó listo a tiempo; sin entregas con fecha no hay con qué medir: «—» (antes «0%» en rojo)
+  const weekOnTime=delWithDate.filter(entregadaATiempo).length;
+  const otPct=delWithDate.length>0?Math.round((weekOnTime/delWithDate.length)*100):null;
   const avgDays=delivered.length>0?(delivered.reduce((s,o)=>{const c=new Date(o.created_at);const d=new Date(o.delivered_at||o.deliveredAt);return s+(d-c)/86400000},0)/delivered.length).toFixed(1):"—";
 
   // Top 5 clients
@@ -12766,7 +12775,7 @@ function WeeklyReport({orders,role,chemicals=[],plates=[],maintenance=[],userLog
     {isAdmin&&expanded&&<div style={{marginTop:12,borderTop:"0.5px solid "+C.bd,paddingTop:12}}>
       {/* Row 2: Production metrics */}
       <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10}}>
-        <St l="A tiempo" v={otPct+"%"} c={otPct>=80?C.ok:otPct>=60?C.wn:C.dn}/>
+        <St l="A tiempo" v={otPct===null?"—":otPct+"%"} c={otPct===null?C.tx:otPct>=80?C.ok:otPct>=60?C.wn:C.dn}/>
         <St l="Días prom." v={avgDays} c={C.ac}/>
         <St l="Hrs máquina" v={fmtM(weekMachineMin)} c={C.ac}/>
         <St l="Merma pl." v={weekMerma} c={weekMerma>0?C.wn:C.ok}/>
@@ -17562,9 +17571,10 @@ function Analytics({orders,onReload}) {
 
   // ── eficiencia del periodo ──
   const conFecha=del.filter(o=>o.due_date);
-  // v10.84.140 — a tiempo también la que quedó lista a tiempo y esperó a que el cliente pidiera su factura (aquí «entregada» se marca al foliar)
+  // v10.84.140 — a tiempo también la que quedó lista a tiempo y esperó a que el cliente pidiera su factura (aquí «entregada» se marca al foliar);
+  //   v10.84.149 — con o sin la pausa (Marcelo, 17-oct: «sí, cuentan como a tiempo»)
   const onTime=conFecha.filter(entregadaATiempo).length;
-  const porEspera=conFecha.filter(o=>entregadaATiempo(o)&&!(new Date(o.delivered_at||o.deliveredAt)<=new Date(o.due_date+"T23:59:59"))).length;
+  const porLista=conFecha.filter(o=>entregadaATiempo(o)&&!(new Date(o.delivered_at||o.deliveredAt)<=new Date(o.due_date+"T23:59:59"))).length;
   const late=conFecha.length-onTime,sinFecha=del.length-conFecha.length;
   const onTimePct=conFecha.length>0?Math.round((onTime/conFecha.length)*100):null;
   const merma=orders.flatMap(o=>(o.waste_log||[]).filter(w=>enRango(diaLocal(w.date),rango)));
@@ -17750,7 +17760,7 @@ function Analytics({orders,onReload}) {
             <span style={{color:C.dnInk,display:"inline-flex",alignItems:"center",gap:4}}><WarningIcon size={11} weight="fill"/>{late} tarde</span>
             {sinFecha>0&&<span style={{color:C.t2,display:"inline-flex",alignItems:"center",gap:4}}>{sinFecha} sin fecha compromiso (no cuentan)</span>}
           </div>
-          {porEspera>0&&<div data-a-tiempo-por-espera style={{fontSize:11,color:C.t2,textAlign:"center",marginTop:8,lineHeight:1.45}}>{porEspera===1?"1 de las a tiempo se marcó entregada después de su fecha: estaba lista a tiempo y esperó":porEspera+" de las a tiempo se marcaron entregadas después de su fecha: estaban listas a tiempo y esperaron"} a que el cliente pidiera su factura.</div>}</>}
+          {porLista>0&&<div data-a-tiempo-lista style={{fontSize:11,color:C.t2,textAlign:"center",marginTop:8,lineHeight:1.45}}>{porLista===1?"1 de las a tiempo se marcó entregada después de su fecha, pero estaba lista a tiempo":porLista+" de las a tiempo se marcaron entregadas después de su fecha, pero estaban listas a tiempo"} (aquí «entregada» se marca al foliar).</div>}</>}
         </div>
 
         {/* Stale orders: lo de AHORA, no del periodo */}

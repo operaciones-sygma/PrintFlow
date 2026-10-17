@@ -55,7 +55,10 @@ const partes = [
   fnBlock("snoozeActive"),
   // v10.84.140 — lo atrasado: la ficha pregunta `vencidaAhora` (la lista que espera la factura del cliente no es «RETRASO»). Si el App.jsx la trae: el de
   //   antes no (la corrida doble). Sin esto el banco se quedaba en blanco y cada caso esperaba su tope (el candado de la 140 frenó por eso: «detalle» pasó de 12 min)
-  ...opcional(L.some(l => l.startsWith("const vencidaAhora=")), () => [line(/^const ETAPAS_LISTA=/, "ETAPAS_LISTA"), line(/^const esperaAlCliente=/, "esperaAlCliente"), line(/^const vencidaAhora=/, "vencidaAhora")].join("\n")),
+  //   v10.84.149 — y `vencidaAhora` pregunta `listaATiempo` (con `listaEn` y `finDeLaEntrega`): si el App.jsx las trae
+  ...opcional(L.some(l => l.startsWith("const vencidaAhora=")), () => [line(/^const ETAPAS_LISTA=/, "ETAPAS_LISTA"), line(/^const esperaAlCliente=/, "esperaAlCliente"),
+    ...(L.some(l => l.startsWith("const listaATiempo=")) ? [line(/^const listaEn=/, "listaEn"), line(/^const finDeLaEntrega=/, "finDeLaEntrega"), line(/^const listaATiempo=/, "listaATiempo")] : []),
+    line(/^const vencidaAhora=/, "vencidaAhora")].join("\n")),
   multi(/^const ETAPA_NOMBRE = \{/, "ETAPA_NOMBRE"), multi(/^const etapaPreviaDeshacer = /, "etapaPreviaDeshacer"),
   multi(/^const vuelveAlDeshacer = /, "vuelveAlDeshacer"), multi(/^const liquidadaConSaldoAFavor = /, "liquidadaConSaldoAFavor", /\)\);\s*$/),
   // v10.84.112 — quién corrige el precio y de qué orden (si el App.jsx lo trae)

@@ -229,6 +229,24 @@ await caso("ent-23-la-leyenda-dice-la-espera", "espera=1", async p => {
   ok("ent-23-la-leyenda-dice-la-espera", /Retrasada/.test(t) && /Espera al cliente/.test(t) && /Entregada/.test(t), `la leyenda: ${/Espera al cliente/.test(t) ? "explica «Espera al cliente»" : "NO dice qué es «Espera al cliente»"}`);
 });
 
+// ── vuelta 4 (v10.84.149; Marcelo, 17-oct: «sí, cuentan como a tiempo»): la que quedó LISTA a tiempo no es «Retrasada» aunque no tenga la pausa (el
+//   reporte ya la cuenta a tiempo); la que llegó a Salidas después de su fecha, sí. Escritas antes del arreglo ──
+await caso("ent-24-la-lista-a-tiempo-sin-pausa-no-es-retrasada", "lista=1", async p => {
+  const t = await fichaTexto(p, "LISTA A TIEMPO SIN PAUSA"), aria = await fichaAria(p, "LISTA A TIEMPO SIN PAUSA"), borde = await fichaBorde(p, "LISTA A TIEMPO SIN PAUSA");
+  ok("ent-24-la-lista-a-tiempo-sin-pausa-no-es-retrasada", !!t && !/Retrasada/.test(t) && /Lista a tiempo/.test(t) && !/retrasada/i.test(aria) && /lista a tiempo/i.test(aria) && !/185, 28, 28|255, 59, 48|224, 59, 48/.test(borde),
+    `en Salidas desde el domingo 11, vencía el lunes 12, sin la pausa: «${t.slice(0, 90)}»; para el lector de pantalla «${aria.slice(0, 140)}»; borde ${borde}`);
+});
+await caso("ent-25-la-lista-tarde-sin-pausa-sigue-retrasada", "lista=1", async p => {
+  const t = await fichaTexto(p, "LISTA TARDE SIN PAUSA");
+  ok("ent-25-la-lista-tarde-sin-pausa-sigue-retrasada", /Retrasada 2 d/.test(t) && !/Lista a tiempo/.test(t), `llegó a Salidas el martes 13, vencía el lunes 12: «${t.slice(0, 90)}»`);
+});
+// vuelta 2: el otro modo de la pantalla (el mes)
+await caso("ent-26-en-el-mes-tambien", "lista=1", async p => {
+  await p.getByRole("button", { name: "Mes" }).click(); await espera(p);
+  const a = await fichaTexto(p, "LISTA A TIEMPO SIN PAUSA"), b = await fichaTexto(p, "LISTA TARDE SIN PAUSA");
+  ok("ent-26-en-el-mes-tambien", !!a && !/Retrasada/.test(a) && /Lista a tiempo/.test(a) && /Retrasada/.test(b), `en el mes: la lista a tiempo «${a.slice(0, 80)}»; la lista tarde «${b.slice(0, 80)}»`);
+});
+
 await browser.close();
 for (const r of res) console.log(r);
 const fallan = res.filter(r => r.startsWith("FALLA")).length;

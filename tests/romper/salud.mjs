@@ -315,6 +315,16 @@ for (const rol of ["secretaria", "admin"]) {
   });
 }
 
+// ── vuelta 5 (v10.84.149; Marcelo, 17-oct: «sí, cuentan como a tiempo»): la que quedó LISTA a tiempo tampoco es «Vencida», aunque no tenga la pausa.
+//   Escrita antes del arreglo ──
+for (const rol of ["secretaria", "admin"]) {
+  await caso(`dp-42-la-lista-a-tiempo-sin-pausa-no-es-vencida-${rol}`, "rol=" + rol + "&caso=lista", async p => {
+    const t = await texto(p), venc = (t.match(/Vencidas \((\d+)\)/) || [])[1];
+    // (sólo la cuenta de «Vencidas»: P-0664 sí puede salir como quieta en Salidas, porque le falta foliarse y entregarse)
+    ok(`dp-42-la-lista-a-tiempo-sin-pausa-no-es-vencida-${rol}`, venc === "1", `con P-0664 (en Salidas desde el 8 sin la pausa, vencida el 9): «Vencidas (${venc ?? "no sale"})» (debe ser 1: P-0611)`);
+  });
+}
+
 await browser.close();
 for (const r of res) console.log(r);
 const fallan = res.filter(r => r.startsWith("FALLA")).length;

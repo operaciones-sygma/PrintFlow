@@ -200,6 +200,27 @@ await caso("db-20-con-retraso-hoy-sin-la-que-espera-al-cliente", "rol=secretaria
   ok("db-20-con-retraso-hoy-sin-la-que-espera-al-cliente", Number.isFinite(conEspera) && conEspera === sin, `«Con retraso hoy»: ${conEspera} con P-0645 (en Salidas, «el cliente no ha pedido factura», vencida el 8) y ${sin} sin ella (deben ser iguales)`);
 });
 
+// ── vuelta 4 (v10.84.149; Marcelo, 17-oct: «sí, cuentan como a tiempo»): lo LISTO a tiempo no es retraso, también sin la pausa; y el «A tiempo» de la semana
+//   (el reporte completo de Dirección) cuenta con la regla de Analytics: antes medía contra el mediodía del día de entrega y sin lo que quedó listo a tiempo.
+//   Escritas antes del arreglo ──
+const valorDe = (p, etiqueta) => p.locator("span", { hasText: new RegExp("^" + etiqueta + "$") }).first().locator("xpath=following-sibling::span[1]").innerText().catch(() => "");
+await caso("db-21-con-retraso-hoy-sin-la-lista-a-tiempo", "rol=secretaria&caso=lista", async p => {
+  const conLista = Number(await valorDe(p, "Con retraso hoy"));
+  await p.goto(p.url().replace("caso=lista", "caso=")); await p.getByRole("heading", { name: "Dashboard" }).waitFor({ timeout: 30000 }); await espera(p, 300);
+  const sin = Number(await valorDe(p, "Con retraso hoy"));
+  ok("db-21-con-retraso-hoy-sin-la-lista-a-tiempo", Number.isFinite(conLista) && conLista === sin, `«Con retraso hoy»: ${conLista} con P-0646 (en Salidas desde el 7 sin la pausa, vencía el 8) y ${sin} sin ella (deben ser iguales)`);
+});
+await caso("db-22-a-tiempo-de-la-semana-con-la-regla", "rol=admin&caso=lista", async p => {
+  await p.getByRole("button", { name: /Reporte Completo/ }).click(); await espera(p);
+  const v = (await valorDe(p, "A tiempo")).trim();
+  ok("db-22-a-tiempo-de-la-semana-con-la-regla", /^88\s?%$/.test(v), `«A tiempo» de los últimos 7 días: «${v}» (debe 88 %: 7 de 8; P-0505 quedó lista a tiempo, P-0506 se entregó a las 18:00 del día de su fecha; sólo P-0507, lista tarde, no)`);
+});
+await caso("db-23-a-tiempo-sin-fechas-no-es-cero", "rol=admin&caso=sinfecha", async p => {
+  await p.getByRole("button", { name: /Reporte Completo/ }).click(); await espera(p);
+  const v = (await valorDe(p, "A tiempo")).trim();
+  ok("db-23-a-tiempo-sin-fechas-no-es-cero", v === "—", `«A tiempo» con 5 entregadas en la semana y ninguna con fecha de entrega: «${v}» (debe «—»: no hay con qué medir; «0%» en rojo dice que todas llegaron tarde)`);
+});
+
 await browser.close();
 for (const r of res) console.log(r);
 const fallan = res.filter(r => r.startsWith("FALLA")).length;

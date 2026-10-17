@@ -12,6 +12,34 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.149 — «A tiempo» es haber quedado lista a tiempo, con o sin la pausa (y lo de hoy dice lo mismo) — 17-oct-2026
+
+**Qué pasaba.** La pregunta que dejó v10.84.140: en 120 días, 45 entregas quedaron listas a tiempo y se marcaron entregadas unos 4.6 días después SIN
+ponerlas «En espera: el cliente no ha pedido factura». Marcelo, 17-oct: **«sí, cuentan como a tiempo»** (con eso, la puntualidad de esos 120 días pasa de
+46 % a 58 %). Hasta hoy sólo contaba a tiempo la que tenía esa pausa en su bitácora. Y al buscar quién más dice «a tiempo» o «vencida»: el «A tiempo» de la
+semana (el reporte completo de Dirección, en el Dashboard) tenía su propia cuenta, contra el MEDIODÍA del día de entrega (`parseDate` ancla a las 12:00): la
+entregada a las 18:00 de su día salía tarde, y sin entregas con fecha decía «0%» en rojo. El calendario, la Torre, el Despertador, «Datos Pendientes» y las
+fichas pintaban vencida la orden que quedó lista a tiempo y sólo espera foliarse.
+
+**Qué se cambió.** Una regla para todas las pantallas: a tiempo es haber quedado LISTA (llegó a Salidas o regresó de maquila) a más tardar el día de su
+entrega, con o sin la pausa (`entregadaATiempo`; se fueron `ESPERA_DE_FACTURA` y `esperoAlCliente`, que leían la pausa sólo para esto), y lo de hoy dice lo
+mismo: la que quedó lista a tiempo no es vencida (`listaATiempo`, en `vencidaAhora` y en `diagnoseOrder`). El calendario la marca «Lista a tiempo» (gris, sin
+rojo); Analytics dice cuántas de las a tiempo se marcaron entregadas después de su fecha «pero estaban listas a tiempo (aquí «entregada» se marca al
+foliar)»; el «A tiempo» de la semana usa `entregadaATiempo` y sin entregas con fecha dice «—». La que llegó a Salidas después de su fecha sigue tarde, la que
+regresó a máquina cuenta la última vez que quedó lista, y sin su bitácora se cuenta como antes. En el Despertador, Lupita persigue lo vencido de Manuel con
+la misma regla (`vencidaAhora`): la de Manuel lista a tiempo, que sólo espera su folio (de Karla), ya no le sale cada mañana como «tú llevas lo de Manuel»
+(el 17-oct, 20 de las 21 listas que esperan al cliente eran de Manuel).
+
+**Cómo se probó.** 24 pruebas nuevas en cinco tandas, escritas antes del arreglo. Vuelta 1 contra v10.84.148: fallaban 14 (en `atrasos`, 7: la regla, la
+Torre y «Datos Pendientes»; Analytics daba 57 % en vez de 71 %; el calendario la pintaba roja; el Dashboard contaba de más «Con retraso hoy», su «A tiempo»
+daba 63 % en vez de 88 % y «0%» sin fechas; «Vencidas (2)» en vez de 1). Vuelta 2, por donde no se diseñó: el Despertador (atr-30: a Lupita le salía «Apura
+con Karla… tú llevas lo de Manuel» por la de Manuel lista a tiempo; arreglado) y la vista del mes del calendario (ent-26). Vuelta 3, la que regresa a máquina y
+vuelve a Salidas a tiempo o tarde: sin fallas. Ahora todas pasan; contra v10.84.148 fallan 17 de las 24. **atr-13, atr-14, atr-15 y an-35 se fueron con la
+decisión:** afirmaban la regla de antes (la lista a tiempo sin la pausa, tarde). El banco del detalle copia a mano `vencidaAhora`: ahora también `listaEn`,
+`finDeLaEntrega` y `listaATiempo` (si no, se quedaba en blanco). Los 31 bancos se generan con el App.jsx nuevo; build y `probar-alcance` en verde.
+
+**En producción:** (pendiente)
+
 ## v10.84.148 — El historial del cliente: el vendedor abre y ve lo que lleva como vendedor — 17-oct-2026
 
 **Qué pasaba.** La pasada de `/impeccable critique` de la madrugada del 17-oct sobre el historial del cliente (`ClientHistory`, al tocar el nombre en la

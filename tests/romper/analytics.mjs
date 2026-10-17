@@ -376,18 +376,21 @@ await caso("an-33-la-barra-mas-larga-cabe", "modo=inventariogrande", async p => 
     `con ${$(103000)} de inventario (al final): barras ${JSON.stringify(barras)} (ninguna pasa del 100 %; la de inventario llena, la de etiquetas al 15 %)`);
 });
 
-// ── vuelta 3 (v10.84.140): a tiempo también la que quedó lista a tiempo y esperó a que el cliente pidiera su factura (aquí «entregada» se marca al foliar) ──
-await caso("an-35-a-tiempo-si-estaba-lista-y-espero-la-factura", "modo=espera", async p => {
-  await pestaña(p, "Eficiencia");
-  const t = await cifra(p, "atiempo");
-  const nota = ((await p.locator("[data-a-tiempo-por-espera]").first().innerText().catch(() => "")) || "").replace(/\s+/g, " ");
-  ok("an-35-a-tiempo-si-estaba-lista-y-espero-la-factura", /57\s?%/.test(t) && /4 de 7/.test(t) && /^2 de las a tiempo se marcaron entregadas después de su fecha/.test(nota) && /pidiera su factura/.test(nota),
-    `a tiempo «${t}» (debe: 57 %, 4 de 7: las 2 de antes, P-0120 y P-0123, que estaban listas a tiempo y esperaron la factura; P-0121 lista tarde y P-0122 sin la espera, tarde); la nota: «${nota || "no sale"}»`);
-});
+// ── vuelta 3 (v10.84.140): a tiempo también la que quedó lista a tiempo y esperó a que el cliente pidiera su factura (aquí «entregada» se marca al foliar).
+//   an-35 afirmaba esa regla (P-0122, lista a tiempo SIN la pausa, contaba tarde: 4 de 7); se fue con la decisión de Marcelo del 17-oct: an-37 ──
 await caso("an-36-sin-esas-no-sale-la-nota", "", async p => {
   await pestaña(p, "Eficiencia");
-  const nota = await p.locator("[data-a-tiempo-por-espera]").count();
-  ok("an-36-sin-esas-no-sale-la-nota", nota === 0, `sin entregas que esperaran la factura: ${nota ? "SALE la nota" : "sin nota"}`);
+  const nota = await p.locator("[data-a-tiempo-lista],[data-a-tiempo-por-espera]").count();
+  ok("an-36-sin-esas-no-sale-la-nota", nota === 0, `sin entregas listas a tiempo y marcadas después: ${nota ? "SALE la nota" : "sin nota"}`);
+});
+
+// ── vuelta 4 (v10.84.149; Marcelo, 17-oct: «sí, cuentan como a tiempo»): a tiempo es haber quedado LISTA a tiempo, con o sin la pausa; escrita antes del arreglo ──
+await caso("an-37-a-tiempo-si-estaba-lista-a-tiempo-aunque-no-esperara", "modo=espera", async p => {
+  await pestaña(p, "Eficiencia");
+  const t = await cifra(p, "atiempo");
+  const nota = ((await p.locator("[data-a-tiempo-lista],[data-a-tiempo-por-espera]").first().innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  ok("an-37-a-tiempo-si-estaba-lista-a-tiempo-aunque-no-esperara", /71\s?%/.test(t) && /5 de 7/.test(t) && /^3 de las a tiempo se marcaron entregadas después de su fecha/.test(nota) && /listas a tiempo/.test(nota) && !/pidiera su factura/.test(nota),
+    `a tiempo «${t}» (debe: 71 %, 5 de 7: las 2 de antes y P-0120, P-0122 y P-0123, listas a tiempo; P-0121, lista tarde, no); la nota: «${nota || "no sale"}» (debe decir que 3 estaban listas a tiempo, sin hablar de la factura)`);
 });
 
 await browser.close();

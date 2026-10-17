@@ -18,7 +18,7 @@ const ok = (n, c, x = "") => { if (process.env.SOLO && !new RegExp(process.env.S
 const AHORA = new Date("2026-10-16T12:00:00-06:00").getTime();
 const D0 = Date;
 globalThis.Date = class extends D0 { constructor(...a) { if (a.length) super(...a); else super(AHORA); } static now() { return AHORA; } };
-const QUIERO = ["vencidaAhora", "esperaAlCliente", "entregadaATiempo", "getIncompleteData"];
+const QUIERO = ["vencidaAhora", "esperaAlCliente", "entregadaATiempo", "getIncompleteData", "diagnoseOrder", "getWakeupItems"];
 const { codigo } = extraer(fs.readFileSync(path.join(RAIZ, "src", "App.jsx"), "utf8"), QUIERO, { simulados: ["supabase"] });
 const tmp = path.join(os.tmpdir(), "pf-atrasos-" + process.pid + ".mjs");
 fs.writeFileSync(tmp, [...new Set(codigo.match(/\b[A-Z][A-Za-z0-9]*Icon\b/g) || [])].map(i => `const ${i} = () => null;`).join("\n")
@@ -89,20 +89,8 @@ caso("atr-12-lista-tarde-cuenta-tarde-aunque-esperara", () => {
   const o = entregada("2026-10-15T12:00:00-06:00", [lista("2026-10-13T10:00:00-06:00"), pausa("2026-10-13T11:00:00-06:00")]);
   ok("atr-12-lista-tarde-cuenta-tarde-aunque-esperara", aTiempo(o) === false, `lista el 13 (un día tarde) y luego esperó la factura: a tiempo ${aTiempo(o)} (lo de la planta sí fue tarde)`);
 });
-caso("atr-13-lista-a-tiempo-sin-la-espera-cuenta-tarde", () => {
-  const o = entregada("2026-10-15T12:00:00-06:00", [lista("2026-10-11T10:00:00-06:00")]);
-  ok("atr-13-lista-a-tiempo-sin-la-espera-cuenta-tarde", aTiempo(o) === false, `lista el 11 pero sin la espera de la factura, entregada el 15: a tiempo ${aTiempo(o)} (no se sabe que fuera el cliente)`);
-});
-caso("atr-14-la-espera-escrita-a-mano-tambien", () => {
-  const con = t => aTiempo(entregada("2026-10-15T12:00:00-06:00", [lista("2026-10-11T10:00:00-06:00"), pausa("2026-10-12T09:00:00-06:00", t)]));
-  const r = { torre: con("🔕 En espera (Torre): todavia no pide factura el cliente · hasta que cambie de etapa"), kfc: con("🔕 En espera (Torre): KFC, todavia no piden factura · hasta que cambie de etapa"),
-    otra: con("🔕 En espera (Torre): Esperando a que Genaro diga si es remision o factura · hasta que cambie de etapa"), material: con("🔕 En espera: Esperando material o insumo para continuar · hasta que cambie de etapa") };
-  ok("atr-14-la-espera-escrita-a-mano-tambien", r.torre && r.kfc && !r.otra && !r.material, `las pausas escritas a mano: ${JSON.stringify(r)} (las dos de «no pide factura» sí; la de remisión o factura y la de material, no)`);
-});
-caso("atr-15-la-espera-puesta-despues-de-entregar-no-cuenta", () => {
-  const o = entregada("2026-10-15T12:00:00-06:00", [lista("2026-10-11T10:00:00-06:00"), pausa("2026-10-15T13:00:00-06:00")]);
-  ok("atr-15-la-espera-puesta-despues-de-entregar-no-cuenta", aTiempo(o) === false, `la pausa quedó registrada después de entregarla: a tiempo ${aTiempo(o)}`);
-});
+// (atr-13, atr-14 y atr-15 afirmaban la regla de antes: la lista a tiempo SIN la pausa de la factura contaba tarde, y la pausa se leía de la bitácora.
+//  Se fueron con la decisión de Marcelo del 17-oct, «sí, cuentan como a tiempo»: atr-20 y atr-21.)
 caso("atr-16-lista-a-las-2330-del-dia-si-a-las-0030-del-siguiente-no", () => {
   const de = h => aTiempo(entregada("2026-10-15T12:00:00-06:00", [lista(h), pausa("2026-10-13T09:00:00-06:00")]));
   const r = [de("2026-10-12T23:30:00-06:00"), de("2026-10-13T00:30:00-06:00")];
@@ -120,6 +108,87 @@ caso("atr-18-sin-bitacora-como-antes", () => {
 caso("atr-19-la-maquila-recibida-a-tiempo-que-espero", () => {
   const o = entregada("2026-10-15T12:00:00-06:00", [lista("2026-10-12T09:00:00-06:00", "maq_received"), pausa("2026-10-12T10:00:00-06:00")], { stage: "maq_delivered", order_type: "maquila" });
   ok("atr-19-la-maquila-recibida-a-tiempo-que-espero", aTiempo(o) === true, `maquila recibida el 12, esperó la factura, entregada el 15: a tiempo ${aTiempo(o)}`);
+});
+
+// ── v10.84.149 (Marcelo, 17-oct, sobre las 45 entregas listas a tiempo y marcadas entregadas unos 4.6 días después SIN la pausa: «sí, cuentan como a
+//   tiempo»). A tiempo es haber quedado LISTA a tiempo (llegó a Salidas o regresó de maquila a más tardar el día de su entrega), con o sin la pausa: aquí
+//   «entregada» se marca al foliar. Y lo de hoy dice lo mismo que el reporte: la que quedó lista a tiempo y sigue en Salidas (o recibida de maquila) no es
+//   «vencida», ni en la Torre. Vuelta 1: escritas antes del arreglo, contra v10.84.148 ──
+caso("atr-20-lista-a-tiempo-sin-la-espera-cuenta-a-tiempo", () => {
+  const o = entregada("2026-10-15T12:00:00-06:00", [lista("2026-10-11T10:00:00-06:00")]);
+  ok("atr-20-lista-a-tiempo-sin-la-espera-cuenta-a-tiempo", aTiempo(o) === true, `lista el 11 sin la pausa, foliada y entregada el 15 (vencía el 12): a tiempo ${aTiempo(o)}`);
+});
+caso("atr-21-la-pausa-ya-no-cambia-la-cuenta", () => {
+  const con = (cuando, tl) => aTiempo(entregada("2026-10-15T12:00:00-06:00", [lista(cuando), ...tl]));
+  const a = "2026-10-11T10:00:00-06:00", tarde = "2026-10-13T10:00:00-06:00";
+  const r = { sin: con(a, []), factura: con(a, [pausa("2026-10-12T09:00:00-06:00")]), material: con(a, [pausa("2026-10-12T09:00:00-06:00", "🔕 En espera: Esperando material o insumo para continuar · hasta que cambie de etapa")]),
+    despues: con(a, [pausa("2026-10-15T13:00:00-06:00")]), tardeSin: con(tarde, []), tardeConFactura: con(tarde, [pausa("2026-10-13T11:00:00-06:00")]) };
+  ok("atr-21-la-pausa-ya-no-cambia-la-cuenta", r.sin && r.factura && r.material && r.despues && !r.tardeSin && !r.tardeConFactura,
+    `lista el 11: sin pausa ${r.sin}, con la de la factura ${r.factura}, con la de material ${r.material}, con la pausa puesta después de entregar ${r.despues} (todas a tiempo); lista el 13 (tarde): sin pausa ${r.tardeSin}, con la de la factura ${r.tardeConFactura} (las dos tarde)`);
+});
+caso("atr-22-lista-a-tiempo-en-salidas-no-esta-vencida", () => {
+  const o = orden({ timeline: [lista("2026-10-11T10:00:00-06:00")] });
+  ok("atr-22-lista-a-tiempo-en-salidas-no-esta-vencida", venc(o) === false, `en Salidas desde el 11 sin la pausa, vencía el 12 (hoy es 16): vencida ${venc(o)} (quedó lista a tiempo: lo que falta es foliar y entregar)`);
+});
+caso("atr-23-lista-tarde-en-salidas-si-esta-vencida", () => {
+  const o = orden({ timeline: [lista("2026-10-13T10:00:00-06:00")] });
+  ok("atr-23-lista-tarde-en-salidas-si-esta-vencida", venc(o) === true, `llegó a Salidas el 13, vencía el 12: vencida ${venc(o)} (la planta sí llegó tarde)`);
+});
+caso("atr-24-la-maquila-recibida-a-tiempo-sin-la-espera-no-esta-vencida", () => {
+  const o = orden({ stage: "maq_received", order_type: "maquila", timeline: [lista("2026-10-12T09:00:00-06:00", "maq_received")] });
+  ok("atr-24-la-maquila-recibida-a-tiempo-sin-la-espera-no-esta-vencida", venc(o) === false, `recibida de maquila el 12, vencía el 12, sin la pausa: vencida ${venc(o)}`);
+});
+caso("atr-25-lista-a-tiempo-pero-regreso-a-produccion-si-esta-vencida", () => {
+  const o = orden({ stage: "in_production", timeline: [lista("2026-10-11T10:00:00-06:00"), { to: "in_production", date: T("2026-10-13T09:00:00-06:00"), action: "→ in_production" }] });
+  ok("atr-25-lista-a-tiempo-pero-regreso-a-produccion-si-esta-vencida", venc(o) === true, `llegó a Salidas el 11 y el 13 regresó a máquina (ya no está lista), vencía el 12: vencida ${venc(o)}`);
+});
+caso("atr-26-lista-a-las-2330-del-dia-no-vencida-a-las-0030-si", () => {
+  const de = h => venc(orden({ timeline: [lista(h)] }));
+  const r = [de("2026-10-12T23:30:00-06:00"), de("2026-10-13T00:30:00-06:00")];
+  ok("atr-26-lista-a-las-2330-del-dia-no-vencida-a-las-0030-si", r[0] === false && r[1] === true, `en Salidas desde el 12 a las 23:30: vencida ${r[0]} (no); desde el 13 a las 00:30: vencida ${r[1]} (sí)`);
+});
+caso("atr-27-datos-pendientes-vencidas-sin-la-lista-a-tiempo", () => {
+  const ordenes = [orden({ id: "a", production_number: "P-0901", timeline: [lista("2026-10-11T10:00:00-06:00")] }), orden({ id: "b", production_number: "P-0902", stage: "in_production" }),
+    orden({ id: "c", production_number: "P-0903", timeline: [lista("2026-10-13T10:00:00-06:00")] })];
+  const v = F.getIncompleteData(ordenes).vencidas.map(o => o.production_number);
+  ok("atr-27-datos-pendientes-vencidas-sin-la-lista-a-tiempo", JSON.stringify(v) === '["P-0902","P-0903"]', `«Vencidas» de Datos Pendientes: ${JSON.stringify(v)} (sin P-0901, lista a tiempo; con P-0903, lista tarde)`);
+});
+// (con un folio anticipado, para que la Torre no se quede en «Sin folio de factura»: así se ve qué dice de lo atrasado)
+caso("atr-28-la-torre-no-dice-vencida-a-la-lista-a-tiempo", () => {
+  const d = F.diagnoseOrder(orden({ invoice_folio: "F-300", timeline: [lista("2026-10-11T10:00:00-06:00")] }));
+  ok("atr-28-la-torre-no-dice-vencida-a-la-lista-a-tiempo", !d || d.key !== "late", `en Salidas desde el 11 con su folio anticipado, vencía el 12: la Torre dice «${d ? d.text : "nada"}» (no «Vencida»)`);
+});
+caso("atr-29-la-torre-si-dice-vencida-a-la-lista-tarde", () => {
+  const d = F.diagnoseOrder(orden({ invoice_folio: "F-301", timeline: [lista("2026-10-14T10:00:00-06:00")] }));
+  ok("atr-29-la-torre-si-dice-vencida-a-la-lista-tarde", !!d && d.key === "late", `en Salidas desde el 14 con su folio anticipado, vencía el 12: la Torre dice «${d ? d.text : "nada"}» (debe: «Vencida»)`);
+});
+
+// ── vuelta 2 (v10.84.149): el Despertador. Lupita persigue lo VENCIDO de Manuel (no tiene usuario: «tú llevas lo de Manuel»); lo medía con la fecha sola, así
+//   que la de Manuel lista a tiempo en Salidas, que sólo espera su folio (de Karla), le salía a ella cada mañana. El 17-oct, 20 de las 21 listas que esperan
+//   al cliente eran de Manuel ──
+const delDespertador = (rol, ordenes) => F.getWakeupItems(rol, rol, ordenes).map(x => x.o.production_number + ": " + x.why + " → " + x.action);
+caso("atr-30-lupita-no-persigue-la-de-manuel-lista-a-tiempo", () => {
+  const r = delDespertador("secretaria", [orden({ agent: "Manuel", timeline: [lista("2026-10-11T10:00:00-06:00")] })]);
+  ok("atr-30-lupita-no-persigue-la-de-manuel-lista-a-tiempo", r.length === 0, `la de Manuel en Salidas desde el 11 (vencía el 12), sin folio: el Despertador de Lupita trae ${JSON.stringify(r)} (nada: no está vencida y el folio es de Karla)`);
+});
+caso("atr-31-lupita-si-persigue-la-de-manuel-vencida", () => {
+  const r = delDespertador("secretaria", [orden({ agent: "Manuel", stage: "in_production", timeline: [{ to: "in_production", date: T("2026-10-15T09:00:00-06:00"), action: "→ in_production" }] })]);
+  ok("atr-31-lupita-si-persigue-la-de-manuel-vencida", r.length === 1 && /Manuel/.test(r[0]), `la de Manuel en máquina, vencía el 12: el Despertador de Lupita trae ${JSON.stringify(r)} (debe traerla: «tú llevas lo de Manuel»)`);
+});
+caso("atr-32-karla-si-ve-el-folio-de-la-lista-a-tiempo", () => {
+  const r = delDespertador("karla", [orden({ agent: "Manuel", timeline: [lista("2026-10-11T10:00:00-06:00")] })]);
+  ok("atr-32-karla-si-ve-el-folio-de-la-lista-a-tiempo", r.length === 1 && /folio/i.test(r[0]) && !/Vencida/.test(r[0]), `la misma, para Karla: ${JSON.stringify(r)} (debe: «Sin folio de factura», sin «Vencida»)`);
+});
+
+// ── vuelta 3 (v10.84.149): la que va y viene. Cuenta la ÚLTIMA vez que llegó a Salidas (si regresó a máquina, lo primero no estaba listo) ──
+const vaYViene = regreso => orden({ timeline: [lista("2026-10-10T10:00:00-06:00"), { to: "in_production", date: T("2026-10-10T15:00:00-06:00"), action: "→ in_production" }, lista(regreso)] });
+caso("atr-33-regreso-a-maquina-y-volvio-tarde-esta-vencida", () => {
+  const o = vaYViene("2026-10-14T10:00:00-06:00");
+  ok("atr-33-regreso-a-maquina-y-volvio-tarde-esta-vencida", venc(o) === true, `en Salidas el 10, a máquina el 10 en la tarde, otra vez en Salidas el 14 (vencía el 12): vencida ${venc(o)}`);
+});
+caso("atr-34-regreso-a-maquina-y-volvio-a-tiempo-no-esta-vencida", () => {
+  const o = vaYViene("2026-10-12T18:00:00-06:00");
+  ok("atr-34-regreso-a-maquina-y-volvio-a-tiempo-no-esta-vencida", venc(o) === false, `en Salidas el 10, a máquina el 10 en la tarde, otra vez en Salidas el 12 a las 18:00 (vencía el 12): vencida ${venc(o)}`);
 });
 
 for (const r of res) console.log(r);
