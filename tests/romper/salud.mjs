@@ -325,6 +325,36 @@ for (const rol of ["secretaria", "admin"]) {
   });
 }
 
+// ── vuelta 6 (v10.84.154 y v10.84.155; Marcelo, 17-oct: «si hazlo»): el pulso, un renglón por persona con sus ESTANCADAS (no las horas de su orden más
+//   quieta, que contaban lo que espera su fecha); y cada renglón de «Datos incompletos» dice lo demás que le falta a esa orden. Escritas antes del arreglo ──
+const pulso = p => p.evaluate(() => { const h = [...document.querySelectorAll("h3")].find(x => /Pulso por responsable/.test(x.textContent)); const c = h && h.nextElementSibling; if (!c) return null;
+  return { grandes: [...c.querySelectorAll("*")].filter(e => parseFloat(getComputedStyle(e).fontSize) >= 20 && /^\d+$/.test((e.textContent || "").trim())).length,
+    altos: [...c.children].map(x => Math.round(x.getBoundingClientRect().height)), texto: c.innerText.replace(/\s+/g, " ") }; });
+await caso("dp-43-el-pulso-en-renglones", "rol=admin", async p => {
+  const r = await pulso(p);
+  ok("dp-43-el-pulso-en-renglones", !!r && r.grandes === 0 && r.altos.length > 0 && r.altos.every(a => a <= 60),
+    `el pulso: ${r ? r.grandes + " números grandes; el alto de cada persona: " + JSON.stringify(r.altos) + " px (renglones de 60 px o menos)" : "no sale"}`);
+});
+await caso("dp-44-cuenta-estancadas-no-horas", "rol=admin", async p => {
+  const r = await pulso(p), karla = ((await p.locator('[data-responsable="Karla"]').first().innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  ok("dp-44-cuenta-estancadas-no-horas", !!r && !/Sin movimiento/.test(r.texto) && /\b1 estancada\b/.test(karla) && /\b3 órdenes\b/.test(karla),
+    `el pulso ${r && /Sin movimiento/.test(r.texto) ? "DICE «Sin movimiento: hasta …» (cuenta también lo que espera su fecha)" : "sin las horas"}; Karla: «${karla.slice(0, 120) || "(sin su renglón)"}» (debe: 3 órdenes, 1 estancada: P-0448, seis días quieta en Salidas sin fecha)`);
+});
+await caso("dp-46-cada-renglon-dice-lo-demas-que-le-falta", "rol=secretaria", async p => {
+  const filas = await p.locator("[data-tambien]").evaluateAll(es => es.map(e => (e.closest("button") || e).innerText.replace(/\s+/g, " ")));
+  const prov = filas.some(f => /P-0650/.test(f) && /costo del proveedor/.test(f)), costo = filas.some(f => /P-0650/.test(f) && /proveedor de la maquila/.test(f));
+  ok("dp-46-cada-renglon-dice-lo-demas-que-le-falta", filas.length === 2 && prov && costo,
+    `«También le falta»: ${filas.length ? JSON.stringify(filas.map(f => f.slice(0, 100))) : "ningún renglón lo dice"} (P-0650, maquila sin proveedor ni costo: cada uno de sus dos renglones dice el otro)`);
+});
+
+// ── vuelta 7 (v10.84.154, por donde no se diseñó): el doble clic en «Ver las N» de una persona ──
+await caso("dp-45-doble-clic-en-ver-las-de-una-persona", "rol=secretaria", async p => {
+  const b = p.getByRole("button", { name: /Ver las órdenes de Lupita/ }).first(), hay = await b.count();
+  if (hay) { await b.dblclick(); await espera(p, 400); }
+  const t = await texto(p);
+  ok("dp-45-doble-clic-en-ver-las-de-una-persona", hay > 0 && /P-0655/.test(t), `doble clic en «Ver las …» de Lupita: ${hay ? (/P-0655/.test(t) ? "se despliegan" : "el segundo clic las VUELVE A PLEGAR") : "SIN el botón"}`);
+});
+
 await browser.close();
 for (const r of res) console.log(r);
 const fallan = res.filter(r => r.startsWith("FALLA")).length;

@@ -18196,20 +18196,19 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
       if (!map[resp.name]) {
         map[resp.name] = {
           role: resp.role, name: resp.name, icon: icons[resp.role] || UserIcon,
-          orders: [], vencidas: 0, urgentes: 0, horasSinActividad: 0
+          orders: [], vencidas: 0, urgentes: 0, estancadas: 0
         };
       }
       const r = map[resp.name];
       r.orders.push(o);
       if (isVencida(o)) r.vencidas += 1;
       if (isUrgente(o)) r.urgentes += 1;
-      // v10.28.1 — fallback: si created_at también es null, tratar como muy estancada (999h) para no ocultar el problema
-      const lastAct = o.timeline?.length > 0 ? o.timeline[o.timeline.length - 1].date : o.created_at;
-      const h = lastAct ? bizHoursAgo(lastAct) : 999; // v10.64.4 — horas hábiles (sin fines de semana)
-      if (h > r.horasSinActividad) r.horasSinActividad = h;
+      // v10.84.154 — sus estancadas, con la regla de «Estancadas» (getStale), en vez de «Sin movimiento: hasta N h» de su orden más quieta: esas horas
+      //   contaban también lo que espera su fecha de entrega (en Salidas o recibido de maquila), que no está atorado (Marcelo, 17-oct: «si hazlo»)
+      if (getStale(o)) r.estancadas += 1;
     });
-    return Object.values(map).sort((a, b) => b.vencidas - a.vencidas || b.urgentes - a.urgentes);
-  }, [active]);
+    return Object.values(map).sort((a, b) => b.vencidas - a.vencidas || b.urgentes - a.urgentes || b.estancadas - a.estancadas);
+  }, [active, maintKey]);
 
   const stale = useMemo(() => {
     const list = active.map(o => ({ ...o, _stale: getStale(o) })).filter(o => o._stale);
@@ -18414,48 +18413,44 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
     </>
   );
 
-  // SECCIÓN 2: el pulso por persona (v10.58.67: una tarjeta por PERSONA; la llave y lo desplegado, también por nombre)
+  // SECCIÓN 2: el pulso por persona (v10.58.67: por PERSONA; la llave y lo desplegado, también por nombre). v10.84.154 — un renglón por persona (antes una
+  //   tarjeta con el número grande, la plantilla de tarjetas iguales que la critique del 16-oct marcó; Marcelo, 17-oct: «si hazlo»): cuántas lleva, sus
+  //   vencidas, urgentes y estancadas en su tinta, «al día» si no tiene nada de eso, y la propia con «Tú»
+  const enSuTinta = (n, uno, varios, tinta, Icono) => n > 0 && <span style={{ display: "inline-flex", alignItems: "center", gap: 4, color: tinta, fontWeight: 600 }}><Icono size={10} weight="fill" aria-hidden="true"/>{n} {n === 1 ? uno : varios}</span>;
   const secPulso = (
     <>
       <h3 style={titulo}><UsersIcon size={16} weight="bold"/>Pulso por responsable</h3>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, marginBottom: 24 }}>
+      <div data-pulso style={{ background: C.bg, border: "1px solid " + C.bd, borderRadius: 12, overflow: "hidden", marginBottom: 24 }}>
         {responsiblePulse.length === 0 && (
-          <div style={{gridColumn:"1/-1"}}><EmptyState icon={UsersIcon} title="Sin responsables con carga" hint="No hay órdenes activas asignadas a nadie ahora mismo. El taller está libre."/></div>
+          <EmptyState icon={UsersIcon} title="Sin responsables con carga" hint="No hay órdenes activas asignadas a nadie ahora mismo. El taller está libre."/>
         )}
         {responsiblePulse.map(r => {
-          // v10.32.0 — la tarjeta propia, destacada (v10.84.123: también la de Karla, que ve esta misma vista)
+          // v10.32.0 — la propia, destacada (v10.84.123: también la de Karla, que ve esta misma vista)
           const isMe = (role === "secretaria" && r.role === "secretaria") || (role === "karla" && r.role === "karla");
           const abierta = !!expandedSection["resp_" + r.name];
+          const RI = r.icon;
           return (
-          <div key={r.name} style={{
-            background: C.bg,
-            border: isMe ? "2px solid " + C.fac : "1.5px solid " + (r.vencidas > 0 ? C.dn : r.urgentes > 0 ? C.amb : C.live) + "66",
-            borderRadius: 12,
-            padding: 14,
-            position: "relative"
-          }}>
-            {isMe && (
-              <div style={{position:"absolute",top:-8,right:8,display:"inline-flex",alignItems:"center",gap:3,background:C.fac,color:"#fff",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:10}}>
-                <UserIcon size={10} weight="bold"/>Tú
-              </div>
-            )}
-            <div style={{ display:"flex", alignItems:"center", gap:6, fontSize: 13, fontWeight: 700, color: C.tx, marginBottom: 8 }}>
-              {(()=>{const RI=r.icon;return RI?<RI size={15} weight="bold" style={{flexShrink:0}}/>:null})()}{r.name}
+          <div key={r.name} data-responsable={r.name} style={{ borderBottom: "0.5px solid " + C.bd, background: isMe ? C.fac + "0a" : "transparent" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px 14px", flexWrap: "wrap", padding: "9px 14px" }}>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 700, color: C.tx, minWidth: 140 }}>
+                {RI && <RI size={15} weight="bold" style={{ flexShrink: 0 }} aria-hidden="true"/>}{r.name}
+                {isMe && <span style={{ fontSize: 10, fontWeight: 700, color: "#fff", background: C.fac, padding: "1px 7px", borderRadius: 10 }}>Tú</span>}
+              </span>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: "4px 12px", flexWrap: "wrap", flex: 1, minWidth: 0, fontSize: 12, color: C.t2 }}>
+                <span><strong style={{ color: C.tx }}>{r.orders.length}</strong> {r.orders.length === 1 ? "orden" : "órdenes"}</span>
+                {enSuTinta(r.vencidas, "vencida", "vencidas", C.dnInk, CircleIcon)}
+                {enSuTinta(r.urgentes, "urgente", "urgentes", C.wnInk, CircleIcon)}
+                {enSuTinta(r.estancadas, "estancada", "estancadas", C.wnInk, HourglassIcon)}
+                {!r.vencidas && !r.urgentes && !r.estancadas && <span>al día</span>}
+              </span>
+              <button onClick={e => { if (e.detail >= 2) return; setExpandedSection(s => ({ ...s, ["resp_" + r.name]: !s["resp_" + r.name] })); }} aria-expanded={abierta} aria-label={(abierta ? "Ocultar" : "Ver") + " las órdenes de " + r.name} style={{ padding: "5px 10px", fontSize: 11, fontWeight: 600, background: C.sf, color: C.tx, border: "none", borderRadius: 8, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}>
+                {abierta ? <>Ocultar <CaretUpIcon size={10} style={{verticalAlign:"middle"}}/></> : <>Ver las {r.orders.length} <CaretDownIcon size={10} style={{verticalAlign:"middle"}}/></>}
+              </button>
             </div>
-            <div style={{ fontSize: 24, fontWeight: 800, color: C.tx, marginBottom: 8 }}>{r.orders.length}</div>
-            {r.vencidas > 0 && <div style={{ display:"flex", alignItems:"center", gap:5, fontSize: 11, color: C.t2, marginBottom: 4 }}><CircleIcon size={9} weight="fill" color={C.dn} style={{flexShrink:0}}/>{r.vencidas} vencida{r.vencidas !== 1 ? "s" : ""}</div>}
-            {r.urgentes > 0 && <div style={{ display:"flex", alignItems:"center", gap:5, fontSize: 11, color: C.t2, marginBottom: 4 }}><CircleIcon size={9} weight="fill" color={C.amb} style={{flexShrink:0}}/>{r.urgentes} urgente{r.urgentes !== 1 ? "s" : ""}</div>}
-            {!r.vencidas && !r.urgentes && <div style={{ fontSize: 11, color: C.t2, marginBottom: 4 }}>Sin vencidas ni urgentes</div>}
-            <div style={{ display:"flex", alignItems:"center", gap:5, fontSize: 11, color: C.t2, marginBottom: 8 }}>
-              <ClockIcon size={11} style={{flexShrink:0}}/>Sin movimiento: hasta {quieta(r.horasSinActividad)}
-            </div>
-            <button onClick={() => setExpandedSection(s => ({ ...s, ["resp_" + r.name]: !s["resp_" + r.name] }))} aria-expanded={abierta} aria-label={(abierta ? "Ocultar" : "Ver") + " las órdenes de " + r.name} style={{ width: "100%", padding: "6px 10px", fontSize: 11, fontWeight: 600, background: C.sf, color: C.tx, border: "none", borderRadius: 8, cursor: "pointer", fontFamily: "inherit" }}>
-              {abierta ? <>Ocultar <CaretUpIcon size={10} style={{verticalAlign:"middle"}}/></> : <>Ver todas <CaretDownIcon size={10} style={{verticalAlign:"middle"}}/></>}
-            </button>
             {abierta && (
-              <div style={{ marginTop: 8, paddingTop: 4, borderTop: "0.5px solid " + C.bd }}>
+              <div style={{ padding: "0 14px 8px" }}>
                 {r.orders.map(o => (
-                  <button key={o.id} type="button" onClick={() => onAction(o.id, "detail")} style={{ ...fila, color: C.t2, borderBottom: "none", padding: "4px 0" }}>
+                  <button key={o.id} type="button" onClick={() => onAction(o.id, "detail")} style={{ ...fila, color: C.t2, padding: "4px 0" }}>
                     <span style={recorta} title={(o.client || "").trim()}>{o.production_number || "—"} · {(o.client || "—").trim()}</span>
                     <span style={{display:"inline-flex",alignItems:"center",flexShrink:0}}><StageLbl stage={o.stage} size={10}/></span>
                   </button>
