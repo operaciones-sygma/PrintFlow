@@ -4078,6 +4078,25 @@ function NotificationTray({notifications,onClose,onRead,onReadAll,onDelete,onDel
   const hacer=async fn=>{if(trabajando)return false;setTrabajando(true);try{return await fn()}finally{setTrabajando(false)}};
   const abrir=async n=>{const puede=!!n.order_id&&(!existe||existe(n.order_id));if(!n.read)await hacer(()=>onRead(n.id));if(puede&&onOpen)onOpen(n.order_id)};
   const chico={...bs(C.bg,C.tx),boxShadow:"0 0 0 0.5px "+C.bd,minHeight:32,fontSize:11,padding:"5px 10px"};
+  // v10.84.135 — los avisos JUNTOS POR ORDEN (Marcelo, 16-oct): los de una misma orden van en un renglón (el más nuevo y «y N avisos más»); «Ver los N»
+  //   los despliega; abrirlo abre la orden y marca todos como leídos; su X borra los N. Los que no son de una orden van sueltos. El número de la
+  //   campana sigue contando avisos, no renglones.
+  const [abiertos,setAbiertos]=useState(()=>new Set());
+  const grupos=useMemo(()=>{const mapa=new Map(),orden=[];for(const x of notifications){const k=x.order_id?("o:"+x.order_id):("n:"+x.id);if(!mapa.has(k)){mapa.set(k,[]);orden.push(k)}mapa.get(k).push(x)}return orden.map(k=>({clave:k,items:mapa.get(k)}))},[notifications]);
+  const abrirGrupo=async g=>{const x=g.items[0];const puede=!!x.order_id&&(!existe||existe(x.order_id));const sin=g.items.filter(y=>!y.read);if(sin.length)await hacer(async()=>{for(const y of sin){if(await onRead(y.id)===false)return false}return true});if(puede&&onOpen)onOpen(x.order_id)};
+  const fila=n=>{const puede=!!n.order_id&&(!existe||existe(n.order_id));return <div key={n.id} style={{display:"flex",alignItems:"flex-start",gap:2,borderBottom:"0.5px solid "+C.bd,background:n.read?C.bg:C.ios+"08"}}>
+            <button onClick={()=>abrir(n)} aria-label={(n.read?"":"Sin leer. ")+n.message+(puede?". Abrir la orden":"")} style={{flex:1,minWidth:0,textAlign:"left",background:"none",border:"none",padding:"11px 4px 11px 14px",cursor:"pointer",fontFamily:"inherit"}}>
+              <span style={{display:"flex",alignItems:"flex-start",gap:8}}>
+                {!n.read&&<span aria-hidden="true" style={{width:8,height:8,borderRadius:"50%",background:C.ios,flexShrink:0,marginTop:5}}/>}
+                <span style={{flex:1,minWidth:0}}>
+                  <span style={{display:"block",fontSize:12,fontWeight:n.read?500:700,color:C.tx}}>{n.message}</span>
+                  {n.reason&&<span style={{display:"block",fontSize:11,color:C.wnTx,marginTop:2}}><ChatCircleIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Motivo: {n.reason}</span>}
+                  <span style={{display:"block",fontSize:10,color:C.t2,marginTop:3}}>{AUTHOR_NAME[n.by_user]||n.by_user} · {fDT(n.created_at)}{n.order_id&&!puede?" · la orden ya no está entre las cargadas":""}</span>
+                </span>
+              </span>
+            </button>
+            <button onClick={()=>hacer(()=>onDelete(n.id))} disabled={trabajando} aria-label={"Borrar el aviso: "+n.message} title="Borrar" style={{background:"none",border:"none",cursor:"pointer",color:C.t2,padding:"12px 12px 8px 6px",display:"inline-flex",alignItems:"center"}}><XIcon size={13} weight="bold"/></button>
+          </div>};
   return <div style={{position:"fixed",inset:0,zIndex:998}} onClick={onClose}>
     <div ref={caja} tabIndex={-1} role="dialog" aria-modal="true" aria-label={"Avisos"+(sinLeer?", "+sinLeer+" sin leer":"")} onKeyDown={atraparTab} onClick={e=>e.stopPropagation()}
       style={{position:"absolute",top:48,right:16,background:C.bg,borderRadius:16,boxShadow:C.sh3,width:380,maxWidth:"calc(100vw - 32px)",maxHeight:"70vh",display:"flex",flexDirection:"column",overflow:"hidden",border:"0.5px solid "+C.bd,outline:"none"}}>
@@ -4100,19 +4119,29 @@ function NotificationTray({notifications,onClose,onRead,onReadAll,onDelete,onDel
             :leidos===null
               ?<div style={{textAlign:"center",padding:"30px 20px",color:C.t2,fontSize:12}}>Leyendo los avisos…</div>
               :<div style={{textAlign:"center",padding:"40px 20px",color:C.t2}}><div style={{display:"flex",justifyContent:"center"}}><CheckCircleIcon size={32} weight="fill" color={C.ok}/></div><div style={{fontSize:12,marginTop:8}}>Sin avisos</div></div>)
-          :notifications.map(n=>{const puede=!!n.order_id&&(!existe||existe(n.order_id));return <div key={n.id} style={{display:"flex",alignItems:"flex-start",gap:2,borderBottom:"0.5px solid "+C.bd,background:n.read?C.bg:C.ios+"08"}}>
-            <button onClick={()=>abrir(n)} aria-label={(n.read?"":"Sin leer. ")+n.message+(puede?". Abrir la orden":"")} style={{flex:1,minWidth:0,textAlign:"left",background:"none",border:"none",padding:"11px 4px 11px 14px",cursor:"pointer",fontFamily:"inherit"}}>
-              <span style={{display:"flex",alignItems:"flex-start",gap:8}}>
-                {!n.read&&<span aria-hidden="true" style={{width:8,height:8,borderRadius:"50%",background:C.ios,flexShrink:0,marginTop:5}}/>}
-                <span style={{flex:1,minWidth:0}}>
-                  <span style={{display:"block",fontSize:12,fontWeight:n.read?500:700,color:C.tx}}>{n.message}</span>
-                  {n.reason&&<span style={{display:"block",fontSize:11,color:C.wnTx,marginTop:2}}><ChatCircleIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Motivo: {n.reason}</span>}
-                  <span style={{display:"block",fontSize:10,color:C.t2,marginTop:3}}>{AUTHOR_NAME[n.by_user]||n.by_user} · {fDT(n.created_at)}{n.order_id&&!puede?" · la orden ya no está entre las cargadas":""}</span>
-                </span>
-              </span>
-            </button>
-            <button onClick={()=>hacer(()=>onDelete(n.id))} disabled={trabajando} aria-label={"Borrar el aviso: "+n.message} title="Borrar" style={{background:"none",border:"none",cursor:"pointer",color:C.t2,padding:"12px 12px 8px 6px",display:"inline-flex",alignItems:"center"}}><XIcon size={13} weight="bold"/></button>
-          </div>})}
+          :grupos.map(g=>{
+            if(g.items.length===1)return fila(g.items[0]);
+            const n=g.items[0],resto=g.items.length-1,sinLeerG=g.items.filter(x=>!x.read),abierto=abiertos.has(g.clave);
+            const puede=!!n.order_id&&(!existe||existe(n.order_id));
+            const pn=(String(n.message||"").match(/\b[PH]-\d{3,5}\b/)||[])[0]||"esta orden";
+            return <div key={g.clave} role="group" aria-label={g.items.length+" avisos de "+pn} style={{borderBottom:"0.5px solid "+C.bd}}>
+              <div style={{display:"flex",alignItems:"flex-start",gap:2,background:sinLeerG.length?C.ios+"08":C.bg}}>
+                <button onClick={()=>abrirGrupo(g)} aria-label={(sinLeerG.length?sinLeerG.length+" sin leer. ":"")+n.message+". Y "+resto+(resto===1?" aviso más":" avisos más")+" de "+pn+(puede?". Abrir la orden":"")} style={{flex:1,minWidth:0,textAlign:"left",background:"none",border:"none",padding:"11px 4px 6px 14px",cursor:"pointer",fontFamily:"inherit",color:C.tx}}>
+                  <span style={{display:"flex",alignItems:"flex-start",gap:8}}>
+                    {sinLeerG.length>0&&<span aria-hidden="true" style={{width:8,height:8,borderRadius:"50%",background:C.ios,flexShrink:0,marginTop:5}}/>}
+                    <span style={{flex:1,minWidth:0}}>
+                      <span style={{display:"block",fontSize:12,fontWeight:sinLeerG.length?700:500,color:C.tx}}>{n.message}</span>
+                      <span style={{display:"block",fontSize:11,color:C.t2,marginTop:2}}>y {resto} {resto===1?"aviso más":"avisos más"} de esta orden</span>
+                      <span style={{display:"block",fontSize:10,color:C.t2,marginTop:3}}>{AUTHOR_NAME[n.by_user]||n.by_user} · {fDT(n.created_at)}{n.order_id&&!puede?" · la orden ya no está entre las cargadas":""}</span>
+                    </span>
+                  </span>
+                </button>
+                <button onClick={()=>hacer(async()=>{for(const x of g.items){if(await onDelete(x.id)===false)return false}return true})} disabled={trabajando} aria-label={"Borrar los "+g.items.length+" avisos de "+pn} title="Borrar" style={{background:"none",border:"none",cursor:"pointer",color:C.t2,padding:"12px 12px 8px 6px",display:"inline-flex",alignItems:"center"}}><XIcon size={14} weight="bold"/></button>
+              </div>
+              <button onClick={()=>setAbiertos(z=>{const s2=new Set(z);if(s2.has(g.clave))s2.delete(g.clave);else s2.add(g.clave);return s2})} aria-expanded={abierto} style={{background:"none",border:"none",cursor:"pointer",color:C.ac,fontFamily:"inherit",fontSize:11,fontWeight:700,padding:"0 14px 9px 30px",minHeight:24}}>{abierto?"Ocultar":"Ver los "+g.items.length}</button>
+              {abierto&&<div style={{borderTop:"0.5px solid "+C.bd,paddingLeft:16}}>{g.items.map(x=>fila(x))}</div>}
+            </div>;
+          })}
       </div>
     </div>
   </div>;

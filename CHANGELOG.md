@@ -12,6 +12,20 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.135 — Los avisos van juntos por orden — 16-oct-2026
+
+**Qué pasaba.** Decisión de Marcelo (16-oct, ~17:45, la 5 de las preguntas: «¿agrupar los avisos por orden?», de la 127): tres avisos de P-0611 eran tres
+renglones en la bandeja; para ver de qué orden hablaba cada uno había que leerlos todos.
+
+**Qué se cambió** (sólo `NotificationTray`): los avisos de una misma orden van en un renglón: el más nuevo y «y N avisos más de esta orden». «Ver los N»
+los despliega (cada uno con su renglón de siempre, `fila`); abrir el renglón abre la orden y marca todos como leídos; su X borra los N («Borrar los 3 avisos
+de P-0611»). Los avisos que no son de una orden van sueltos. El número de la campana sigue contando avisos, no renglones.
+
+**Cómo se probó.** La tanda `avisos` (20) con un caso nuevo en su banco (`caso=porOrden`: tres de P-0611, uno de P-0612 y uno sin orden). **Vuelta 1**
+(5, escritas antes del arreglo) contra v10.84.134: fallaban 4 (pasaba «los avisos sin orden van sueltos»). Con el arreglo, las 20 a la primera.
+
+**En producción:** (pendiente)
+
 ## v10.84.134 — El Despertador se vuelve a abrir en el día: «Tus pendientes de hoy» — 16-oct-2026
 
 **Qué pasaba.** Decisión de Marcelo (16-oct, ~17:45, la 6 de las preguntas de la 128): el Despertador, una vez confirmado, no se podía volver a ver en todo

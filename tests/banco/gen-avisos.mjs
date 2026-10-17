@@ -4,7 +4,7 @@
 // versión que se prueba: la de antes se tragaba los errores de Supabase (devolvía [] o seguía); la de v10.84.127 los avisa (lanza). Se anota en #log:
 // «db <función> <id>», «accion <id> <acción>», «aviso <texto>» (el showToast de App).
 // Uso: node gen-avisos.mjs <App.jsx> <dirSalida>
-// Variantes por URL: falla=leer|marcar|borrar (la base no contesta eso) · caso=vacio (no hay avisos) | muchos (30) · rol=secretaria|admin
+// Variantes por URL: falla=leer|marcar|borrar (la base no contesta eso) · caso=vacio (no hay avisos) | muchos (30) | porOrden (tres de P-0611) · rol=secretaria|admin
 // Gancho: window.__llega(aviso) mete un aviso nuevo con la bandeja abierta (el tiempo real).
 import fs from "node:fs";
 import path from "node:path";
@@ -49,7 +49,15 @@ const db = {
 const supabase = {};
 const T = s => new Date(s).toISOString();
 const n = (id, order_id, message, x = {}) => ({ id, order_id, message, reason: null, by_user: "produccion", target_role: ROL, created_at: T("2026-10-14T10:00:00-06:00"), read: false, ...x });
-const AVISOS = CASO === "vacio" ? [] : CASO === "muchos" ? Array.from({ length: 30 }, (_, i) => n("m" + i, "OP-P-06" + String(i).padStart(2, "0"), "Aviso número " + (i + 1) + " de la P-06" + String(i).padStart(2, "0"), { read: i > 4 })) : [
+// v10.84.135 — caso=porOrden: tres avisos de P-0611 (dos sin leer), uno de P-0612 y uno sin orden (los avisos juntos por orden)
+const POR_ORDEN = [
+  n("g1", "OP-P-0611", "📣 Gerardo pide atención: P-0611 · DELDHY WESTERN PRODUCTS · Máquina"),
+  n("g2", "OP-P-0612", "🔁 P-0612 se regresó a Diseño", { reason: "El cliente cambió el logotipo", by_user: "preprensa", created_at: T("2026-10-14T09:50:00-06:00") }),
+  n("g3", "OP-P-0611", "📦 P-0611 pasó a Empaque", { created_at: T("2026-10-14T09:40:00-06:00") }),
+  n("g4", "OP-P-0611", "🖨️ P-0611 se imprimió", { read: true, created_at: T("2026-10-14T09:00:00-06:00") }),
+  n("g5", null, "🧹 Limpieza del archivo terminada", { by_user: "admin", created_at: T("2026-10-14T08:00:00-06:00") }),
+];
+const AVISOS = CASO === "vacio" ? [] : CASO === "porOrden" ? POR_ORDEN : CASO === "muchos" ? Array.from({ length: 30 }, (_, i) => n("m" + i, "OP-P-06" + String(i).padStart(2, "0"), "Aviso número " + (i + 1) + " de la P-06" + String(i).padStart(2, "0"), { read: i > 4 })) : [
   n("a1", "OP-P-0611", "📣 Gerardo pide atención: P-0611 · DELDHY WESTERN PRODUCTS · Máquina"),
   n("a2", "OP-P-0612", "🔁 P-0612 se regresó a Diseño", { reason: "El cliente cambió el logotipo", by_user: "preprensa", created_at: T("2026-10-14T09:30:00-06:00") }),
   n("a3", "OP-H-3000", "✅ H-3000 se entregó", { by_user: "karla", created_at: T("2026-10-13T17:00:00-06:00") }),   // una orden que ya no está entre las cargadas

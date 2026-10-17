@@ -151,6 +151,36 @@ await caso("av-15-vacio-de-verdad", "caso=vacio", async p => {
   ok("av-15-vacio-de-verdad", /Sin avisos|Sin notificaciones/.test(t) && !(await p.getByRole("button", { name: /Borrar todas/ }).count()), `sin avisos: «${t.slice(0, 80)}»`);
 });
 
+// ── v10.84.135 — los avisos juntos por orden (decisión de Marcelo, 16-oct); escritas antes del arreglo. caso=porOrden: g1, g3 (sin leer) y g4 (leído)
+//   de P-0611; g2 de P-0612; g5 sin orden ──
+await caso("av-16-una-orden-un-renglon", "caso=porOrden", async p => {
+  const t = await texto(p);
+  const vistos = ["Gerardo pide atención: P-0611", "P-0611 pasó a Empaque", "P-0611 se imprimió"].filter(x => t.includes(x)).length;
+  ok("av-16-una-orden-un-renglon", vistos === 1 && /2 avisos más/.test(t), `de los 3 avisos de P-0611 se ven ${vistos} (debe 1, el más nuevo)${/2 avisos más/.test(t) ? "; dice «2 avisos más»" : "; no dice cuántos más"}`);
+});
+await caso("av-17-abrir-el-grupo", "caso=porOrden", async p => {
+  await aviso(p, /Gerardo pide atención: P-0611/).click(); await espera(p, 600);
+  const abre = (await lineas(p, "accion OP-P-0611 detail")).length, marcados = (await lineas(p, "db markRead g")).map(l => l.split(" ").pop()).sort();
+  ok("av-17-abrir-el-grupo", abre === 1 && marcados.join(",") === "g1,g3", `abrir P-0611: ${abre ? "abre la orden" : "NO la abre"}; marca leídos: ${marcados.join(",") || "ninguno"} (deben g1 y g3)`);
+});
+await caso("av-18-ver-los-tres", "caso=porOrden", async p => {
+  const ver = p.getByRole("button", { name: /Ver los 3/ });
+  const hay = await ver.count(); if (hay) { await ver.first().click(); await espera(p, 300); }
+  const t = await texto(p);
+  const vistos = ["Gerardo pide atención: P-0611", "P-0611 pasó a Empaque", "P-0611 se imprimió"].filter(x => t.includes(x)).length;
+  ok("av-18-ver-los-tres", hay >= 1 && vistos === 3, `«Ver los 3» ${hay ? "sí" : "NO hay"}; se ven ${vistos} de 3`);
+});
+await caso("av-19-borrar-el-grupo", "caso=porOrden", async p => {
+  const x = p.getByRole("button", { name: /Borrar los 3 avisos de P-0611/ });
+  const hay = await x.count(); if (hay) { await x.first().click(); await espera(p, 800); }
+  const borrados = (await lineas(p, "db deleteNotification g")).map(l => l.split(" ").pop()).sort();
+  ok("av-19-borrar-el-grupo", hay >= 1 && borrados.join(",") === "g1,g3,g4", `«Borrar los 3 avisos de P-0611» ${hay ? "sí" : "NO hay"}; borrados: ${borrados.join(",") || "ninguno"}`);
+});
+await caso("av-20-sin-orden-sueltos", "caso=porOrden", async p => {
+  const t = await texto(p);
+  ok("av-20-sin-orden-sueltos", /Limpieza del archivo terminada/.test(t) && /P-0612 se regresó a Diseño/.test(t), `el aviso sin orden ${/Limpieza/.test(t) ? "sale" : "NO sale"}; P-0612 ${/P-0612 se regresó/.test(t) ? "sale" : "NO sale"}`);
+});
+
 await browser.close();
 for (const r of res) console.log(r);
 const fallan = res.filter(r => r.startsWith("FALLA")).length;
