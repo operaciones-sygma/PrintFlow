@@ -12,6 +12,57 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.141 — «Aplicar saldo» (Corona) ya no promete un descubierto que la base no deja — 16-oct-2026
+
+**Qué pasaba.** Lo encontró la sesión de CobranzaFlow al revisar la decisión de Corona (16-oct). En «Asignar folio y entregar» de un cliente Corona, con
+«Aplicar saldo» y un saldo menor que la orden, la ventana decía «El saldo quedará negativo. Sigue siendo válido (se permite descubierto); Tesorería deberá
+registrar el depósito faltante» (y en el segundo paso «Se permite»), y dejaba seguir. Es falso: la base lo frena (`apply_credit_no_folio`: «Saldo Corona
+insuficiente: disponible $X, se requiere $Y. Registra el depósito antes de aplicar el saldo», si quedaría por debajo de −$0.01; y
+`cobranza.client_credit_ledger` tiene CHECK de no sobregirar en todos sus movimientos). Karla daba el clic y le llegaba el rechazo. Marcelo (por la sesión
+de CobranzaFlow): «No, como está la base».
+
+**Qué se cambió** (sólo `InvoiceModal`): con «Aplicar saldo» y un saldo que no alcanza (la misma cuenta que la base, con su −$0.01), la ventana dice «No
+alcanza el saldo: faltan $X sin IVA, y así no se puede aplicar. Primero Tesorería registra el depósito que falta; o entrégala con factura o remisión», y
+«Continuar» no deja seguir (`saldoNoAlcanza`). Con factura o remisión, igual que antes.
+
+**Cómo se probó.** La tanda `folio` (216, de dinero: sin segunda oportunidad en el candado). Vuelta 1 contra v10.84.140: fallaban inv-26 (dice que no alcanza, cuánto falta y no deja seguir), inv-96 (Ctrl+Enter tampoco lleva a la vista previa) e inv-183 (con factura sí se sigue), y pasaban las de guarda: el saldo justo (queda en $0.00) y medio centavo abajo (la base acepta hasta −$0.01) dejan seguir (inv-181 y 182), y con un saldo que alcanza, el color de «Continuar», las dos columnas y lo facturado por adelantado sin verde (inv-57, 77 y 112, con el banco nuevo `saldoCorona`). Cinco pruebas viejas daban por bueno el descubierto: inv-26 y 96 lo pedían en pantalla, inv-57, 77 y 112 llegaban a la vista previa con el saldo que no alcanza; se ajustaron a la decisión. Con el arreglo, 216 de 216.
+
+**En producción:** (pendiente)
+
+## v10.84.140 — La orden lista que espera a que el cliente pida su factura ya no cuenta como atrasada — 16-oct-2026
+
+**Qué pasaba.** Marcelo (16-oct): «las órdenes que llegan al día de entrega y no se marcan como entregadas porque el cliente no ha pedido facturas o
+remisión no deberían contar como entrega atrasada, no da números falsos en reportes y aparece roja en el calendario. Analízalo muy bien y dime cómo
+evitarlo»; y «sí, las órdenes se ponen como En Espera y la razón». Aquí «entregada» se marca al foliar: sin la factura pedida, la orden lista se queda en
+Salidas (o recibida de maquila) y, pasada su fecha, la app la trataba como atrasada en todos lados: «Retrasada N d» en el calendario (la N crecía mientras
+el cliente no pedía), «Con retraso hoy» del Dashboard, «Vencidas» de Datos Pendientes, la fecha en rojo y «RETRASO» en las fichas (también en la sección
+«En espera» del tablero de Karla), «N vencidas» en los grupos de la vista «En espera», y en Analytics contaba como entrega tarde (comparaba el día en que se
+marcó entregada). La pausa «En espera: el cliente no ha pedido factura» no la miraba ninguna. Medido ese día: las 7 «atrasadas» de toda la planta eran de
+éstas (P-0070, P-0534, P-0537, P-0538, P-0541, P-0583 y P-0609, las 7 con esa pausa; 3 quedaron listas a tiempo y 4 de 1 a 7 días tarde); en los últimos
+120 días, de 383 entregas con fecha Analytics daba 156 a tiempo (41 %), y 21 más estaban listas a tiempo y sólo esperaron la factura del cliente.
+
+**Qué se cambió** (una regla para todas las pantallas):
+- `vencidaAhora`: vencida HOY es con fecha que ya pasó, sin entregar ni cancelar, y que no sea una orden lista (Salidas o recibida de maquila) «En espera:
+  el cliente no ha pedido factura» (`esperaAlCliente`): el reloj se para cuando quedó lista. La usan el filtro «Retrasos», la prioridad del día, «Vencidas»
+  de Datos Pendientes, el pulso y las estancadas de Salud, «Con retraso hoy», la fecha y el «RETRASO» de las fichas, y el resumen de los grupos de «En
+  espera». De paso, una orden ya entregada ya no pinta su fecha en rojo con «RETRASO».
+- El calendario de «Entregas»: esa orden sale «Espera al cliente», con borde punteado y sin rojo (la leyenda lo explica; el lector de pantalla dice «lista:
+  el cliente no ha pedido su factura»). La de Salidas sin esa pausa sigue «Retrasada»: falta foliarla y entregarla.
+- Analytics, «Entregas a tiempo» (`entregadaATiempo`): a tiempo si se marcó entregada a tiempo, o si esperó la factura del cliente (esa pausa en su
+  bitácora, también las escritas a mano antes de v10.72.36: «todavía no pide factura el cliente») y quedó lista (llegó a Salidas o regresó de maquila, la
+  última vez antes de entregarse) a tiempo. Si quedó lista tarde, cuenta tarde: lo de la planta, no lo del cliente. La tarjeta dice cuántas cuentan a tiempo
+  por eso.
+
+**Cómo evitarlo (para Marcelo):** con esto no hay que hacer nada distinto: la pausa que ya ponen es la señal. Da igual el día en que la pongan, porque se
+mide cuándo quedó lista.
+
+**Para Marcelo:** en esos 120 días, otras **45** entregas también estaban listas a tiempo, pero se marcaron entregadas unos 4.6 días después **sin** la
+pausa. ¿Cuentan a tiempo? Si sí, el «a tiempo» se mediría para todas por el día en que quedaron listas (58 % en vez de 46 %).
+
+**Cómo se probó.** Tanda nueva `atrasos` (19, sin navegador: `vencidaAhora`, `esperaAlCliente`, `entregadaATiempo` y `getIncompleteData` sacadas vivas de App.jsx con `extraer.mjs`, el reloj fijo en el 16-oct): la espera de factura en Salidas y en la maquila recibida, sin la espera, con otra pausa, la pausa de otra etapa, entregada, cancelada, sin fecha, la fecha rota, la de hoy; y en los reportes, lista a tiempo con y sin la espera, lista tarde, las pausas escritas a mano (y las que no son de factura), la pausa puesta después de entregar, lista a las 23:30 o a las 00:30, de regreso a producción, sin bitácora, y la maquila. Vuelta 1 contra v10.84.139: fallaban las 19. 🔥 Con la primera versión del arreglo fallaban 3: la expresión de la pausa buscaba «pid…» (pide, piden, pidió) y el botón de Karla dice «no ha **pedido** factura»; corregida (`ESPERA_DE_FACTURA`). En pantalla: `entregas` (ent-20 a 23: la que espera no es «Retrasada», tampoco la recibida tarde de maquila, la de Salidas sin espera sí, la leyenda), `dashboard` (db-20: «Con retraso hoy» igual con o sin ella), `salud` (dp-41, Lupita y Dirección: «Vencidas (1)»), `analytics` (an-35: 57 %, 4 de 7, con la nota; an-36: sin ellas no sale la nota) y `sesion`, con la app entera (ses-96: en «Pendientes de Folio» de Karla la fecha de la que espera no va en rojo y la otra sí; ses-97: «En espera» sin «RETRASO» ni «vencida»). Vuelta 1: fallaban 11 y pasaban las 2 de guarda. Tres pruebas se corrigieron antes de contar: db-20 leía el número pegado al texto de al lado («3» y «1…» daban «31»), ses-97 buscaba «Entrega:» y en «En espera» la ficha es la compacta (su «RETRASO» va junto al folio), y ses-96 tomaba la primera caja con el folio, que envolvía también a la otra ficha; las tres, probadas otra vez contra v10.84.139 (fallan por lo que deben) y con el arreglo (pasan). Con el arreglo: `atrasos` 19, `entregas` 23, `dashboard` 21, `salud` 45, `analytics` 50, y sin cambios `chips` 14, `tablero` 163, `todas` 15 y `despertador` 32.
+
+**En producción:** (pendiente)
+
 ## v10.84.139 — «Planta»: cada máquina con su ficha (lo de su placa) — 16-oct-2026
 
 **Qué pasaba.** La decisión 8 de Marcelo del 16-oct: «el registro de maquinaria en Planta (tabla nueva, por el editor)». Las placas de las máquinas (las
