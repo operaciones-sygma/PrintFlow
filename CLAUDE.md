@@ -202,8 +202,8 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
   candado 2203 de 2203, de a 4). Decisiones de Marcelo del 16-oct: «Datos Pendientes (N)» con lo urgente (`datosUrgentes`) y sin dinero en «Cómo va la
   planta» para Lupita y Karla; la Torre pide la fecha sólo de lo que ya corre en la planta (`YA_EN_LA_PLANTA`); la hoja impresa en dos hojas legibles
   cuando en una la letra bajaría de 7 pt; Corona dice la factura y la orden de cada movimiento; y 🔑 «Planta» con la ficha de cada máquina, que lee
-  `public.maquinas_fichas`: **falta que Marcelo aplique `docs/migrations/v10.84.139_maquinas_fichas.sql` en el editor** (sin ella, «Planta» lo dice y
-  el recorrido marca su 404).
+  `public.maquinas_fichas` (`docs/migrations/v10.84.139_maquinas_fichas.sql`, aplicada por Marcelo en el editor el 16-oct ~20:05 y verificada: 7 fichas, sólo
+  produccion y admin, sin borrar).
   v10.84.135 (16-oct, ~18:30; READY `dpl_Gh8azoGrkECu1Z2YbhG769eygKKk`, commits `e178ca4` (v10.84.134) y `47b0f16` (v10.84.135), subidas
   juntas; vuelta atrás: promover `dpl_3cmfMaXxW515Zm77roTB6JMxHhnq` (el código de v10.84.133) o `git revert 47b0f16 e178ca4`; la base no cambió; candado 2161
   de 2161, de a 4). Dos de las decisiones de Marcelo del 16-oct: el Despertador se vuelve a abrir en el día («Tus pendientes de hoy», el sol junto a la

@@ -30,8 +30,10 @@ primero que piden es el modelo y el número exactos.
 
 **Cómo se probó.** La base, ensayada en PGlite (`ensayar-fichas.mjs` en el scratchpad de la sesión, como la de `plano_versiones`): la migración DOS veces con un cambio de Gerardo en medio (no lo pisa), y 31 pruebas por persona (quién ve y escribe, el disparador, la revisión, sin borrar, los largos, anon); 7 sabotajes (sin disparador, Karla entra, con DELETE, anon lee, sin revisión, pisa al reaplicar, sin el tope de las notas), todos cazados. La pantalla: la tanda `plano` con la tabla de fichas en su banco (pln-93 a 105b: la ficha de la PM-74, agregar la de la pegadora, editar con su revisión, otra persona la cambió, sin la tabla, la lectura que falla, Esc con algo escrito, R y Supr con la ventana abierta, lo largo, el Tab, sin permiso, dos la dan de alta a la vez, AA a 1366 y 1920). Vuelta 1 contra v10.84.138: fallaban las 14. Con el arreglo, 99 de 99; tres tocaban la Dobladora (una L) en el promedio de sus esquinas, que cae en el hueco, fuera de la pieza: ahora la eligen de la lista del panel.
 
-**Para Marcelo:** aplicar `docs/migrations/v10.84.139_maquinas_fichas.sql` en el editor SQL de Supabase (todo el archivo; trae su `begin` y su `commit`).
-Hasta entonces, «Planta» dice «Las fichas de las máquinas todavía no están en la base» y nada más cambia.
+**La base:** `docs/migrations/v10.84.139_maquinas_fichas.sql`, **aplicada por Marcelo en el editor SQL el 16-oct, ~20:05**. Verificada (sólo lectura):
+las 7 fichas, RLS prendido, tres políticas (ver, crear y cambiar; ninguna de borrar), `anon` sin permisos, el disparador `maquinas_fichas_sellos` (que
+`authenticated` no puede llamar a mano), y ningún aviso de seguridad de Supabase sobre la tabla o su función. Desde ahí, «Planta» enseña la ficha de cada
+máquina y el recorrido ya no marca el 404.
 
 **En producción:** 16-oct, ~19:51, junto con v10.84.136 a 138; READY `dpl_Gqc4jUaXVsSsoz8ARuBYEUk1hFY7`, commits `1a5da83` (136), `48d5ad3` (137),
 `3b5ef93` (138) y `1c04b4e` (139); vuelta atrás: promover `dpl_7VmAzMK28kCahmAvT9q4iv7YgGzo` (el código de v10.84.135) o `git revert 1c04b4e 3b5ef93 48d5ad3
