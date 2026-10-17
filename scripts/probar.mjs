@@ -127,6 +127,8 @@ const TANDAS = [
   { nombre: "auditoria", gen: "tests/banco/gen-auditoria.mjs", romper: "tests/romper/auditoria.mjs", puerto: 5487 },
   // v10.84.147 — «Poner en espera» (la ventana): un diálogo, Esc y el fondo no tiran lo escrito, los días se validan y dice cuándo vuelve sola
   { nombre: "poner-espera", gen: "tests/banco/gen-poner-espera.mjs", romper: "tests/romper/poner-espera.mjs", puerto: 5488 },
+  // v10.84.148 — el historial del cliente (al tocar su nombre en la ficha): el vendedor abre y ve lo que lleva como vendedor, un diálogo con foco
+  { nombre: "historial", gen: "tests/banco/gen-historial.mjs", romper: "tests/romper/historial.mjs", puerto: 5489 },
 ];
 // 🔑 LA SEGUNDA OPORTUNIDAD (8-oct-2026, Marcelo: «sí es una mejora, aplica la misma metodología para todos los proyectos»; la misma de
 // CobranzaFlow desde el 7-oct, con sus candados: scripts/reintento.mjs). Lo que falla se repite UNA vez, y sólo eso: lo que vuelve a fallar

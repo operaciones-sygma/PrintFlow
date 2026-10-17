@@ -1448,6 +1448,11 @@ function isVendedorOwnerByAgent(user, userLogin, order) {
   const u = (userLogin || "").toLowerCase().trim();
   return !!a && a === u;
 }
+// v10.84.148 — el historial del cliente para el vendedor: se abre si lleva alguna orden de ese cliente, la haya capturado él o sea su vendedor (antes sólo
+//   lo capturado: a Genaro, al tocar a PAOLA NUÑEZ o a VETERINARIA DIVETCO en su propia ficha, le salía «No tienes órdenes con este cliente», porque esas
+//   órdenes las capturó Lupita; y en las demás no veía las que ella le capturó)
+const esDelVendedor=(user,userLogin,o)=>!!o&&(o.created_by===userLogin||isVendedorOwnerByAgent(user,userLogin,o));
+function veHistorialDelCliente(user,userLogin,o,orders){ if(user!=="vendedor")return true; return !!o&&(orders||[]).some(x=>x.client===o.client&&esDelVendedor(user,userLogin,x)); }
 
 // v10.58.41 — stages PRE-PRODUCCIÓN (antes de que el trabajo entre a máquina).
 // Genaro puede editar sus órdenes (donde es agent) hasta este punto. Una vez en
@@ -5118,15 +5123,21 @@ function MenuMasDelDetalle({cerrar,alEscape,contenedor,items,onElegir}){
       </button>])}
   </div>;
 }
+// v10.84.148 — /impeccable critique del historial del cliente (17-oct; ~22/40): el vendedor ve lo que lleva (`esDelVendedor`), es un diálogo que se lleva
+//   el foco y lo regresa, sin el id interno (el folio P-), la etapa y la fecha legibles (eran de 9 px), «Total sin IVA, sin las canceladas», la cancelada
+//   tachada en vez de tenue, «órdenes» con acento.
 function ClientHistory({clientName,orders,onClose,role,userLogin}) {
   useEscClose(onClose);
+  useDevolverFoco();
+  const panelHist=useRef(null);
+  useLayoutEffect(()=>{panelHist.current?.focus({preventScroll:true});},[]);
   const allCo=orders.filter(o=>o.client===clientName).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
-  const co=role==="vendedor"?allCo.filter(o=>!o.created_by||o.created_by===userLogin):allCo;
+  const co=role==="vendedor"?allCo.filter(o=>!o.created_by||esDelVendedor(role,userLogin,o)):allCo;
   // 🔧 scan jul-2026 #16/#17: excluir canceladas (no inflan el valor del cliente) + atribuir maq_price en maquila (canónico).
   const total=co.filter(o=>!String(o.stage||"").includes("cancelled")).reduce((s,o)=>s+(o.order_type==="maquila"?(Number(o.maq_price)||0):(Number(o.price)||0)),0);
   const byType={};co.forEach(o=>{const k=o.product_type||"?";byType[k]=(byType[k]||0)+1}); // v10.34.2 fix #7 — fallback consistente con línea 2391
   const hp=role==="produccion"||role==="preprensa"||role==="german";
-  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}} onClick={onClose}><div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:480,width:"90%",maxHeight:"80vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}><h3 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:6}}><UserIcon size={18} weight="bold"/>{clientName}</h3><p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>{co.length} orden{co.length!==1?"es":""}{!hp?" · Total: "+fmt(total):""}</p>{Object.keys(byType).length>0&&<div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:12}}>{Object.entries(byType).sort((a,b)=>b[1]-a[1]).map(([t,c])=><span key={t} style={{background:C.sf,padding:"4px 10px",borderRadius:8,fontSize:11}}>{t} <strong>{c}</strong></span>)}</div>}{co.map(o=><div key={o.id} style={{padding:"8px 0",borderBottom:"0.5px solid "+C.bd,display:"flex",justifyContent:"space-between"}}><div>{o.cart_folio&&<div style={{fontSize:11,fontWeight:700,color:C.cart,letterSpacing:0.3,marginBottom:1,display:"flex",alignItems:"center",gap:4}}><ShoppingCartIcon size={11} weight="bold"/>{o.cart_folio}</div>}{o.web_folio&&<div style={{fontSize:10,fontWeight:600,color:C.t2,marginBottom:1}}>{o.web_folio}</div>}{o.invoice_folio&&<div style={{fontSize:11,fontWeight:700,color:o.invoice_type==="factura"?C.fac:C.live,marginBottom:1,display:"flex",alignItems:"center",gap:4}}>{o.invoice_type==="factura"?<FileTextIcon size={11} weight="bold"/>:<ClipboardTextIcon size={11} weight="bold"/>}{o.invoice_folio}</div>}<div style={{fontSize:9,color:C.t3}}>{o.id} · {fD(o.created_at)}</div><div style={{fontSize:12}}>{o.product||o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString():""}</div><span style={{background:(SM[o.stage]?.c||C.t3)+"15",color:SM[o.stage]?.c,padding:"1px 6px",borderRadius:6,fontSize:9,fontWeight:600,display:"inline-flex",alignItems:"center"}}><StageLbl stage={o.stage} size={9}/></span></div>{!hp&&(o.order_type==="maquila"?(Number(o.maq_price)||0):(Number(o.price)||0))>0&&<div style={{fontSize:14,fontWeight:700,opacity:String(o.stage||"").includes("cancelled")?.4:1}} title={String(o.stage||"").includes("cancelled")?"Cancelada — no suma al total":""}>{fmt(o.order_type==="maquila"?(Number(o.maq_price)||0):(Number(o.price)||0))}</div>}</div>)}<button onClick={onClose} style={{...bt(C.sf,C.t2),width:"100%",justifyContent:"center",marginTop:14,border:"0.5px solid "+C.bd}}>Cerrar</button></div></div>;
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}} onClick={onClose}><div ref={panelHist} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="hist-cliente-t" onKeyDown={atraparTab} style={{outline:"none",background:C.bg,borderRadius:20,padding:24,maxWidth:480,width:"90%",maxHeight:"80vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}><h3 id="hist-cliente-t" style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:6}}><UserIcon size={18} weight="bold"/>{clientName}</h3><p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>{co.length===1?"1 orden":co.length+" órdenes"}{!hp?" · Total sin IVA, sin las canceladas: "+fmt(total):""}</p>{Object.keys(byType).length>0&&<div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:12}}>{Object.entries(byType).sort((a,b)=>b[1]-a[1]).map(([t,c])=><span key={t} style={{background:C.sf,padding:"4px 10px",borderRadius:8,fontSize:11}}>{t} <strong>{c}</strong></span>)}</div>}{co.map(o=><div key={o.id} style={{padding:"8px 0",borderBottom:"0.5px solid "+C.bd,display:"flex",justifyContent:"space-between"}}><div>{o.cart_folio&&<div style={{fontSize:11,fontWeight:700,color:C.cart,letterSpacing:0.3,marginBottom:1,display:"flex",alignItems:"center",gap:4}}><ShoppingCartIcon size={11} weight="bold"/>{o.cart_folio}</div>}{o.web_folio&&<div style={{fontSize:10,fontWeight:600,color:C.t2,marginBottom:1}}>{o.web_folio}</div>}{o.invoice_folio&&<div style={{fontSize:11,fontWeight:700,color:o.invoice_type==="factura"?C.fac:C.okInk,marginBottom:1,display:"flex",alignItems:"center",gap:4}}>{o.invoice_type==="factura"?<FileTextIcon size={11} weight="bold"/>:<ClipboardTextIcon size={11} weight="bold"/>}{o.invoice_folio}</div>}<div style={{fontSize:11,color:C.t2}}>{o.production_number||o.id} · {fD(o.created_at)}</div><div style={{fontSize:12}}>{o.product||o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString():""}</div><span style={{background:(SM[o.stage]?.c||C.t3)+"15",color:tintaAA(SM[o.stage]?.c||C.t3),padding:"1px 6px",borderRadius:6,fontSize:10,fontWeight:600,display:"inline-flex",alignItems:"center"}}><StageLbl stage={o.stage} size={10}/></span></div>{!hp&&(o.order_type==="maquila"?(Number(o.maq_price)||0):(Number(o.price)||0))>0&&<div style={{fontSize:14,fontWeight:700,color:String(o.stage||"").includes("cancelled")?C.t2:C.tx,textDecoration:String(o.stage||"").includes("cancelled")?"line-through":"none"}} title={String(o.stage||"").includes("cancelled")?"Cancelada: no suma al total":""}>{fmt(o.order_type==="maquila"?(Number(o.maq_price)||0):(Number(o.price)||0))}</div>}</div>)}<button onClick={onClose} style={{...bt(C.sf,C.t2),width:"100%",justifyContent:"center",marginTop:14,border:"0.5px solid "+C.bd}}>Cerrar</button></div></div>;
 }
 // v10.84.43 — `detalle` (opcional): {filas:[{titulo, sub, monto}], total:{titulo, monto}} se pinta como lista alineada a la
 //   izquierda con los importes en una columna a la derecha. Sin `detalle`, la pregunta queda como siempre (las otras 6 ventanas).
@@ -23403,8 +23414,7 @@ export default function PrintFlow() {
     if(action==="client_history"){const o=orders.find(x=>x.id===id);
       // 🔒 v10.12.0.4 Phase 3 — Finding #9: vendedor solo abre historial de clientes con los que tiene órdenes (evita reconocimiento lateral)
       if(o&&user==="vendedor"){
-        const hasOrderWithClient=orders.some(x=>x.client===o.client&&x.created_by===userLogin);
-        if(!hasOrderWithClient){showToast("❌ No tienes órdenes con este cliente","error");return}
+        if(!veHistorialDelCliente(user,userLogin,o,orders)){showToast("❌ No tienes órdenes con este cliente","error");return} // v10.84.148
       }
       if(o)setClientHistory(o.client)
     }

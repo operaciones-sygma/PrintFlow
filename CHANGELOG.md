@@ -12,6 +12,27 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.148 — El historial del cliente: el vendedor abre y ve lo que lleva como vendedor — 17-oct-2026
+
+**Qué pasaba.** La pasada de `/impeccable critique` de la madrugada del 17-oct sobre el historial del cliente (`ClientHistory`, al tocar el nombre en la
+ficha; 22/40, snapshot `.impeccable/critique/2026-10-17T09-03-31Z__src-app-jsx-historial-del-cliente.md`). Para el vendedor, la puerta de App (`handleAction` «client_history») sólo lo abría si él
+CAPTURÓ alguna orden de ese cliente, y el historial sólo enseñaba ésas; la ficha, en cambio, cuenta suya la orden que lleva como vendedor
+(`isVendedorOwnerByAgent`). Caso real: Genaro lleva órdenes de **PAOLA NUÑEZ** y de **VETERINARIA DIVETCO** que capturó Lupita, y al tocar el nombre en su
+propia ficha le salía «❌ No tienes órdenes con este cliente»; en el Patronato de la Feria no veía la que ella le capturó. Además no era un diálogo (sin nombre,
+el foco atrás, el Tab se salía), la etapa iba en su color de semáforo (3.0:1) y la fecha en 9 px junto al id interno «OP-P-…», «Total» no decía que es sin IVA
+y sin las canceladas, la cancelada sólo se veía tenue y decía «ordenes» sin acento.
+
+**Qué se cambió:** una regla para el vendedor (`esDelVendedor`: lo capturó o es su vendedor) en la puerta (`veHistorialDelCliente`) y en el historial; un
+diálogo con el nombre del cliente que se lleva el foco y lo regresa; el folio P- en vez del id; la etapa con `tintaAA` y la fecha de 11 px; «Total sin IVA, sin
+las canceladas»; la cancelada tachada; «órdenes».
+
+**Cómo se probó.** Tanda nueva `historial` (12; banco `gen-historial.mjs`: `ClientHistory` montado con la línea de App, y la puerta de App con
+`veHistorialDelCliente` si App.jsx la trae, o con la regla de antes tal cual). Vuelta 1 contra v10.84.147: fallaban 7 de 10 (Genaro no abría a PAOLA, en la
+Feria le faltaba la de Lupita, no era diálogo, AA y 9 px, el id interno, el total, «ordenes»). Vuelta 2: el vendedor escrito «GENARO » (mayúsculas y espacio)
+y el clic fuera: sin fallas. Ahora 12 de 12; contra v10.84.147 fallan 8. Los 31 bancos se generan con el App.jsx nuevo; build y `probar-alcance` en verde.
+
+**En producción:** (pendiente)
+
 ## v10.84.147 — «Poner en espera»: el fondo ya no tira lo escrito, los días se validan y dice cuándo vuelve sola — 17-oct-2026
 
 **Qué pasaba.** La pasada de `/impeccable critique` de la madrugada del 17-oct sobre la ventana «Poner en espera» (`SnoozeModal`; 21/40, snapshot
