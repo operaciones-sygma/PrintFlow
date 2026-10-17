@@ -18980,6 +18980,10 @@ function CancelacionesView({orders, role, onCancelOrders, onDetail}){
   );
 }
 
+// v10.84.151 — las series que timbra SYGMA desde el corte (1-sep-2026, emisor propio): F- (facturas) y RS- (remisiones). Las demás (D- y R-, de Alpha) ya no
+//   corren: sus huecos son historia que no se puede corregir aquí (Marcelo, 17-oct: «escojo tus recomendaciones»: auditar sólo F- y RS-, Alpha aparte)
+const SERIES_DE_HOY={factura:["F"],remision:["RS"]};
+const esSerieDeHoy=(serie,tipo)=>(SERIES_DE_HOY[tipo]||[]).includes(serie);
 function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrder}){
   const [filter,setFilter]=useState("90d");
   const [type,setType]=useState("factura");
@@ -18994,6 +18998,7 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
   const [hStatusChip,setHStatusChip]=useState("all"); // v10.70.3 — chips de status del consecutivo H- (independiente del P-)
   const [showShared,setShowShared]=useState(false); // v10.72.73 — modal de folios compartidos (antes sección inline que ocupaba mucho); el estado de expansión vive dentro de SharedFoliosModal
   const [showKey,setShowKey]=useState(false); // v10.72.77 — clave de badges colapsable (distill: reemplaza el párrafo-leyenda del fondo)
+  const [conjunto,setConjunto]=useState("hoy"); // v10.84.151 — «hoy»: las series de hoy (F-, RS-) · «alpha»: las de Alpha (D-, R-), para consultarlas
   const normSearch=s=>String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
   const sq=normSearch(search.trim());
   const cutoffs=useMemo(()=>{
@@ -19177,6 +19182,7 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
       // en vez de en el ultimo folio fiscal. Se excluye a proposito, y ahora esta escrito.
       // Coherente con el otro parser del mismo componente (`pf`), que sigue descartandola.
       if(se==='DP')return;
+      if(esSerieDeHoy(se,type)!==(conjunto==="hoy"))return;   // v10.84.151 — las de hoy, o las de Alpha aparte (antes, todas juntas)
       if(!bySerie[se])bySerie[se]={};
       if(!bySerie[se][n])bySerie[se][n]=[];
       bySerie[se][n].push(o);
@@ -19234,7 +19240,13 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
     return {sequence:seq,gaps:gapList,duplicates:dupes,total:series.reduce((s,se)=>s+Object.keys(bySerie[se]).length,0),rangos,
             latest:rangos.length?rangos[rangos.length-1].latest:null,
             oldest:rangos.length?rangos[0].oldest:null,sharedCount:sharedCnt};
-  },[folioOrders,sharedFolioStrings,purchaseOrders]);
+  },[folioOrders,sharedFolioStrings,purchaseOrders,conjunto,type]);
+  // v10.84.151 — lo que se busca y está en el otro conjunto: se dice dónde, con un botón para verlo (si no, buscar «D-6190» viendo las de hoy diría «Sin resultados»)
+  const enElOtro=useMemo(()=>{
+    if(!sq)return 0;
+    return folioOrders.filter(o=>{const se=serieFolio(o.invoice_folio);if(!se||se==="DP"||esSerieDeHoy(se,type)===(conjunto==="hoy"))return false;
+      return normSearch(o.invoice_folio).includes(sq)||normSearch(o.client||"").includes(sq)||normSearch(o.production_number||"").includes(sq)}).length;
+  },[folioOrders,sq,conjunto,type]);
   // Lista de OCs con folio compartido en el periodo+tipo actual (para sección dedicada)
   const sharedOCs=useMemo(()=>{
     if(!purchaseOrders)return [];
@@ -19244,13 +19256,14 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
       // v10.77.0 — una factura puede ser D- (Alpha) o F- (serie propia SYGMA).
       if(type==="factura"&&prefix!=="D"&&prefix!=="F")return false;
       if(type==="remision"&&prefix!=="R")return false;
+      if(esSerieDeHoy(serieFolio(po.shared_invoice_folio),type)!==(conjunto==="hoy"))return false;   // v10.84.151
       const ocOrders=folioOrders.filter(o=>o.purchase_order_id===po.id&&o.invoice_folio===po.shared_invoice_folio);
       return ocOrders.length>0;
     }).map(po=>({
       ...po,
       orderCount:folioOrders.filter(o=>o.purchase_order_id===po.id&&o.invoice_folio===po.shared_invoice_folio).length
     })).sort((a,b)=>parseFolio(b.shared_invoice_folio)-parseFolio(a.shared_invoice_folio));
-  },[purchaseOrders,folioOrders,type]);
+  },[purchaseOrders,folioOrders,type,conjunto]);
   const exportCSV=()=>{
     // v10.43.30 — Columnas extras para Corona OC
     const rows=[["Folio","Status","Origen","Cliente","Producción/PO Corona","OrdenID","Asignado","Por","Anticipado","Cancelada","Monto c/IVA"]];
@@ -19267,7 +19280,7 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
     const b=new Blob([csv],{type:"text/csv;charset=utf-8;"});
     const a=document.createElement("a");
     a.href=URL.createObjectURL(b);
-    a.download="Auditoria_"+(type==="factura"?"Facturas":"Remisiones")+"_"+new Date().toISOString().slice(0,10)+".csv";
+    a.download="Auditoria_"+(type==="factura"?"Facturas":"Remisiones")+(conjunto==="alpha"?"_Alpha":"")+"_"+new Date().toISOString().slice(0,10)+".csv";
     a.click();
   };
   const tColor=type==="factura"?C.fac:C.live;
@@ -19301,7 +19314,11 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
     </div>
     {tab==="folios"&&<>
     <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
-      {["factura","remision"].map(t=><button key={t} onClick={()=>setType(t)} style={{background:type===t?(t==="factura"?C.fac:C.okInk):C.bg,color:type===t?"#fff":C.tx,border:"1px solid "+(type===t?(t==="factura"?C.fac:C.okInk):C.bd),borderRadius:8,padding:"8px 14px",fontSize:12,fontWeight:700,display:"inline-flex",alignItems:"center",gap:6,cursor:"pointer"}}>{t==="factura"?<><FileTextIcon size={13} weight="bold"/>Facturas (D-XXXX)</>:<><ReceiptIcon size={13} weight="bold"/>Remisiones (R-XXXX)</>}</button>)}
+      {["factura","remision"].map(t=><button key={t} onClick={()=>setType(t)} style={{background:type===t?(t==="factura"?C.fac:C.okInk):C.bg,color:type===t?"#fff":C.tx,border:"1px solid "+(type===t?(t==="factura"?C.fac:C.okInk):C.bd),borderRadius:8,padding:"8px 14px",fontSize:12,fontWeight:700,display:"inline-flex",alignItems:"center",gap:6,cursor:"pointer"}}>{t==="factura"?<><FileTextIcon size={13} weight="bold"/>Facturas</>:<><ReceiptIcon size={13} weight="bold"/>Remisiones</>}</button>)}
+      {/* v10.84.151 — de hoy (F-, RS-: lo que se audita) o de Alpha (D-, R-: para consultar). Antes las dos juntas, con los huecos de Alpha en la cuenta */}
+      <div role="group" aria-label="Qué serie" style={{display:"inline-flex",gap:2,background:C.sf,borderRadius:10,padding:3}}>
+        {[{id:"hoy",l:"Desde el corte · "+(type==="factura"?"F-":"RS-")},{id:"alpha",l:"Alpha · "+(type==="factura"?"D-":"R-")}].map(x=>{const sel=conjunto===x.id;return <button key={x.id} type="button" aria-pressed={sel} onClick={()=>setConjunto(x.id)} style={{border:"none",borderRadius:8,padding:"6px 12px",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit",background:sel?C.bg:"transparent",color:sel?C.tx:C.t2,boxShadow:sel?"0 1px 2px rgba(26,26,31,.08)":"none"}}>{x.l}</button>})}
+      </div>
       <button onClick={exportCSV} disabled={total===0} style={{...bt(C.ac),fontSize:11,padding:"6px 12px",opacity:total===0?0.4:1,cursor:total===0?"not-allowed":"pointer",marginLeft:"auto"}}><DownloadSimpleIcon size={13} weight="bold"/>Exportar CSV</button>
     </div>
     {/* v10.43.18 QW1 — Búsqueda por folio o cliente */}
@@ -19341,7 +19358,7 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
           {dot:C.ok,tier:"Contabilizado · en el sistema",items:[["COMPARTIDO","1 factura cubre varias órdenes de una OC"],["EN COBRANZAFLOW","en la cartera de CobranzaFlow sin orden aquí: por partes, del plan matriz o hecha sin orden"],["OC CRÉDITO CORONA","OC a crédito Corona, no orden de producción"]]},
           {dot:C.t3,tier:"Contabilizado · inerte (nada que hacer)",items:[["CANCELADA EN ALPHA","cancelada en Alpha; no sale en vigentes"],["AUTO-FACTURA $0","auto-factura interna de PADILLA en $0"],["PAGADA EN ALPHA","facturada y ya cobrada directo en Alpha"]]},
           {dot:C.wn,tier:"Revisar",items:[["DUPLICADO","mismo folio en varias órdenes sin razón fiscal"],["ANTICIPADO","folio asignado antes de entregar"]]},
-          {dot:C.dn,tier:"Acción",items:[["FALTANTE","hueco real: el folio se consumió sin orden o se canceló sin registrarse (las series D- y R-, en Alpha)"]]},
+          {dot:C.dn,tier:"Acción",items:[["FALTANTE",conjunto==="alpha"?"hueco de Alpha: el folio se consumió sin orden o se canceló sin registrarse; se busca en Alpha":"hueco real: el folio se consumió sin orden o se canceló sin registrarse; se busca en CobranzaFlow (F- y RS- las timbra SYGMA)"]]},
         ].map((g,gi)=><div key={gi}>
           <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}><span style={{width:9,height:9,borderRadius:3,background:g.dot,flexShrink:0}}/><span style={{fontSize:10,fontWeight:800,color:C.tx,textTransform:"uppercase",letterSpacing:.3}}>{g.tier}</span></div>
           <div style={{display:"flex",flexDirection:"column",gap:2,paddingLeft:15}}>
@@ -19372,13 +19389,15 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
       const filteredSeq=sequence.filter(it=>matchesChip(it)&&matchesSearch(it));
       if(sequence.length===0)return <div style={{textAlign:"center",padding:"40px 20px",color:C.t2,background:C.bg,borderRadius:10,border:"1px solid "+C.bd}}>
         <TIcon size={46} color={C.ph}/>
-        <div style={{fontSize:14,fontWeight:700,color:C.tx,marginTop:8}}>Sin folios en este periodo</div>
+        <div style={{fontSize:14,fontWeight:700,color:C.tx,marginTop:8}}>{conjunto==="alpha"?"Sin folios de Alpha en este periodo":"Sin folios en este periodo"}</div>
+        {conjunto==="alpha"&&filter!=="all"&&<div style={{fontSize:11,color:C.t2,marginTop:4}}>Alpha timbró hasta septiembre: «Todo el historial» los trae todos.</div>}
         <div style={{fontSize:11,color:C.t2,marginTop:4}}>Ajusta el filtro o carga el archivo histórico para ver más</div>
       </div>;
       if(filteredSeq.length===0)return <div style={{textAlign:"center",padding:"30px 20px",color:C.t2,background:C.bg,borderRadius:10,border:"1px solid "+C.bd}}>
         <MagnifyingGlassIcon size={30} color={C.ph}/>
         <div style={{fontSize:13,fontWeight:600,color:C.tx,marginTop:6}}>Sin resultados con los filtros actuales</div>
         <div style={{fontSize:10,color:C.t2,marginTop:4}}>Limpia búsqueda o cambia el chip de status</div>
+        {enElOtro>0&&<button type="button" onClick={()=>setConjunto(conjunto==="hoy"?"alpha":"hoy")} style={{...bs(C.bg,tintaAA(C.ac,7)),marginTop:10,border:"1px solid "+C.bd}}>{(enElOtro===1?"1 coincide":"Coinciden "+enElOtro)+(conjunto==="hoy"?" en Alpha":" en las de hoy")+": verlas"}</button>}
       </div>;
       // v10.72.75 — /impeccable clarify (P2): la fila FALTANTE da CONTEXTO. Los folios vecinos ya registrados (con
       // fecha) que bracketean el hueco le dicen a Karla la ventana donde buscar en Alpha; el subtexto nombra las 2

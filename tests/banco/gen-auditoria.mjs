@@ -4,7 +4,8 @@
 // list_corona_oc_invoices (las OC a crédito de Corona).
 // Lo que la vista pide a App se anota en #log: «oc <id>», «orden <id>», «rpc <nombre> <tipo>».
 // Uso: node gen-auditoria.mjs <App.jsx> <dirSalida>
-// Variantes por URL: rol=admin|karla · falla=cobranza (la cartera no contesta)
+// Variantes por URL: rol=admin|karla · falla=cobranza (la cartera no contesta) · remalpha=1 (v10.84.151: dos remisiones de Alpha, R-1290 y R-1292, con
+//   R-1291 faltante)
 import fs from "node:fs";
 import path from "node:path";
 import { LIGA_FUENTES, copiarFuentes } from "./fuentes.mjs";
@@ -68,6 +69,9 @@ const ORDENES = [
   o("H-0592", { invoice_folio: "D-6192", invoice_type: "factura", invoiced_at: T("2026-08-21T12:00:00-06:00"), client: "ALPHA TRES", created_at: T("2026-08-10T09:00:00-06:00") }),
   // remisiones propias
   rem("P-0612", "RS-1", 1), rem("P-0613", "RS-2", 2), rem("P-0614", "RS-3", 3),
+  // v10.84.151 — remisiones de Alpha (antes del corte), con un hueco: R-1291
+  ...(Q.get("remalpha") === "1" ? [o("H-0593", { invoice_folio: "R-1290", invoice_type: "remision", invoiced_at: T("2026-08-19T12:00:00-06:00"), client: "ALPHA REMISION UNO", created_at: T("2026-08-10T09:00:00-06:00") }),
+    o("H-0594", { invoice_folio: "R-1292", invoice_type: "remision", invoiced_at: T("2026-08-21T12:00:00-06:00"), client: "ALPHA REMISION TRES", created_at: T("2026-08-10T09:00:00-06:00") })] : []),
   // una sin folio (cuenta en la pestaña de órdenes); P-0603 no existe: hueco del consecutivo de órdenes
   o("P-0615", { stage: "ready", client: "SIN FOLIO TODAVIA" }),
 ];

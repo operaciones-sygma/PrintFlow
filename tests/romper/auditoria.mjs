@@ -213,6 +213,78 @@ await caso("aud-21-los-compartidos-se-llevan-el-foco-y-lo-regresan", "", async p
   ok("aud-21-los-compartidos-se-llevan-el-foco-y-lo-regresan", !!t && dentro && !salio && /Compartidos|ver cuáles/i.test(foco), `el foco ${dentro ? "entra" : "NO entra"} a los compartidos; el Tab ${salio ? "se sale" : "no se sale"}; tras Esc queda en: ${foco}`);
 });
 
+// ── vuelta 4 (v10.84.151; Marcelo, 17-oct: «escojo tus recomendaciones»): se auditan las series de HOY (F- y RS-, desde el corte); las de Alpha (D-, R-)
+//   van aparte, para consultarlas: sus huecos ya no se pueden corregir y revueltos con los de hoy hacían ruido. Escritas antes del arreglo ──
+const conjunto = (p, re) => p.getByRole("group", { name: "Qué serie" }).getByRole("button", { name: re }).first();
+const marcado = async (p, re) => { const b = conjunto(p, re); return (await b.count()) ? await b.getAttribute("aria-pressed") : null; };
+const aAlpha = async p => { const hay = await conjunto(p, /Alpha/).count(); if (hay) { await conjunto(p, /Alpha/).click(); await espera(p, 400); } return hay > 0; };
+await caso("aud-23-por-omision-solo-las-de-hoy", "", async p => {
+  const t = await texto(p), alpha = [...new Set(t.match(/\b(D-\d{3,}|C-3)\b/g) || [])], hoy = await marcado(p, /Desde el corte/);
+  ok("aud-23-por-omision-solo-las-de-hoy", !alpha.length && /\bF-1\b/.test(t) && hoy === "true",
+    `al abrir: ${alpha.length ? "salen folios de Alpha (" + alpha.join(", ") + ")" : "sólo las de hoy"}; ${/\bF-1\b/.test(t) ? "F-1 a la vista" : "SIN F-1"}; «Desde el corte» ${hoy === null ? "NO EXISTE" : hoy === "true" ? "marcado" : "sin marcar"}`);
+});
+await caso("aud-24-alpha-aparte-para-consultar", "", async p => {
+  const hay = await aAlpha(p), t = await texto(p), m = (t.match(/(\d+)\s*huecos?/i) || [])[1];
+  ok("aud-24-alpha-aparte-para-consultar", hay && /D-6190/.test(t) && /D-6192/.test(t) && !/\bF-[1-9]\b/.test(t) && m === "0",
+    `«Alpha · D-»: ${hay ? "existe" : "NO EXISTE"}; ${/D-6190/.test(t) && /D-6192/.test(t) ? "D-6190 y D-6192 a la vista" : "sin los de Alpha"}; ${/\bF-[1-9]\b/.test(t) ? "y SALEN los F-" : "sin los F-"}; huecos: ${m ?? "no dice"} (D-6191 está cancelada en la cartera: no es hueco)`);
+});
+await caso("aud-25-lo-buscado-en-alpha-se-dice-donde", "", async p => {
+  await buscar(p, "D-6190");
+  const b = p.getByRole("button", { name: /en Alpha/ }).first(), hay = await b.count();
+  if (hay) { await b.click(); await espera(p, 400); }
+  const t = await texto(p);
+  ok("aud-25-lo-buscado-en-alpha-se-dice-donde", hay > 0 && /D-6190/.test(t) && /ALPHA UNO/.test(t),
+    `buscar «D-6190» viendo las de hoy: ${hay ? "dice que coincide en Alpha y lleva ahí" : "sin un botón que lleve a Alpha"}; ${/ALPHA UNO/.test(t) ? "D-6190 de ALPHA UNO a la vista" : "no se ve"}`);
+});
+await caso("aud-26-el-csv-de-hoy-sin-alpha", "", async p => {
+  await espera(p, 500);
+  const [dl] = await Promise.all([p.waitForEvent("download", { timeout: 6000 }), p.getByRole("button", { name: /Exportar CSV/ }).click()]);
+  const ruta = await dl.path(), c = ruta ? fs.readFileSync(ruta, "utf8") : "";
+  ok("aud-26-el-csv-de-hoy-sin-alpha", /"F-5","HUECO"/.test(c) && !/"D-61/.test(c) && !/"C-3"/.test(c), `el CSV de las de hoy: ${/"D-61/.test(c) || /"C-3"/.test(c) ? "TRAE folios de Alpha" : "sin Alpha"}; ${/"F-5","HUECO"/.test(c) ? "con F-5 como HUECO" : "SIN F-5"}`);
+});
+await caso("aud-27-remisiones-rs-y-alpha-r-aparte", "remalpha=1", async p => {
+  await p.getByRole("button", { name: /^\s*Remisiones/ }).first().click(); await espera(p, 500);
+  const t1 = await texto(p), hay = await aAlpha(p), t2 = await texto(p);
+  const de = t => (t.match(/\d+ folios?/) || ["?"])[0] + ", " + (t.match(/\d+ huecos?/) || ["?"])[0];
+  ok("aud-27-remisiones-rs-y-alpha-r-aparte", /(^|\D)3 folios/.test(t1) && /(^|\D)0 huecos/.test(t1) && !/R-129/.test(t1) && hay && /(^|\D)2 folios/.test(t2) && /(^|\D)1 hueco(?!s)/.test(t2) && /R-1291/.test(t2),
+    `Remisiones, las de hoy: ${de(t1)}${/R-129/.test(t1) ? " (con las R- de Alpha revueltas: «" + (t1.match(/.{0,40}R-129.{0,40}/) || [""])[0] + "»)" : ""} (debe 3 y 0: RS-1 a RS-3); Alpha: ${hay ? de(t2) : "NO EXISTE"}${/R-1291/.test(t2) ? ", con R-1291" : ", SIN R-1291"} (debe 2 y 1: R-1291)`);
+});
+await caso("aud-28-alpha-sin-folios-en-el-periodo-dice-donde", "", async p => {
+  const hay = await aAlpha(p);
+  await p.locator("select").first().selectOption("lm"); await espera(p, 400);
+  const t = await texto(p);
+  ok("aud-28-alpha-sin-folios-en-el-periodo-dice-donde", hay && /Sin folios de Alpha en este periodo/.test(t) && /Todo el historial/.test(t),
+    `«Alpha» con «Mes pasado» (septiembre: el banco no trae folios de Alpha ahí): ${hay ? "«" + ((t.match(/Sin folios[^.]*\.[^.]*\./) || [""])[0]).slice(0, 140) + "»" : "NO EXISTE «Alpha»"}`);
+});
+
+// ── vuelta 5 (v10.84.151, por donde no se diseñó): Alpha y las remisiones, de Alpha a lo de hoy, el doble clic en «verlas», los compartidos ──
+await caso("aud-29-alpha-se-queda-al-cambiar-a-remisiones", "remalpha=1", async p => {
+  await aAlpha(p);
+  await p.getByRole("button", { name: /^\s*Remisiones/ }).first().click(); await espera(p, 500);
+  const t = await texto(p), alpha = await marcado(p, /Alpha/), et = ((await conjunto(p, /Alpha/).innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  ok("aud-29-alpha-se-queda-al-cambiar-a-remisiones", alpha === "true" && /R-1290/.test(t) && /R-1292/.test(t) && !/RS-\d/.test(t) && /R-\s*$|R-$/.test(et.trim()),
+    `en Alpha y luego «Remisiones»: Alpha ${alpha === "true" ? "sigue marcado" : "SE DESMARCA"}; ${/R-1290/.test(t) ? "R-1290 a la vista" : "sin las R-"}${/RS-\d/.test(t) ? " (y SALEN las RS-)" : ""}; el botón dice «${et}»`);
+});
+await caso("aud-30-desde-alpha-lo-de-hoy-se-ofrece", "", async p => {
+  await aAlpha(p); await buscar(p, "F-1");
+  const b = p.getByRole("button", { name: /en las de hoy/ }).first(), hay = await b.count();
+  if (hay) { await b.click(); await espera(p, 400); }
+  const t = await texto(p), hoy = await marcado(p, /Desde el corte/);
+  ok("aud-30-desde-alpha-lo-de-hoy-se-ofrece", hay > 0 && hoy === "true" && /PRIMERA/.test(t), `en Alpha, buscar «F-1»: ${hay ? "ofrece las de hoy" : "SIN la oferta"}; después ${hoy === "true" ? "en las de hoy" : "sigue en Alpha"}, ${/PRIMERA/.test(t) ? "F-1 de PRIMERA a la vista" : "sin F-1"}`);
+});
+await caso("aud-31-doble-clic-en-verlas-no-abre-una-orden", "", async p => {
+  await buscar(p, "D-6190");
+  const b = p.getByRole("button", { name: /en Alpha/ }).first(), hay = await b.count();
+  if (hay) { await b.dblclick(); await espera(p, 600); }
+  const abiertas = (((await p.textContent("#log").catch(() => "")) || "").split("\n")).filter(l => /^orden /.test(l));
+  ok("aud-31-doble-clic-en-verlas-no-abre-una-orden", hay > 0 && !abiertas.length, `doble clic en «Coinciden 1 en Alpha: verlas»: ${hay ? (abiertas.length ? "el segundo clic ABRE " + abiertas.join(", ") : "sólo cambia a Alpha") : "SIN el botón"}`);
+});
+await caso("aud-32-los-compartidos-son-de-su-conjunto", "", async p => {
+  const t1 = await texto(p), hoy = (t1.match(/(\d+)\s*compartidos?/) || [])[1];
+  await aAlpha(p); const t2 = await texto(p), alpha = (t2.match(/(\d+)\s*compartidos?/) || [])[1];
+  ok("aud-32-los-compartidos-son-de-su-conjunto", hoy === "1" && alpha === "0", `compartidos: las de hoy ${hoy ?? "?"} (F-8 de la OC-0900), Alpha ${alpha ?? "?"} (ninguno)`);
+});
+
 await browser.close();
 for (const r of res) console.log(r);
 const fallan = res.filter(r => r.startsWith("FALLA")).length;
