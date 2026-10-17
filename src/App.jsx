@@ -18897,7 +18897,14 @@ function CancelacionesView({orders, role, onCancelOrders, onDetail}){
   const matchO=o=>!sq||[o.client,o.client_company,o.production_number,o.invoice_folio,o.product_type,o.product,o.cancellation_reason].some(f=>nrm(f).includes(sq));
   const isCancelled=o=>o.stage==="cancelled"||o.stage==="maq_cancelled"||!!o.cancelled_at;
   // Cancelables: no canceladas ya, no devueltas, no pedidos web sin aprobar. (Activas y entregadas/facturadas → con NC.)
-  const candidates=useMemo(()=>orders.filter(o=>!isCancelled(o)&&!o.returned_at&&o.stage!=="web_pending"&&o.stage!=="web_rejected").filter(matchO).sort((a,b)=>String(b.created_at||"").localeCompare(String(a.created_at||""))),[orders,sq]);
+  // v10.84.153 — primero las ACTIVAS (Marcelo, 17-oct: «escojo tus recomendaciones»): la lista traía también las entregadas y facturadas, 30 a la vez, y lo
+  //   que de verdad se cancela quedaba revuelto con ellas; las entregadas (con su factura: nota de crédito, sólo Dirección) se ven con un botón, y lo buscado
+  //   que sólo está entre ellas lo ofrece
+  const [conEntregadas,setConEntregadas]=useState(false);
+  const yaSeEntrego=o=>/delivered/.test(String(o.stage||""))||o.stage==="stocked";
+  const cancelables=useMemo(()=>orders.filter(o=>!isCancelled(o)&&!o.returned_at&&o.stage!=="web_pending"&&o.stage!=="web_rejected").filter(matchO).sort((a,b)=>String(b.created_at||"").localeCompare(String(a.created_at||""))),[orders,sq]);
+  const nEntregadas=cancelables.filter(yaSeEntrego).length;
+  const candidates=conEntregadas?cancelables:cancelables.filter(o=>!yaSeEntrego(o));
   const shownCands=candidates.slice(0,30);
   const history=useMemo(()=>orders.filter(isCancelled).filter(matchO).sort((a,b)=>String(b.cancelled_at||"").localeCompare(String(a.cancelled_at||""))),[orders,sq]);
   const toggle=id=>setSel(p=>{const n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n});
@@ -18951,11 +18958,12 @@ function CancelacionesView({orders, role, onCancelOrders, onDetail}){
       <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar por cliente, folio (F-…, RS-…), orden (P-…) o producto…" style={{width:"100%",maxWidth:520,boxSizing:"border-box",padding:"9px 12px",border:"1px solid "+C.bd,borderRadius:10,fontSize:13,fontFamily:"'Geist',sans-serif",background:C.bg,color:C.tx,marginBottom:14}}/>
       <div style={{background:C.card,borderRadius:16,boxShadow:C.sh2,padding:16,marginBottom:18}}>
         <div style={{fontSize:13,fontWeight:800,color:C.tx,marginBottom:10,display:"flex",alignItems:"center",gap:6}}><XCircleIcon size={14} weight="bold" color={C.dn}/>Cancelar órdenes</div>
-        {shownCands.length===0?<div style={{fontSize:12,color:C.t3,padding:"18px 0",textAlign:"center"}}>{sq?"Sin órdenes cancelables que coincidan.":"No hay órdenes cancelables."}</div>:
+        {shownCands.length===0?<div style={{fontSize:12,color:C.t3,padding:"18px 0",textAlign:"center"}}>{sq?(conEntregadas?"Sin órdenes cancelables que coincidan.":"Sin órdenes activas que coincidan."):(conEntregadas?"No hay órdenes cancelables.":"No hay órdenes activas por cancelar.")}</div>:
         <div style={{maxHeight:380,overflowY:"auto",display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(290px,1fr))",gap:8,padding:2}}>
           {shownCands.map(o=><OrderPickCard key={o.id} o={o} selected={sel.has(o.id)} onToggle={()=>toggle(o.id)} accent={C.dn}/>)}
         </div>}
         {candidates.length>shownCands.length&&<div style={{fontSize:11,color:C.t2,marginTop:6}}>Mostrando {shownCands.length} de {candidates.length}. Usa la búsqueda para acotar.</div>}
+        {(nEntregadas>0||conEntregadas)&&<button type="button" aria-pressed={conEntregadas} onClick={e=>{if(e.detail>=2)return;setConEntregadas(v=>!v)}} style={{...bs(C.bg,tintaAA(C.ac,7)),border:"1px solid "+C.bd,fontSize:11,marginTop:8}}>{conEntregadas?"Sólo las activas":"Ver también las entregadas ("+nEntregadas+")"}</button>}
         <textarea value={reason} onChange={e=>setReason(e.target.value)} placeholder="Motivo de la cancelación (mín. 5 caracteres)…" rows={2} style={{width:"100%",boxSizing:"border-box",marginTop:12,padding:"9px 12px",border:"1px solid "+C.bd,borderRadius:10,fontSize:13,fontFamily:"'Geist',sans-serif",background:C.bg,color:C.tx,resize:"vertical"}}/>
         {blockedByRole&&<div style={{fontSize:11,color:C.dnInk,fontWeight:600,marginTop:8,display:"flex",alignItems:"center",gap:5}}><WarningCircleIcon size={13} weight="fill"/>{selLinked} con vínculo fiscal requieren nota de crédito — solo Dirección puede cancelarlas. Quítalas de la selección.</div>}
         {sel.size>0&&<div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:10,padding:"8px 10px",background:C.sf,borderRadius:10,border:"1px solid "+C.bd}}>

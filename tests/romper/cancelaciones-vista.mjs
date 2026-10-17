@@ -37,7 +37,10 @@ const lineas = async (p, pref) => (await log(p)).split("\n").filter(l => l.start
 const espera = (p, ms = 250) => p.waitForTimeout(ms);
 const texto = p => p.evaluate(() => { const r = document.getElementById("root").cloneNode(true); r.querySelector("#log")?.remove(); return r.innerText.replace(/\s+/g, " "); });
 // elegir órdenes (la casilla de su ficha), escribir el motivo y apretar el botón de cancelar del lote
-const elegir = async (p, ...pns) => { for (const pn of pns) { await p.locator("label", { hasText: pn }).first().locator('input[type="checkbox"]').check(); await espera(p, 120); } };
+// (desde v10.84.153 la lista empieza por las activas: si la que se quiere no está, se traen las entregadas con su botón)
+const elegir = async (p, ...pns) => { for (const pn of pns) {
+  if (!(await p.locator("label", { hasText: pn }).count())) { const v = p.getByRole("button", { name: /^Ver también las entregadas/ }); if (await v.count()) { await v.first().click(); await espera(p, 200); } }
+  await p.locator("label", { hasText: pn }).first().locator('input[type="checkbox"]').check(); await espera(p, 120); } };
 const motivo = async (p, t = "El cliente canceló el pedido") => { await p.getByPlaceholder(/Motivo de la cancelación/).fill(t); await espera(p, 120); };
 const botonDelLote = p => p.getByRole("button", { name: /^(Revisar y cancelar|Cancelar)( \(\d+\)| las \d+)?$/ }).first();
 const confirmacion = p => p.getByRole("region", { name: /Vas a cancelar/ });
@@ -251,6 +254,42 @@ await caso("cnv-23-el-saldo-que-llega-tarde-se-dice", "lento=tarde", async p => 
   const t2 = ((await confirmacion(p).innerText().catch(() => "")) || "").replace(/\s+/g, " ");
   ok("cnv-23-el-saldo-que-llega-tarde-se-dice", /No se pudo comprobar/.test(t1) && /\$2,500\.00/.test(t2) && !/No se pudo comprobar/.test(t2),
     `a los 8.6 s: ${/No se pudo comprobar/.test(t1) ? "«no se pudo comprobar»" : "«" + t1.slice(0, 60) + "»"}; cuando contesta (9.5 s): ${/\$2,500\.00/.test(t2) ? "dice los $2,500.00" : "NO dice el saldo que llegó"}`);
+});
+
+// ── vuelta 4 (v10.84.153; Marcelo, 17-oct: «escojo tus recomendaciones»): la lista para elegir empieza por las ACTIVAS; las entregadas (con su factura) se
+//   ven con un botón, y lo buscado que sólo está entre ellas se ofrece. Escritas antes del arreglo ──
+const verEntregadas = p => p.getByRole("button", { name: /^Ver también las entregadas/ }).first();
+const enLaLista = p => p.locator("label").evaluateAll(ls => ls.map(l => l.innerText.replace(/\s+/g, " ")).join(" | "));
+await caso("cnv-24-empieza-por-las-activas", "", async p => {
+  const l = await enLaLista(p), b = await verEntregadas(p).count(), dice = b ? (await verEntregadas(p).innerText()).replace(/\s+/g, " ") : "";
+  const entregadas = ["P-0802", "P-0805", "P-0807"].filter(pn => l.includes(pn)), activas = ["P-0801", "P-0803", "P-0804", "P-0806"].filter(pn => !l.includes(pn));
+  ok("cnv-24-empieza-por-las-activas", !entregadas.length && !activas.length && /\(3\)/.test(dice),
+    `al abrir: ${entregadas.length ? "salen las entregadas " + entregadas.join(", ") : "sin las entregadas"}${activas.length ? "; FALTAN activas: " + activas.join(", ") : ""}; el botón: ${b ? "«" + dice + "»" : "NO EXISTE"} (debe decir 3)`);
+});
+await caso("cnv-25-el-boton-las-trae-y-las-quita-sin-perder-lo-elegido", "", async p => {
+  const b = await verEntregadas(p).count(); if (b) { await verEntregadas(p).click(); await espera(p); }
+  const con = await enLaLista(p), todas = ["P-0802", "P-0805", "P-0807"].every(pn => con.includes(pn));
+  await elegir(p, "P-0802");
+  const solo = p.getByRole("button", { name: /^Sólo las activas/ }).first(), hay = await solo.count(); if (hay) { await solo.click(); await espera(p); }
+  // (el botón del lote dice el número sólo con dos o más: lo elegido se ve en su etiqueta, «P-0802 · F-120»; la primera versión buscaba «(1)» en el botón)
+  const sin = await enLaLista(p), elegida = /P-0802 · F-120/.test(await texto(p));
+  ok("cnv-25-el-boton-las-trae-y-las-quita-sin-perder-lo-elegido", b > 0 && todas && hay > 0 && !sin.includes("P-0802") && elegida,
+    `«Ver también las entregadas»: ${b ? (todas ? "las trae" : "NO las trae todas") : "NO EXISTE"}; «Sólo las activas»: ${hay ? (sin.includes("P-0802") ? "SIGUE P-0802" : "las quita") : "NO EXISTE"}; P-0802, elegida: ${elegida ? "sigue elegida (su etiqueta)" : "SE PERDIÓ"}`);
+});
+await caso("cnv-26-lo-buscado-entre-las-entregadas-se-ofrece", "", async p => {
+  await p.getByPlaceholder(/Buscar por cliente/).fill("F-120"); await espera(p, 300);
+  const t = await texto(p), b = await verEntregadas(p).count();
+  if (b) { await verEntregadas(p).click(); await espera(p); }
+  const l = await enLaLista(p);
+  ok("cnv-26-lo-buscado-entre-las-entregadas-se-ofrece", b > 0 && /activas que coincidan/.test(t) && l.includes("P-0802"),
+    `buscar «F-120» (P-0802, entregada con su factura): «${(t.match(/Sin órdenes[^.]*\./) || ["(sin aviso)"])[0]}»; ${b ? "con el botón de las entregadas" : "SIN el botón"}; después: ${l.includes("P-0802") ? "P-0802 a la vista" : "no sale"}`);
+});
+
+// ── vuelta 5 (v10.84.153): el doble clic en el botón de las entregadas ──
+await caso("cnv-27-doble-clic-en-ver-las-entregadas", "", async p => {
+  const b = await verEntregadas(p).count(); if (b) { await verEntregadas(p).dblclick(); await espera(p, 400); }
+  const l = await enLaLista(p);
+  ok("cnv-27-doble-clic-en-ver-las-entregadas", b > 0 && l.includes("P-0802"), `doble clic en «Ver también las entregadas»: ${b ? (l.includes("P-0802") ? "se ven" : "el segundo clic las VUELVE A ESCONDER") : "SIN el botón"}`);
 });
 
 await browser.close();
