@@ -7,7 +7,11 @@
 //   la base pone quién y cuándo, y `revision` evita guardar encima de lo que otro guardó mientras tanto. Sin esa tabla, el plano igual se
 //   acomoda e imprime. Lo que no se ha guardado se queda en esta computadora (un borrador) y se ofrece al volver.
 //   Pruebas: tests/romper/plano.mjs, con su banco tests/banco/gen-plano.mjs.
-import { useState, useEffect, useMemo, useRef, useCallback, useLayoutEffect, useReducer } from "react";
+// v10.84.139 — la FICHA de cada máquina (lo de su placa: fabricante, modelo, número, año, conexión; decisión de Marcelo del 16-oct: «el registro de
+//   maquinaria en Planta»): sale al tocar la máquina y Producción y Dirección la completan. Vive en public.maquinas_fichas, por pieza del plano
+//   (docs/migrations/v10.84.139_maquinas_fichas.sql); como las versiones, la base pone quién y cuándo, y `revision` evita guardar encima de lo de otro.
+//   Sin la tabla, el plano sigue igual y la ficha lo dice.
+import { useState, useEffect, useMemo, useRef, useCallback, useLayoutEffect, useReducer, Fragment } from "react";
 import { ArrowClockwise as ArrowClockwiseIcon, ArrowCounterClockwise as ArrowCounterClockwiseIcon, ArrowUUpLeft as ArrowUUpLeftIcon, ArrowUUpRight as ArrowUUpRightIcon, Plus as PlusIcon, Copy as CopyIcon, Trash as TrashIcon, MagnifyingGlassPlus as MagnifyingGlassPlusIcon, MagnifyingGlassMinus as MagnifyingGlassMinusIcon, CornersOut as CornersOutIcon, Printer as PrinterIcon, FloppyDisk as FloppyDiskIcon, Warning as WarningIcon, X as XIcon, ArrowsClockwise as ArrowsClockwiseIcon } from "@phosphor-icons/react";
 import * as G from "../lib/plano.js";
 import { CAJA, MUROS, VIDRIOS, PUERTAS, FIJOS, ESCALERAS, PUNTEADO, PROYECCION, DIVISIONES, AREAS, MAQUINAS } from "./plantaBaja.js";
@@ -16,6 +20,14 @@ import { hojaParaImprimir, escalaDe, imprimirEnMarco, medidas, cm } from "./hoja
 const OBSTACULOS = [...G.segmentosDe(MUROS, "muro"), ...G.segmentosDe(VIDRIOS, "muro"), ...G.segmentosDe(DIVISIONES, "muro"), ...G.segmentosDe(FIJOS, "fijo"), ...G.segmentosDe(ESCALERAS, "fijo")];
 export const ORIGINAL = G.limpiarPiezas(MAQUINAS).piezas;
 const TABLA = "plano_versiones";
+// v10.84.139 — las fichas de las máquinas, y sus campos (el largo, el de la base)
+const FICHAS = "maquinas_fichas";
+const COLUMNAS_FICHA = "pieza,fabricante,modelo,numero,anio,conexion,notas,por_confirmar,revision,actualizado_por,actualizado_en";
+const CAMPOS_FICHA = [["fabricante", "Fabricante", 200, "Ej.: Heidelberger Druckmaschinen AG"], ["modelo", "Modelo", 200, "Como viene en la placa"],
+  ["numero", "N.º de máquina o de serie", 120, ""], ["anio", "Año", 120, "Ej.: 2007, o «1988-1989 (estimado)»"],
+  ["conexion", "Conexión (lo eléctrico de la placa)", 300, "Ej.: trifásica, 220 V, 60 Hz, 18.7 A"], ["notas", "Notas", 2000, ""],
+  ["por_confirmar", "Por confirmar en la máquina", 1000, "Lo que la placa no deja leer"]];
+const LARGOS_FICHA = new Set(["notas", "por_confirmar"]);
 const COLUMNAS = "id,nombre,revision,creado_por,creado_en,actualizado_por,actualizado_en";
 const BORRADOR = "pf-plano-borrador", ULTIMA = "pf-plano-ultima";
 const HISTORIA_MAX = 100;
@@ -28,7 +40,7 @@ const escribirLocal = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v
 const quitarLocal = k => { try { localStorage.removeItem(k); } catch { /* nada */ } };
 
 // ── lo que dice la base, en palabras ──
-export const sinTabla = e => !!e && (e.code === "PGRST205" || e.code === "42P01" || (/plano_versiones/.test(e.message || "") && /schema cache|does not exist|no existe/i.test(e.message || "")));
+export const sinTabla = (e, tabla = TABLA) => !!e && (e.code === "PGRST205" || e.code === "42P01" || (String(e.message || "").includes(tabla) && /schema cache|does not exist|no existe/i.test(e.message || "")));
 export function enPalabras(e, que) {
   if (!e) return "";
   const m = String(e.message || "");
@@ -39,6 +51,13 @@ export function enPalabras(e, que) {
   if (e.code === "PGRST301" || e.code === "PGRST303" || /jwt|token.*expir|not authenticated/i.test(m)) return "Tu sesión se venció: vuelve a entrar. Lo que cambiaste se queda guardado en esta computadora.";
   if (/failed to fetch|networkerror|network|timeout|load failed/i.test(m)) return "No hubo conexión con la base. Revisa el internet y vuelve a intentar.";
   return "La base contestó: " + (m || "un error sin descripción") + ".";
+}
+// v10.84.139 — lo que dice la base de una ficha, en palabras (lo de la sesión, la red y el permiso, como las versiones)
+function fichaEnPalabras(e) {
+  if (!e) return "";
+  if (sinTabla(e, FICHAS)) return "Las fichas de las máquinas todavía no están en la base.";
+  if (e.code === "23514") return "La base no aceptó la ficha: algún dato es demasiado largo.";
+  return enPalabras(e, "cambiar las fichas de las máquinas");
 }
 const hora = iso => { try { return new Date(iso).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", hour12: false }); } catch { return ""; } };   // (en 24 h: con «a.m.» la frase acababa en «a.m..»)
 const fechaCorta = iso => { try { const d = new Date(iso); const hoy = new Date(); return d.toDateString() === hoy.toDateString() ? "hoy " + hora(iso) : d.toLocaleDateString("es-MX", { day: "numeric", month: "short" }) + " " + hora(iso); } catch { return ""; } };
@@ -83,11 +102,11 @@ function Campo({ etiqueta, valor, leer, alCambiar, sufijo, ancho, tema, nombre, 
 function Ventana({ titulo, children, botones, alCerrar, tema, sucia = false, ancho = 460 }) {
   const { C } = tema;
   const caja = useRef(null);
-  useLayoutEffect(() => { const b = caja.current?.querySelector("input,button[data-principal]") || caja.current?.querySelector("button"); b?.focus({ preventScroll: true }); }, []);
+  useLayoutEffect(() => { const b = caja.current?.querySelector("input,textarea,button[data-principal]") || caja.current?.querySelector("button"); b?.focus({ preventScroll: true }); }, []);
   const tecla = e => {
     if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); if (!sucia) alCerrar(); return; }
     if (e.key !== "Tab") return;
-    const f = [...caja.current.querySelectorAll("button:not([disabled]),input:not([disabled])")];
+    const f = [...caja.current.querySelectorAll("button:not([disabled]),input:not([disabled]),textarea:not([disabled])")];
     if (!f.length) return;
     const i = f.indexOf(document.activeElement);
     if (e.shiftKey && i <= 0) { e.preventDefault(); f[f.length - 1].focus(); } else if (!e.shiftKey && i === f.length - 1) { e.preventDefault(); f[0].focus(); }
@@ -126,6 +145,7 @@ export default function PlanoPlanta({ supabase, usuario = "", nombre = "", tema,
   const [tam, setTam] = useState({ w: 0, h: 0 });
   const [alto, setAlto] = useState(520);
   const [vista, setVista] = useState(null);             // {s: px por cm, dx, dy}
+  const [fichas, setFichas] = useState({ estado: "leyendo", porPieza: {}, error: null });   // v10.84.139 — leyendo | listo | sintabla | falla
 
   const piezasRef = { get current() { return historia.current.piezas; } };   // (el acomodo de este momento, también dentro de los manejadores)
   const vistaRef = useRef(vista); vistaRef.current = vista;
@@ -338,6 +358,62 @@ export default function PlanoPlanta({ supabase, usuario = "", nombre = "", tema,
     window.addEventListener("keydown", tecla);
     return () => window.removeEventListener("keydown", tecla);
   }, [ventana, sel, menuImprimir, deshacer, rehacer, duplicarSel, moverSel, girarSel, borrarSel]);
+
+  // ── las fichas de las máquinas (v10.84.139): se leen todas al entrar (son una por máquina); una falla no es «sin ficha» (la regla 12) ──
+  const pedidoFichas = useRef(0);
+  const leerFichas = useCallback(async () => {
+    if (!supabase) { setFichas({ estado: "sintabla", porPieza: {}, error: null }); return; }
+    const n = ++pedidoFichas.current;
+    setFichas(f => ({ ...f, estado: "leyendo" }));
+    let r;
+    try { r = await supabase.from(FICHAS).select(COLUMNAS_FICHA).limit(500); }
+    catch (e) { r = { data: null, error: { message: String(e?.message || e) } }; }
+    if (n !== pedidoFichas.current) return;
+    if (r.error) { setFichas(f => ({ ...f, estado: sinTabla(r.error, FICHAS) ? "sintabla" : "falla", error: r.error })); return; }
+    const porPieza = {};
+    for (const f of r.data || []) if (f && f.pieza) porPieza[f.pieza] = f;
+    setFichas({ estado: "listo", porPieza, error: null });
+  }, [supabase]);
+  useEffect(() => { leerFichas(); }, [leerFichas]);
+  const vacioFicha = () => Object.fromEntries(CAMPOS_FICHA.map(([k]) => [k, ""]));
+  const abrirFicha = p => {
+    const f = fichas.porPieza[p.id] || null, campos = vacioFicha();
+    if (f) for (const [k] of CAMPOS_FICHA) campos[k] = f[k] == null ? "" : String(f[k]);
+    setVentana({ tipo: "ficha", pieza: p.id, nombre: p.nombre, campos, original: { ...campos }, revision: f ? f.revision : null, nueva: !f, error: null, guardando: false, conflicto: null });
+  };
+  const guardarFicha = async () => {
+    const w = ventana; if (!w || w.tipo !== "ficha" || w.guardando) return;
+    const datos = {}, largos = [];
+    for (const [k, etiqueta, max] of CAMPOS_FICHA) {
+      const crudo = String(w.campos[k] || "");
+      const v = LARGOS_FICHA.has(k) ? crudo.trim() : crudo.replace(/\s+/g, " ").trim();
+      if (v.length > max) largos.push(etiqueta + ": de más de " + max.toLocaleString("es-MX") + " letras (lleva " + v.length.toLocaleString("es-MX") + ")");
+      datos[k] = v || null;
+    }
+    if (largos.length) { setVentana(x => x && x.tipo === "ficha" && { ...x, error: largos.join(". ") + "." }); return; }
+    if (w.nueva && !Object.values(datos).some(Boolean)) { setVentana(x => x && x.tipo === "ficha" && { ...x, error: "Escribe al menos el fabricante o el modelo." }); return; }
+    setVentana(x => x && x.tipo === "ficha" && { ...x, guardando: true, error: null });
+    let r;
+    try {
+      r = w.revision == null
+        ? await supabase.from(FICHAS).insert({ pieza: w.pieza, ...datos }).select(COLUMNAS_FICHA)
+        : await supabase.from(FICHAS).update(datos).eq("pieza", w.pieza).eq("revision", w.revision).select(COLUMNAS_FICHA);
+    } catch (e) { r = { data: null, error: { message: String(e?.message || e) } }; }
+    const fila = !r.error && Array.isArray(r.data) ? r.data[0] : null;
+    // otra persona la dio de alta (23505) o la cambió (0 filas con la revisión que se abrió) mientras se escribía: no se pisa; se dice quién y se ofrece
+    //   guardar encima a sabiendas (con la revisión de la suya)
+    if ((r.error && r.error.code === "23505") || (!r.error && !fila)) {
+      let otra = null;
+      try { const q = await supabase.from(FICHAS).select(COLUMNAS_FICHA).eq("pieza", w.pieza).maybeSingle(); otra = q.data || null; } catch { /* se dice sin el quién */ }
+      if (otra) setFichas(f => ({ ...f, porPieza: { ...f.porPieza, [otra.pieza]: otra } }));
+      setVentana(x => x && x.tipo === "ficha" && { ...x, guardando: false, revision: otra ? otra.revision : null, nueva: !otra, conflicto: otra ? { por: otra.actualizado_por, en: otra.actualizado_en } : { por: null, en: null } });
+      return;
+    }
+    if (r.error) { setVentana(x => x && x.tipo === "ficha" && { ...x, guardando: false, error: "No se guardó. " + fichaEnPalabras(r.error) }); return; }
+    setFichas(f => ({ ...f, estado: f.estado === "falla" ? "falla" : "listo", porPieza: { ...f.porPieza, [fila.pieza]: fila } }));
+    setVentana(null);
+    avisar?.("Se guardó la ficha de «" + w.nombre + "»", "info");
+  };
 
   // ── las versiones ──
   const guardarUltima = id => { if (id) escribirLocal(ULTIMA, id); else quitarLocal(ULTIMA); };
@@ -712,6 +788,26 @@ export default function PlanoPlanta({ supabase, usuario = "", nombre = "", tema,
             <button type="button" onClick={borrarSel} style={{ ...bs("transparent", C.dnInk), border: "1px solid " + C.bd, flex: 1, justifyContent: "center" }}><TrashIcon size={14} weight="bold" />Quitar</button>
           </div>
           {libre && <div data-plano-libre style={{ fontSize: 12.5, color: C.tx, lineHeight: 1.5 }}><b>Libre alrededor:</b> {LADOS.map(([k, f]) => f + " " + (libre[k] ? G.distancia(libre[k].cm) : "más de 15 m")).join(" · ")}</div>}
+          {/* v10.84.139 — la ficha de la máquina (lo de su placa) */}
+          {(() => { const ficha = fichas.porPieza[pieza.id] || null; return <div data-plano-ficha style={{ borderTop: "1px solid " + C.bd, paddingTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+              <span style={{ fontSize: 10, fontWeight: 600, color: C.t2, textTransform: "uppercase", letterSpacing: .3 }}>Ficha de la máquina</span>
+              {fichas.estado === "listo" && <button type="button" data-plano-ficha-editar onClick={() => abrirFicha(pieza)} aria-label={(ficha ? "Editar la ficha de " : "Agregar la ficha de ") + pieza.nombre} style={{ ...bs("transparent", C.ac), minHeight: 30, padding: "4px 8px" }}>{ficha ? "Editar" : "Agregar ficha"}</button>}
+            </div>
+            {fichas.estado === "leyendo" ? <div style={{ fontSize: 12.5, color: C.t2 }}>Leyendo la ficha…</div>
+              : fichas.estado === "sintabla" ? <div style={{ fontSize: 12.5, color: C.t2, lineHeight: 1.45 }}>Las fichas de las máquinas todavía no están en la base.</div>
+              : fichas.estado === "falla" ? <div role="alert" data-plano-ficha-falla style={{ fontSize: 12.5, color: C.dnInk, lineHeight: 1.45 }}>No se pudo leer la ficha: no quiere decir que no tenga. <button type="button" onClick={leerFichas} style={{ ...bs("transparent", C.ac), minHeight: 30, padding: "4px 8px" }}>Reintentar</button></div>
+              : ficha ? <>
+                <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "auto 1fr", gap: "3px 10px", fontSize: 12.5, lineHeight: 1.4 }}>
+                  {[["Fabricante", ficha.fabricante], ["Modelo", ficha.modelo], ["N.º", ficha.numero], ["Año", ficha.anio], ["Conexión", ficha.conexion]].filter(([, v]) => v).map(([k, v]) => <Fragment key={k}>
+                    <dt style={{ color: C.t2 }}>{k}</dt><dd style={{ margin: 0, color: C.tx, fontWeight: 600, overflowWrap: "anywhere" }}>{v}</dd></Fragment>)}
+                </dl>
+                {ficha.notas && <div style={{ fontSize: 12.5, color: C.tx, lineHeight: 1.45, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{ficha.notas}</div>}
+                {ficha.por_confirmar && <div style={{ fontSize: 12.5, color: C.wnTx, lineHeight: 1.45, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}><b>Por confirmar:</b> {ficha.por_confirmar}</div>}
+                {ficha.actualizado_por && <div style={{ fontSize: 11.5, color: C.t2 }}>La actualizó {persona(ficha.actualizado_por)}{ficha.actualizado_en ? ", " + fechaCorta(ficha.actualizado_en) : ""}</div>}
+              </>
+              : <div style={{ fontSize: 12.5, color: C.t2, lineHeight: 1.45 }}>Sin ficha todavía: en su placa vienen el fabricante, el modelo y el número.</div>}
+          </div>; })()}
           <div style={{ fontSize: 12, color: C.t2, lineHeight: 1.5 }}>Flechas: mueven 5 cm (con Shift, 50) · R: gira 90° · Supr: quita · Ctrl+Z: deshace</div>
         </div>
         : <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -782,6 +878,23 @@ export default function PlanoPlanta({ supabase, usuario = "", nombre = "", tema,
       <button type="button" data-plano-borrar-ok disabled={ocupado === "borrando"} onClick={borrarVersion} style={{ ...bt(C.dnInk), opacity: ocupado ? .6 : 1 }}><TrashIcon size={14} weight="bold" />{ocupado === "borrando" ? "Borrando…" : "Borrar"}</button>
     </>}>
       Deja de salir en la lista para todos{version.actualizado_por ? <> (la guardó {persona(version.actualizado_por)}{version.actualizado_en ? ", " + fechaCorta(version.actualizado_en) : ""})</> : null}. Lo que ves en el plano se queda, sin guardar. Se puede deshacer en seguida.
+    </Ventana>}
+    {ventana?.tipo === "ficha" && <Ventana tema={tema} ancho={520} titulo={(ventana.nueva && !ventana.conflicto ? "Ficha nueva: " : "Ficha de ") + ventana.nombre}
+      sucia={CAMPOS_FICHA.some(([k]) => (ventana.campos[k] || "") !== (ventana.original[k] || ""))} alCerrar={() => setVentana(null)} botones={<>
+      <button type="button" onClick={() => setVentana(null)} style={btnSec}>Cancelar</button>
+      <button type="button" data-principal data-plano-ficha-guardar disabled={ventana.guardando} onClick={guardarFicha} style={{ ...bt(C.ac), opacity: ventana.guardando ? .6 : 1 }}><FloppyDiskIcon size={14} weight="bold" />{ventana.guardando ? "Guardando…" : ventana.conflicto ? "Guardar la mía encima" : "Guardar ficha"}</button>
+    </>}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, maxHeight: "52vh", overflowY: "auto", padding: "2px 4px 2px 2px" }}>
+        {CAMPOS_FICHA.map(([k, etiqueta, , ph]) => { const largo = LARGOS_FICHA.has(k); const props = { name: "ficha-" + k, value: ventana.campos[k] || "", placeholder: ph, autoComplete: "off",
+            onChange: ev => { const v = ev.target.value; setVentana(x => x && x.tipo === "ficha" && { ...x, campos: { ...x.campos, [k]: v }, error: null }); },
+            style: { ...tema.inp, boxShadow: "0 0 0 1px " + C.bd, ...(largo ? { resize: "vertical", minHeight: 64, fontFamily: "inherit", lineHeight: 1.45 } : {}) } };
+          return <label key={k} style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12, fontWeight: 600, color: C.t2 }}>{etiqueta}
+            {largo ? <textarea rows={3} {...props} /> : <input {...props} />}</label>; })}
+      </div>
+      {ventana.conflicto && <div role="status" data-plano-ficha-conflicto style={{ marginTop: 10, fontSize: 12.5, color: C.wnTx, lineHeight: 1.45 }}>
+        {ventana.conflicto.por ? <><b>{persona(ventana.conflicto.por)}</b> guardó esta ficha{ventana.conflicto.en ? " a las " + hora(ventana.conflicto.en) : ""} mientras escribías.</> : <>Otra persona guardó esta ficha mientras escribías.</>} No se guardó encima: si
+        guardas otra vez, lo tuyo queda en lugar de lo suyo (la suya ya se ve en el panel al cerrar).</div>}
+      {ventana.error && <div role="alert" data-plano-ficha-error style={{ marginTop: 8, fontSize: 12.5, color: C.dnInk, lineHeight: 1.45 }}>{ventana.error}</div>}
     </Ventana>}
     {ventana?.tipo === "conflicto" && <Ventana tema={tema} titulo={ventana.otra && !ventana.otra.borrado_en ? "Otra persona guardó esta versión mientras la editabas" : "Esta versión ya no existe"} alCerrar={() => setVentana(null)} ancho={500} botones={<>
       <button type="button" onClick={() => setVentana(null)} style={btnSec}>Seguir editando</button>

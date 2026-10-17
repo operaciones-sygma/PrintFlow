@@ -851,6 +851,127 @@ await caso("pln-92-la-hoja-letreros-encima-y-la-hora", "versiones=2&ultima=v-1",
     `en la hoja los nombres van ${primerNombre > ultimoPoligono ? "después de" : "ANTES de"} las piezas; la tabla ${/font-size:inherit/.test(hoja) ? "hereda" : "NO hereda"} la letra; la ventana: «${v.slice(0, 110)}»`);
 });
 
+// ── v10.84.139: la ficha de cada máquina (lo de su placa), la decisión de Marcelo del 16-oct. Vuelta 1: escritas antes del cambio. ──
+const ficha = async p => ((await p.textContent("[data-plano-ficha]").catch(() => "")) || "").replace(/\s+/g, " ");
+const abrirLaFicha = async (p, id) => { await clicEn(p, id); await p.click("[data-plano-ficha-editar]"); await dialogo(p).waitFor({ timeout: 3000 }); };
+// (la Dobladora es una L: el promedio de sus esquinas cae en el hueco, fuera de la pieza; se elige de la lista del panel)
+const elegirEnLista = async (p, nombre) => { await p.locator("[data-plano-lista] button", { hasText: nombre }).first().click(); await espera(p, 150); };
+const sinAAEn = (p, sel) => p.evaluate(s => {
+  const nums = c => (c.match(/[\d.]+/g) || []).map(Number);
+  const lum = ([r, g, b]) => { const f = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+  const fondo = el => { const capas = []; for (let x = el; x; x = x.parentElement) { const v = nums(getComputedStyle(x).backgroundColor); if (v.length === 3 || (v.length === 4 && v[3] >= 0.999)) { capas.push([v[0], v[1], v[2], 1]); break; } if (v.length === 4 && v[3] > 0) capas.push(v); }
+    let c = [255, 255, 255]; for (let i = capas.length - 1; i >= 0; i--) { const [r, g, b, a] = capas[i]; c = [r * a + c[0] * (1 - a), g * a + c[1] * (1 - a), b * a + c[2] * (1 - a)]; } return c; };
+  const malos = [];
+  for (const el of document.querySelectorAll(s + " *")) {
+    const t = [...el.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join("").trim(); if (!t || !el.getClientRects().length) continue;
+    const cs = getComputedStyle(el), a = lum(nums(cs.color)), b = lum(fondo(el)), k = (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+    if (k < 4.5 || parseFloat(cs.fontSize) < 10) malos.push(t.slice(0, 24) + " " + k.toFixed(1));
+  }
+  return malos;
+}, sel);
+await caso("pln-93-la-ficha-de-la-pm74", "", async p => {
+  await clicEn(p, "m-2");
+  const f = await ficha(p);
+  ok("pln-93-la-ficha-de-la-pm74", /Ficha de la máquina/.test(f) && /Heidelberger/.test(f) && /PM741523/.test(f) && /2007/.test(f), `al tocar la PM-74, su ficha: «${f.slice(0, 160) || "no hay"}»`);
+});
+await caso("pln-94-sin-ficha-se-agrega", "", async p => {
+  await clicEn(p, "m-7");
+  const antes = await ficha(p);
+  const b = p.locator("[data-plano-ficha-editar]"); const hay = await b.count();
+  if (hay) { await b.click(); await dialogo(p).waitFor({ timeout: 3000 }); await p.fill("input[name=ficha-fabricante]", "Horizon"); await p.fill("input[name=ficha-modelo]", "BQ-4GO"); await p.click("[data-plano-ficha-guardar]"); await espera(p, 400); }
+  const despues = await ficha(p), alta = (await lineas(p, "fichas insert m-7")).length, aviso = (await lineas(p, "toast:info:Se guardó la ficha")).length;
+  ok("pln-94-sin-ficha-se-agrega", /Sin ficha todavía/.test(antes) && hay === 1 && alta === 1 && /Horizon/.test(despues) && /BQ-4GO/.test(despues) && aviso === 1,
+    `la Pegadora: «${antes.slice(0, 90)}»; ${hay ? "«Agregar ficha» se guarda: " + (alta ? "sí" : "NO") + "; después: «" + despues.slice(0, 90) + "»" : "NO hay con qué agregarla"}`);
+});
+await caso("pln-95-editar-guarda-con-su-revision", "", async p => {
+  await abrirLaFicha(p, "m-6");
+  await p.fill("input[name=ficha-anio]", "2003 (placa)"); await p.click("[data-plano-ficha-guardar]"); await espera(p, 400);
+  const up = await lineas(p, "fichas update"), f = await ficha(p), t = await p.evaluate(() => window.__fichas().find(x => x.pieza === "m-6"));
+  ok("pln-95-editar-guarda-con-su-revision", up.length === 1 && /pieza=m-6&revision=2/.test(up[0]) && /2003 \(placa\)/.test(f) && t.revision === 3 && (await dialogo(p).count()) === 0,
+    `editar la Guillotina 115: «${up[0] || "no se guardó"}»; en el panel: «${(f.match(/Año.{0,30}/) || [""])[0]}»; revisión ${t.revision}`);
+});
+await caso("pln-96-otra-persona-la-cambio", "", async p => {
+  await abrirLaFicha(p, "m-6");
+  await p.fill("textarea[name=ficha-notas]", "Cuchilla nueva en septiembre");
+  await p.evaluate(() => window.__otraFicha("m-6"));
+  await p.click("[data-plano-ficha-guardar]"); await espera(p, 500);
+  const v = await textoDialogo(p), t1 = await p.evaluate(() => window.__fichas().find(x => x.pieza === "m-6").notas);
+  const encima = p.getByRole("button", { name: /Guardar la mía encima/ }); const hay = await encima.count();
+  if (hay) { await encima.click(); await espera(p, 500); }
+  const t2 = await p.evaluate(() => window.__fichas().find(x => x.pieza === "m-6"));
+  ok("pln-96-otra-persona-la-cambio", /Marcelo/.test(v) && /mientras escribías/.test(v) && t1 === "La cambió Marcelo" && hay === 1 && t2.notas === "Cuchilla nueva en septiembre",
+    `Marcelo la cambió mientras Gerardo escribía: la ventana «${v.slice(0, 140)}»; lo de Marcelo ${t1 === "La cambió Marcelo" ? "no se pisó" : "SE PISÓ"}; «Guardar la mía encima» ${hay ? "guarda: «" + t2.notas + "»" : "NO SALE"}`);
+});
+await caso("pln-97-sin-la-tabla-el-plano-sigue", "modo=fichassintabla", async p => {
+  await clicEn(p, "m-2");
+  const f = await ficha(p), editar = await p.locator("[data-plano-ficha-editar]").count(), nombre = await elegida(p);
+  ok("pln-97-sin-la-tabla-el-plano-sigue", /todavía no están en la base/.test(f) && editar === 0 && nombre === "PM-74", `sin la tabla: la ficha «${f.slice(0, 100) || "no hay sección"}»; «Editar» ${editar}; la pieza elegida «${nombre}»`);
+});
+await caso("pln-98-la-lectura-falla-no-es-sin-ficha", "modo=fichasfalla1", async p => {
+  await clicEn(p, "m-2");
+  const antes = await ficha(p);
+  const re = p.locator("[data-plano-ficha]").getByRole("button", { name: /Reintentar/ }); const hay = await re.count();
+  if (hay) { await re.click(); await espera(p, 400); }
+  const despues = await ficha(p);
+  ok("pln-98-la-lectura-falla-no-es-sin-ficha", /No se pudo leer la ficha/.test(antes) && !/Sin ficha todavía/.test(antes) && hay === 1 && /Heidelberger/.test(despues),
+    `la primera lectura de las fichas falló: «${antes.slice(0, 100)}»; ${hay ? "«Reintentar» trae: «" + despues.slice(0, 70) + "»" : "SIN «Reintentar»"}`);
+});
+await caso("pln-99-esc-con-algo-escrito-no-cierra", "", async p => {
+  await abrirLaFicha(p, "m-2");
+  await p.fill("input[name=ficha-modelo]", "PM 74-4-P, la buena"); await p.keyboard.press("Escape"); await espera(p);
+  const sigue = await dialogo(p).count();
+  await p.getByRole("button", { name: /^Cancelar$/ }).click(); await espera(p);
+  const cerro = (await dialogo(p).count()) === 0, nada = (await lineas(p, "fichas update")).length === 0;
+  ok("pln-99-esc-con-algo-escrito-no-cierra", sigue === 1 && cerro && nada, `con algo escrito, Esc: la ventana ${sigue ? "sigue" : "SE CERRÓ (se perdió lo escrito)"}; «Cancelar» ${cerro ? "la cierra" : "no la cierra"} sin guardar (${nada ? "nada" : "SE GUARDÓ"})`);
+});
+await caso("pln-100-r-en-la-ventana-no-gira", "", async p => {
+  await abrirLaFicha(p, "m-2");
+  const antes = await pieza(p, "m-2");
+  await p.getByRole("button", { name: /^Cancelar$/ }).focus(); await p.keyboard.press("r"); await p.keyboard.press("Delete"); await espera(p);
+  const despues = await pieza(p, "m-2");
+  ok("pln-100-r-en-la-ventana-no-gira", !!despues && Math.round(antes.w) === Math.round(despues.w) && Math.round(antes.h) === Math.round(despues.h),
+    `con la ficha abierta, R y Supr: la PM-74 ${!despues ? "SE QUITÓ" : Math.round(antes.w) === Math.round(despues.w) ? "se queda igual" : "SE GIRÓ"}`);
+});
+await caso("pln-101-lo-largo-se-dice-y-no-se-manda", "", async p => {
+  await elegirEnLista(p, "Dobladora"); await p.click("[data-plano-ficha-editar]"); await dialogo(p).waitFor({ timeout: 3000 });
+  await p.fill("textarea[name=ficha-notas]", "x".repeat(2001)); await p.click("[data-plano-ficha-guardar]"); await espera(p, 300);
+  const v = await textoDialogo(p), mandado = (await lineas(p, "fichas update")).length;
+  ok("pln-101-lo-largo-se-dice-y-no-se-manda", /Notas: de más de 2,000 letras \(lleva 2,001\)/.test(v) && mandado === 0, `notas de 2,001 letras: «${(v.match(/Notas: de más[^.]*\./) || ["no dice nada"])[0]}»; a la base ${mandado ? "SE MANDÓ" : "no se mandó"}`);
+});
+await caso("pln-102-el-tab-no-se-sale", "", async p => {
+  await abrirLaFicha(p, "m-2");
+  const fuera = [];
+  for (let i = 0; i < 14; i++) { await p.keyboard.press("Tab"); if (!(await p.evaluate(() => !!document.activeElement?.closest("[role=dialog]")))) fuera.push(i); }
+  const llegoAlLargo = await p.evaluate(() => { const d = document.querySelector("[role=dialog]"); return [...d.querySelectorAll("textarea")].length; });
+  ok("pln-102-el-tab-no-se-sale", fuera.length === 0 && llegoAlLargo === 2, `14 Tab en la ficha: ${fuera.length ? "el foco se SALE en " + fuera.join(",") : "se queda adentro"}; cuadros largos: ${llegoAlLargo}`);
+});
+await caso("pln-103-sin-permiso-lo-dice", "modo=fichasinpermiso", async p => {
+  await abrirLaFicha(p, "m-2");
+  await p.fill("input[name=ficha-anio]", "2007 (placa)"); await p.click("[data-plano-ficha-guardar]"); await espera(p, 400);
+  const v = await textoDialogo(p);
+  ok("pln-103-sin-permiso-lo-dice", /No se guardó/.test(v) && /permiso/.test(v) && (await dialogo(p).count()) === 1, `sin permiso: «${(v.match(/No se guardó[^.]*\./) || ["no lo dice"])[0]}»; la ventana ${(await dialogo(p).count()) ? "sigue con lo escrito" : "SE CERRÓ"}`);
+});
+await caso("pln-104-dos-la-dan-de-alta-a-la-vez", "", async p => {
+  await abrirLaFicha(p, "m-9");
+  await p.fill("input[name=ficha-fabricante]", "La de Gerardo");
+  await p.evaluate(() => window.__otraFichaNueva("m-9"));
+  await p.click("[data-plano-ficha-guardar]"); await espera(p, 500);
+  const v = await textoDialogo(p);
+  const encima = p.getByRole("button", { name: /Guardar la mía encima/ }); const hay = await encima.count();
+  if (hay) { await encima.click(); await espera(p, 500); }
+  const t = await p.evaluate(() => window.__fichas().filter(x => x.pieza === "m-9"));
+  ok("pln-104-dos-la-dan-de-alta-a-la-vez", /Marcelo/.test(v) && hay === 1 && t.length === 1 && t[0].fabricante === "La de Gerardo" && t[0].revision === 2,
+    `Marcelo dio de alta la Cilíndrica mientras Gerardo escribía: «${v.slice(0, 120)}»; ${hay ? "«Guardar la mía encima»: " + JSON.stringify(t.map(x => [x.fabricante, x.revision])) : "NO SALE «Guardar la mía encima»"}`);
+});
+for (const [vp, nombre] of [[V1366, "pln-105-la-ficha-cabe-y-se-lee-1366"], [V1920, "pln-105b-la-ficha-cabe-y-se-lee-1920"]]) {
+  await caso(nombre, "", async p => {
+    await elegirEnLista(p, "Dobladora");
+    const m = await p.evaluate(() => ({ scroll: document.documentElement.scrollWidth - innerWidth, panel: !!document.querySelector("[data-plano-ficha]") }));
+    const malos = m.panel ? await sinAAEn(p, "[data-plano-ficha]") : ["no hay ficha"];
+    ok(nombre, m.panel && m.scroll <= 0 && malos.length === 0, `a ${vp.width}: la ficha de la Dobladora ${m.panel ? "sale" : "NO SALE"}; scroll horizontal ${m.scroll}; ${malos.length ? "sin AA: " + malos.slice(0, 5).join(" | ") : "todo con AA"}`);
+  }, { viewport: vp });
+}
+
 await browser.close();
 for (const r of res) console.log(r);
 const fallan = res.filter(r => r.startsWith("FALLA")).length;

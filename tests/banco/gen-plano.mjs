@@ -14,6 +14,10 @@
 //   modo= (con comas) sintabla · listafalla (leer la lista falla siempre) · listafalla1 (sólo la primera vez) · abrirfalla · guardafalla ·
 //     insertfalla · sinpermiso (escribir: 42501) · lento (todo tarda) · guardalento (guardar tarda) · borrarfalla · restaurarfalla ·
 //     jwt (escribir: la sesión vencida, PGRST301)
+//   v10.84.139 — las fichas de las máquinas (la tabla maquinas_fichas, con sus reglas: el autor y la hora los pone «la base», `revision` sube, la pieza es
+//   la llave): fichas=0 (vacía) o, por omisión, tres (la PM-74, la Guillotina 115 —revisión 2, de gerardo— y la Dobladora, con algo por confirmar) ·
+//   modo= fichassintabla · fichasfalla (leer falla siempre) · fichasfalla1 (sólo la primera vez) · fichaguardafalla · fichasinpermiso
+//   window.__otraFicha(pieza): Marcelo la cambia en otra computadora · __otraFichaNueva(pieza): Marcelo la da de alta · __fichas(): las filas
 // window.__otroGuarda(id) / __otroBorra(id): Marcelo guarda o borra esa versión en otra computadora (sube su revisión) ·
 // window.__tabla() las filas · window.__ir(vista) un clic en el menú lateral (el navClick de App) · window.__hoja el HTML de la última hoja
 //   que se mandó a imprimir.
@@ -122,8 +126,52 @@ const sinRed = { message: "TypeError: Failed to fetch" };
 const sinPermiso = { code: "42501", message: 'new row violates row-level security policy for table "plano_versiones"' };
 const proyectar = (f, cols) => { if (!cols || cols === "*") return { ...f }; const o = {}; for (const c of cols.split(",").map(x => x.trim())) o[c] = f[c] === undefined ? null : JSON.parse(JSON.stringify(f[c])); return o; };
 const vivas = () => TABLA.filter(f => !f.borrado_en);
+// ── v10.84.139 — la tabla maquinas_fichas, simulada ──
+const CAMPOS_FICHA = { fabricante: 200, modelo: 200, numero: 120, anio: 120, conexion: 300, notas: 2000, por_confirmar: 1000 };
+const fichaDe = (pieza, x) => ({ pieza, fabricante: null, modelo: null, numero: null, anio: null, conexion: null, notas: null, por_confirmar: null, revision: 1, actualizado_por: null, actualizado_en: iso(600), ...x });
+let FICHAS_T = Q.get("fichas") === "0" ? [] : [
+  fichaDe("m-2", { fabricante: "Heidelberger Druckmaschinen AG", modelo: "PM 74-4-P (Printmaster 74, 4 colores con volteo)", numero: "PM741523", anio: "2007", notas: "Placa 10.107.4102. La «P» es de volteo." }),
+  fichaDe("m-6", { fabricante: "Adolf Mohr Maschinenfabrik (Polar-Mohr)", modelo: "POLAR 115 E", numero: "7381665", anio: "2003", conexion: "trifásica, 220 V, 60 Hz, 18.7 A", revision: 2, actualizado_por: "gerardo", actualizado_en: iso(90) }),
+  fichaDe("m-4", { fabricante: "Baumfolder Corp., Sidney, Ohio (EUA)", modelo: "Model No. 51214… · serie L-26B", por_confirmar: "El último dígito del modelo no se lee." }),
+];
+let lecturasFichas = 0;
+const largoDeMas = v => Object.entries(CAMPOS_FICHA).some(([k, m]) => v[k] != null && String(v[k]).length > m);
+function fichasEjecutar(q) {
+  if (M.has("fichassintabla")) return { data: null, error: { code: "PGRST205", message: "Could not find the table 'public.maquinas_fichas' in the schema cache" } };
+  const filas = FICHAS_T.filter(f => q.filtros.every(fn => fn(f)));
+  const sinPermisoF = { code: "42501", message: 'new row violates row-level security policy for table "maquinas_fichas"' };
+  if (q.op === "select") {
+    if (!q.uno) { lecturasFichas++; anotar("fichas select"); if (M.has("fichasfalla") || (M.has("fichasfalla1") && lecturasFichas === 1)) return { data: null, error: sinRed };
+      return { data: (q.lim ? filas.slice(0, q.lim) : filas).map(f => proyectar(f, q.cols)), error: null }; }
+    anotar("fichas select una " + q.desc.join("&"));
+    return { data: filas[0] ? proyectar(filas[0], q.cols) : null, error: null };
+  }
+  if (q.op === "insert") {
+    const v = q.valores; anotar("fichas insert " + v.pieza);
+    if (M.has("fichaguardafalla")) return { data: null, error: sinRed };
+    if (M.has("fichasinpermiso")) return { data: null, error: sinPermisoF };
+    if (FICHAS_T.some(f => f.pieza === v.pieza)) return { data: null, error: { code: "23505", message: 'duplicate key value violates unique constraint "maquinas_fichas_pkey"' } };
+    if (largoDeMas(v)) return { data: null, error: { code: "23514", message: 'new row for relation "maquinas_fichas" violates check constraint "maquinas_fichas_textos"' } };
+    const f = fichaDe(v.pieza, { ...Object.fromEntries(Object.keys(CAMPOS_FICHA).map(k => [k, v[k] ?? null])), revision: 1, actualizado_por: LOGIN, actualizado_en: new Date().toISOString() });
+    FICHAS_T.push(f);
+    return { data: [proyectar(f, q.cols)], error: null };
+  }
+  if (q.op === "update") {
+    const v = q.valores; anotar("fichas update " + q.desc.join("&") + " " + Object.keys(v).join(","));
+    if (M.has("fichaguardafalla")) return { data: null, error: sinRed };
+    if (M.has("fichasinpermiso")) return { data: null, error: sinPermisoF };
+    if (largoDeMas(v)) return { data: null, error: { code: "23514", message: 'new row for relation "maquinas_fichas" violates check constraint "maquinas_fichas_textos"' } };
+    for (const f of filas) { for (const k of Object.keys(CAMPOS_FICHA)) if (k in v) f[k] = v[k]; f.revision += 1; f.actualizado_por = LOGIN; f.actualizado_en = new Date().toISOString(); }
+    return { data: q.devolver ? filas.map(f => proyectar(f, q.cols)) : null, error: null };
+  }
+  return { data: null, error: { message: "operación desconocida" } };
+}
+window.__fichas = () => JSON.parse(JSON.stringify(FICHAS_T));
+window.__otraFicha = pieza => { const f = FICHAS_T.find(x => x.pieza === pieza); if (!f) return; f.notas = "La cambió Marcelo"; f.revision += 1; f.actualizado_por = "marcelo"; f.actualizado_en = new Date().toISOString(); anotar("otra ficha " + pieza); };
+window.__otraFichaNueva = pieza => { FICHAS_T.push(fichaDe(pieza, { fabricante: "La de Marcelo", revision: 1, actualizado_por: "marcelo", actualizado_en: new Date().toISOString() })); anotar("otra ficha nueva " + pieza); };
 async function ejecutar(t, q) {
   await dormir(M.has("lento") || (q.op !== "select" && M.has("guardalento")) ? LENTO_MS : 60);
+  if (t === "maquinas_fichas") return fichasEjecutar(q);
   if (t !== "plano_versiones") return { data: null, error: { code: "PGRST205", message: "Could not find the table 'public." + t + "'" } };
   if (M.has("sintabla")) return { data: null, error: sinTablaE };
   if (M.has("jwt") && q.op !== "select") return { data: null, error: { code: "PGRST301", message: "JWT expired" } };
