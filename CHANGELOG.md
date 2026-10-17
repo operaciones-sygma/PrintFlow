@@ -12,6 +12,90 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.139 — «Planta»: cada máquina con su ficha (lo de su placa) — 16-oct-2026
+
+**Qué pasaba.** La decisión 8 de Marcelo del 16-oct: «el registro de maquinaria en Planta (tabla nueva, por el editor)». Las placas de las máquinas (las
+fotos de esa tarde) están leídas en `Documents\SYGMA-maquinaria\REGISTRO.md`, pero en la app no había dónde verlas: para pedir una refacción o un avalúo lo
+primero que piden es el modelo y el número exactos.
+
+**Qué se cambió:**
+- La base (para el editor de Supabase, ensayada; `docs/migrations/v10.84.139_maquinas_fichas.sql`): `public.maquinas_fichas`, una ficha por pieza del plano
+  (fabricante, modelo, número de máquina o de serie, año, conexión, notas y lo que hay que confirmar en la máquina). Como `plano_versiones`: sólo
+  Producción y Dirección la ven y la escriben; la base pone quién y cuándo; `revision` evita guardar encima de lo de otro; sin DELETE. Trae las 7 que ya se
+  leyeron (las dos GTO, la PM-74, las dos Polar, el tren y la Baumfolder); aplicarla otra vez no pisa lo que se haya corregido.
+- «Planta» (`src/plano/PlanoPlanta.jsx`): al tocar una máquina, el panel dice su ficha («Ficha de la máquina»: fabricante, modelo, N.º, año, conexión,
+  notas, por confirmar en ámbar, quién la actualizó); «Editar» o «Agregar ficha» abre una ventana para escribirla. Si otra persona la guardó mientras se
+  escribía, no se pisa: dice quién y a qué hora, y ofrece «Guardar la mía encima». Lo de más largo que la base acepta se dice antes de mandarlo. Sin la
+  tabla, el plano sigue igual y la ficha dice que todavía no están en la base; una lectura que falla no es «sin ficha» («Reintentar»).
+
+**Cómo se probó.** La base, ensayada en PGlite (`ensayar-fichas.mjs` en el scratchpad de la sesión, como la de `plano_versiones`): la migración DOS veces con un cambio de Gerardo en medio (no lo pisa), y 31 pruebas por persona (quién ve y escribe, el disparador, la revisión, sin borrar, los largos, anon); 7 sabotajes (sin disparador, Karla entra, con DELETE, anon lee, sin revisión, pisa al reaplicar, sin el tope de las notas), todos cazados. La pantalla: la tanda `plano` con la tabla de fichas en su banco (pln-93 a 105b: la ficha de la PM-74, agregar la de la pegadora, editar con su revisión, otra persona la cambió, sin la tabla, la lectura que falla, Esc con algo escrito, R y Supr con la ventana abierta, lo largo, el Tab, sin permiso, dos la dan de alta a la vez, AA a 1366 y 1920). Vuelta 1 contra v10.84.138: fallaban las 14. Con el arreglo, 99 de 99; tres tocaban la Dobladora (una L) en el promedio de sus esquinas, que cae en el hueco, fuera de la pieza: ahora la eligen de la lista del panel.
+
+**Para Marcelo:** aplicar `docs/migrations/v10.84.139_maquinas_fichas.sql` en el editor SQL de Supabase (todo el archivo; trae su `begin` y su `commit`).
+Hasta entonces, «Planta» dice «Las fichas de las máquinas todavía no están en la base» y nada más cambia.
+
+**En producción:** (pendiente)
+
+## v10.84.138 — Corona: cada movimiento del historial dice su factura (y cómo va) y su orden, que se abre — 16-oct-2026
+
+**Qué pasaba.** La decisión 7 de Marcelo del 16-oct (de la 131): «el historial liga cada cargo con su factura y su orden». La base ya los mandaba
+(`load_credit_ledger`: `folio_fiscal`, `folio_status`, `source_order_id`), pero la ventana sólo enseñaba la referencia: casi siempre nombra la orden y el
+folio («Aplicación saldo SIN folio fiscal — orden P-0445 · subtotal $11381.9…»), pero no se abre, no dice si la factura del depósito ya se cobró, y 4 ajustes
+de una orden sólo decían «AJUSTE».
+
+**Qué se cambió** (`CoronaModal` y su montaje en App): cada movimiento dice «Factura F-82 · por cobrar» (pagada, pagada en parte, cancelada en rojo;
+`ESTADO_FACTURA_CORONA`) y «Orden P-0640», que abre la orden (cierra Corona y abre su detalle, como el Inventario abre una factura). App le pasa el P- de cada
+orden de las cargadas (`pnDeOrden`); una orden que no está entre las cargadas no se inventa. La otra mitad de la decisión, avisar a Tesorería un saldo
+negativo, es de CobranzaFlow: la toma con un disparador en `cobranza.client_credit_ledger` que avisa a Tesorería en su campana (pide el OK de Marcelo en su
+ventana). Medido a las 18:57: nunca ha habido un saldo de Corona en negativo; Modelo tiene $46,122.76.
+
+**Cómo se probó.** La tanda `corona` (21), montada ahora con la línea de App, con la factura, su estado y la orden en cada movimiento de su banco (y una orden que no está entre las cargadas, con su factura cancelada). Vuelta 1 contra v10.84.137: fallaban las 5 nuevas. Con el arreglo, 21 de 21.
+
+**En producción:** (pendiente)
+
+## v10.84.137 — La hoja impresa sale en dos hojas legibles cuando en una la letra quedaría de menos de 7 pt — 16-oct-2026
+
+**Qué pasaba.** La decisión 5 de Marcelo del 16-oct (de la 129: «una orden más larga que la de prueba: ¿una hoja aunque la letra se encoja, o dos hojas
+legibles?»): el ajuste a una hoja (`pfFit`, v10.71.5) encogía la hoja hasta que cupiera, sin piso: una orden con muchas notas, lugares y acabados salía en una
+hoja con la letra de menos de 7 pt.
+
+**Qué se cambió** (sólo la hoja de `PrintOrder`): primero ceden las fotos (como en la 129) y luego, si para caber en una hoja la letra más chica quedaría de
+menos de 7 pt (9.33 px), ya no se encoge: sale en dos hojas a su tamaño, con las fotos completas. La esquina de cada hoja dice de qué orden es («P-0658 ·
+v3»; Chrome repite lo fijo en cada hoja) y la barra de la ventana avisa «Sale en más de una hoja: engrápalas». La orden larga de la 129 (9.5 px) sigue en una.
+
+**Cómo se probó.** La tanda `hoja` (31) con un caso nuevo en su banco: «enorme» (P-0658: dos fotos, 14 renglones de notas, 10 lugares, 10 acabados); hoy salía en una hoja a zoom 0.722, la letra más chica de 7.2 px (5.4 pt). Vuelta 1 contra v10.84.136: fallaban 5 de las 7 nuevas (pasaban «la que cabe no avisa» y «la larga sigue en una»). Con el arreglo, 31 de 31: la enorme en 2 hojas a 10 px, la administrativa también, las fotos de 180 px, ajustar varias veces no repite el folio de la esquina, y sin registro de la versión la esquina dice las dos cosas.
+
+**En producción:** (pendiente)
+
+## v10.84.136 — «Datos Pendientes (N)» cuenta lo urgente, la planta sin dinero para Lupita y Karla, y la Torre recuerda la fecha sólo en la planta — 16-oct-2026
+
+**Qué pasaba.** Tres de las decisiones de Marcelo del 16-oct (las «Para Marcelo» de la 123 y la 126). «Datos Pendientes» no tenía número en el menú, y
+contarlo todo daba un número que nunca baja: de 37 órdenes activas sin fecha de entrega, 36 ya corrían en la planta (Marcelo: «muchas veces ni nos piden
+fecha de entrega, el cliente sólo da la orden… luego se da la fecha de entrega pero Lupita no la ingresa al sistema»; pedirla al capturar no sirve, y lo de
+tomarla de los chats con el CRM queda para después). En «Cómo va la planta», Lupita y Karla veían el dinero de Dirección («$1,980 atorados», el importe de
+cada estancada y de cada máquina). Y la Torre pedía la fecha también de lo que todavía está en diseño o por validar, cuando el cliente muchas veces aún no la da.
+
+**Qué se cambió:**
+- `datosUrgentes` (una sola cuenta para la vista y el menú): ÓRDENES con algo urgente, una vez aunque les falten dos cosas: sin precio, sin cantidad, maquila
+  sin proveedor o sin el costo del proveedor, y sin fecha de entrega sólo las que ya están por entregar (Empaque, Salidas, recibidas de maquila).
+- El menú de Lupita y Karla: «Datos Pendientes (N)»; sin una lectura buena, sin número. Medido en producción a las 18:50: daría **13** (1 sin precio y 12 por
+  entregar sin fecha), no 41.
+- La vista: arriba dice «N órdenes con algo urgente por capturar; lo demás puede esperar» (o «Nada urgente por capturar»). En «Datos incompletos», primero
+  lo urgente y abierto («Por entregar, sin fecha de entrega», sin cantidad, maquila sin proveedor o costo); las demás sin fecha van en «Sin fecha de entrega,
+  todavía en proceso», plegada, y no suman.
+- «Cómo va la planta» de Lupita y Karla sin dinero: ni «$ atorados» en la prioridad, ni el importe de cada estancada, ni el de cada máquina (sus máquinas van
+  por cuántas órdenes tienen). Dirección, igual que antes.
+- La Torre recuerda la fecha de entrega (`no_date`) sólo de lo que ya corre en la planta (`YA_EN_LA_PLANTA`: de CTP en adelante, también Salidas, y la maquila
+  ya enviada). Con los datos de hoy no cambia nada en la Torre: la única sin fecha antes de la planta, P-0651, sale por lo que de verdad la detiene (le falta
+  la validación de Gerardo).
+
+**Lo de los negativos del Inventario (la decisión 6) no hace falta:** la base ya no deja que un producto quede en negativo. Toda venta, venta en lote, carga
+desde una orden y ajuste pasa por `record_stock_movement`, que con un candado por producto frena con «stock insuficiente», y la app lo dice en palabras
+(«Stock insuficiente. Saldo actual: N pzas…»). Hoy no hay ninguno en negativo. Mi pregunta de la 130 partía de un supuesto que no revisé en la base.
+
+**Cómo se probó.** Vuelta 1 (escritas antes del arreglo) contra v10.84.135: en la tanda `salud` fallaban 10 (el dinero en «Cómo va la planta», cuántas son urgentes, lo urgente primero y lo demás plegado, y la vuelta 2: la maquila recibida sin fecha, la que Dirección dejó en espera, la que llega a Salidas con la vista abierta); en `torre`, 4 (lo de antes de la planta en su banco: P-0708 en diseño y P-0709 por enviar a maquila); en `sesion`, con la app entera, 3 (el menú de Lupita y Karla, y sin lectura sin número). Con el arreglo: `salud` 43 de 43, `torre` 18 de 18, las 14 del menú en `sesion`, y sin cambios `despertador` (32), `corregir` (52) y `hooks`. Dos pruebas se ajustaron: dp-08 (el teclado en los datos incompletos) apuntaba a P-0661, que con la decisión va en la lista plegada (ahora a P-0448); tr-10 subía tres niveles desde «Lupita» y leía toda la Torre (con las de antes de la planta en «Avanzando», su «Lupita 1» la confundía): ahora lee el semáforo nada más. El banco de la Torre: P-0704 a P-0706 pasan de diseño a Listas.
+
+**En producción:** (pendiente)
+
 ## v10.84.135 — Los avisos van juntos por orden — 16-oct-2026
 
 **Qué pasaba.** Decisión de Marcelo (16-oct, ~17:45, la 5 de las preguntas: «¿agrupar los avisos por orden?», de la 127): tres avisos de P-0611 eran tres
