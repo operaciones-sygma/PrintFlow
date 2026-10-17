@@ -1,7 +1,8 @@
 // Tratar de ROMPER la «Torre de Control» (con la que abre Dirección), su /impeccable critique del 16-oct. Cada caso afirma lo que DEBERÍA ver Marcelo:
 // una FALLA es un bug. Vuelta 1: escritas antes del arreglo. El reloj del navegador va fijo en el miércoles 14-oct-2026 a las 12:00 de México.
 // En el banco: 6 paradas de verdad (reimprimir, sin folio, vencida, 5 días sin avanzar, por validar, el cliente no aprueba; $21,000) y 7 con datos por
-// capturar (6 sin fecha de entrega —3 en rojo por la regla— y 1 sin precio; $34,500), 3 sanas y 1 en espera.
+// capturar (6 sin fecha de entrega —3 en rojo por la regla— y 1 sin precio; $34,500), 3 sanas y 1 en espera. Y desde v10.84.136, 2 sin fecha ANTES de la
+// planta (en diseño y la maquila por enviar), que la Torre ya no recuerda (la decisión de Marcelo del 16-oct).
 // Uso: node torre.mjs <dir-capturas> [puerto=5181]   ·   SOLO=<regex> corre sólo los casos que coinciden
 import { chromium } from "playwright";
 import { deFuera } from "../consola.mjs";
@@ -110,7 +111,7 @@ await caso("tr-09-los-datos-por-capturar-con-sus-acciones", "", async p => {
   ok("tr-09-los-datos-por-capturar-con-sus-acciones", hay > 0 && estan && resolver >= 7, `${hay ? "«datos por capturar» se abre" : "NO hay sección de datos por capturar"}; ${estan ? "salen P-0701, P-0704 y P-0707" : "no salen"}; «Resolver» ${resolver}`);
 });
 await caso("tr-10-lupita-sin-paradas-en-verde", "", async p => {
-  const chip = await p.evaluate(() => { const el = [...document.querySelectorAll("#root *")].find(e => [...e.childNodes].some(n => n.nodeType === 3 && n.textContent.trim() === "Lupita")); let x = el; for (let i = 0; i < 3 && x; i++) x = x.parentElement; return x ? x.innerText.replace(/\s+/g, " ") : ""; });
+  const chip = await p.evaluate(() => { const el = [...document.querySelectorAll("#root *")].find(e => [...e.childNodes].some(n => n.nodeType === 3 && n.textContent.trim() === "Lupita")); const x = el && el.parentElement; return x ? x.innerText.replace(/\s+/g, " ") : ""; });   // (v10.84.136: subía 3 niveles y leía TODA la Torre; con las de antes de la planta en «Avanzando», su «Lupita 1» la confundía: ahora el semáforo nada más)
   ok("tr-10-lupita-sin-paradas-en-verde", !/Lupita\s*\d/.test(chip), `el semáforo de Lupita: «${chip.slice(0, 40)}» (no tiene trabajo parado: sus 6 son datos por capturar)`);
 });
 for (const ancho of [1366, 1920]) {
@@ -146,6 +147,16 @@ await caso("tr-16-los-datos-con-el-teclado", "", async p => {
   if (llego) { await p.keyboard.press("Enter"); await espera(p); }
   const abierto = await p.getByRole("button", { name: /datos por capturar/i }).first().getAttribute("aria-expanded").catch(() => null);
   ok("tr-16-los-datos-con-el-teclado", llego && abierto === "true", `con Tab ${llego ? "se llega a «datos por capturar»" : "NO se llega"}; Enter: aria-expanded ${abierto}`);
+});
+
+// ── vuelta 3 (v10.84.136): la decisión de Marcelo del 16-oct, la fecha se recuerda sólo de lo que ya corre en la planta ──
+await caso("tr-17-sin-fecha-antes-de-la-planta-no-se-recuerda", "", async p => {
+  const abre = p.getByRole("button", { name: /datos por capturar/i });
+  if (await abre.count()) { await abre.first().click(); await espera(p); }
+  const t = await texto(p);
+  const antes = ["P-0708", "P-0709"].filter(x => t.includes(x)), enPlanta = ["P-0701", "P-0704"].filter(x => t.includes(x));
+  ok("tr-17-sin-fecha-antes-de-la-planta-no-se-recuerda", antes.length === 0 && enPlanta.length === 2,
+    `sin fecha: en diseño (P-0708) y la maquila por enviar (P-0709) ${antes.length ? "SALEN en la Torre: " + antes.join(", ") : "no salen"}; ya en la planta (P-0701 en maquila, P-0704 en Listas) ${enPlanta.length === 2 ? "sí salen" : "NO salen todas: " + enPlanta.join(", ")}`);
 });
 
 await browser.close();

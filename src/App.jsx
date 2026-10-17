@@ -2787,6 +2787,22 @@ function getIncompleteData(orders) {
   };
 }
 
+// v10.84.136 — lo URGENTE de «Datos Pendientes» (decisión de Marcelo del 16-oct: «Datos Pendientes (N)» con su número en el menú). Cuenta ÓRDENES (una
+//   vez aunque le falten dos cosas): sin precio, sin cantidad, maquila sin proveedor o sin el costo del proveedor, y sin fecha de entrega SÓLO las que ya
+//   están por entregar (Empaque, Salidas, recibidas de maquila). Las demás sin fecha se quedan en la lista sin sumar: el 16-oct, 36 de las 37 sin fecha
+//   ya corrían en la planta (Marcelo: «muchas veces ni nos piden fecha de entrega, el cliente sólo da la orden»; se acuerda después por chat y no
+//   siempre se captura), y contarlas era un número que nunca baja. La vista y el menú cuentan con ésta: dicen lo mismo.
+const POR_ENTREGAR = ["packaging", "salidas", "maq_received"];
+function datosUrgentes(orders) {
+  const inc = getIncompleteData(orders);
+  // (como la vista desde v10.58.24: las activas sin las que Dirección dejó en espera desde la Torre, de la más vieja a la más nueva)
+  const sinPrecio = orders.filter(o => !TERMINAL_STAGES.includes(o.stage) && !snoozeActive(o) && !((o.order_type === "maquila" ? Number(o.maq_price) : Number(o.price)) > 0))
+    .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+  const porEntregarSinFecha = inc.sinFecha.filter(o => POR_ENTREGAR.includes(o.stage));
+  const ids = new Set([...sinPrecio, ...inc.sinCantidad, ...inc.maquilaSinProveedor, ...inc.maquilaSinCosto, ...porEntregarSinFecha].map(o => o.id));
+  return { inc, sinPrecio, porEntregarSinFecha, n: ids.size };
+}
+
 function getOrphanOCs(purchaseOrders, orders) {
   if (!purchaseOrders || !Array.isArray(purchaseOrders)) return [];
   return purchaseOrders.filter(po =>
@@ -3351,6 +3367,9 @@ function daysInStage(o){
 //   (diagnoseOrder, el despertador y la torre; la ficha y el botón del detalle). La marca se queda como dato: la ventana de imprimir la dice.
 //   Entregada o cancelada, tampoco (como antes). Una sola regla para todos.
 const pideReimprimir = o => !!o?.needs_reprint && !/delivered|cancelled/.test(String(o?.stage||"")) && !["salidas","maq_received"].includes(o?.stage);
+// v10.84.136 — la Torre recuerda la fecha de entrega SÓLO de lo que ya corre en la planta (decisión de Marcelo del 16-oct): de CTP en adelante (también
+//   Salidas, que ya corrió) y la maquila ya enviada. Antes, en diseño o por validar, muchas veces el cliente todavía no la da («sólo da la orden»).
+const YA_EN_LA_PLANTA=["ctp","placas_listas","ready","in_production","maquila_out","maquila_in","packaging","salidas","maq_sent","maq_in_progress","maq_received"];
 function diagnoseOrder(o){
   const stage=String(o?.stage||"");
   if(!o||o.cancelled_at||stage.includes("cancelled")||stage.includes("delivered")||stage==="stocked"||["web_pending","web_rejected"].includes(stage)) return null;
@@ -3435,7 +3454,7 @@ function diagnoseOrder(o){
   // v10.58.63: datos faltantes (no bloqueantes de flujo) al final — después de vencida/estancada
   if(o.order_type!=="maquila"&&noPrice&&stage!=="salidas")
     return R("no_price","💰 Sin precio capturado","karla","Karla",{action:"edit"});
-  if(!o.due_date)
+  if(!o.due_date&&YA_EN_LA_PLANTA.includes(stage))   // v10.84.136 — sólo lo que ya corre en la planta
     // v10.70.2 (Marcelo): la fecha de entrega la compromete QUIEN VENDIÓ la orden. Si es de un
     // vendedor con usuario (agent, ej. Genaro) le toca a él, NO a Lupita. _maqRole/_maqName ya
     // resuelven vendedor-con-usuario↔Lupita desde o.agent; responsibleNotifyTarget rutea el
@@ -18186,13 +18205,10 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
 
   // v10.58.24: listado de órdenes sin precio para Karla/Lupita/admin.
   // hasPrice: precio o maq_price > 0.
-  const ordersWithoutPriceList = useMemo(
-    () => active.filter(o => {
-      const p = o.order_type === "maquila" ? Number(o.maq_price) : Number(o.price);
-      return !p || p <= 0;
-    }).sort((a,b) => new Date(a.created_at) - new Date(b.created_at)),
-    [active]
-  );
+  // v10.84.136 — lo urgente (sin precio, sin cantidad, maquila sin proveedor o costo, por entregar sin fecha) sale de `datosUrgentes`, la misma cuenta del
+  //   número del menú: la vista y el menú dicen lo mismo
+  const urgentes = useMemo(() => datosUrgentes(orders), [orders]);
+  const ordersWithoutPriceList = urgentes.sinPrecio;
 
   const orderMoney = (o) => o.order_type === "maquila" ? Number(o.maq_price) || 0 : Number(o.price) || 0;
   // v10.28.1 — slice(0,10) tolera due_date con timestamp legacy (e.g. "2026-05-17T00:00:00Z")
@@ -18238,7 +18254,7 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
     };
   }, [active, maintKey]);// v10.73.85 (ultracode) — maintKey en deps, igual que topPriority: recomputar getStale al caer/reparar máquina
 
-  const incomplete = useMemo(() => getIncompleteData(orders), [orders]);
+  const incomplete = urgentes.inc;
 
   const machineStatus = useMemo(() => {
     const inMaintenance = (maintenance || []).filter(m => !m.ended_at);
@@ -18348,6 +18364,8 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
   //   conserva su orden. Sin una lectura buena no dice que todo está bien (la regla 12). Las órdenes de las listas son botones (con el teclado),
   //   «Ver las N» en vez de un «+ N más» sin salida, todo con AA (las tintas de la app), «Sin precio» una sola vez y las palabras en español.
   const esDireccion = role === "admin";
+  // v10.84.136 — «Cómo va la planta» de Lupita y Karla, SIN el dinero (decisión de Marcelo del 16-oct): ni «$ atorados» en la prioridad, ni el importe de
+  //   cada estancada, ni el de cada máquina (eso es la supervisión de Dirección); sus máquinas van por cuántas órdenes tienen
   // días de calendario desde la fecha de entrega, como «Entregas» («Retrasada N d»)
   const diasVencida = o => { const [y, m, d] = String(o.due_date).slice(0, 10).split("-").map(Number); const hoy = new Date(); hoy.setHours(0, 0, 0, 0); return Math.round((hoy - new Date(y, m - 1, d)) / 86400000); };
   const haceDias = f => { const n = Math.floor((Date.now() - new Date(f).getTime()) / 86400000); return n <= 0 ? "hoy" : n === 1 ? "hace 1 día" : "hace " + n + " días"; };
@@ -18381,7 +18399,7 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
           {t.production_number || "—"} · {(t.client || "—").trim()}
         </div>
         <div style={{ fontSize: 12, color: C.t2, marginBottom: 12 }}>
-          {orderMoney(t) > 0 && <>${orderMoney(t).toLocaleString("es-MX", { maximumFractionDigits: 0 })} atorados · </>}
+          {esDireccion && orderMoney(t) > 0 && <>${orderMoney(t).toLocaleString("es-MX", { maximumFractionDigits: 0 })} atorados · </>}
           {venc && <span style={{ color: C.dnInk, fontWeight: 600 }}>Vencida hace {dias} {dias === 1 ? "día" : "días"} · </span>}
           {urg && <span style={{ color: C.wnInk, fontWeight: 600 }}>Urgente · </span>}
           <StageLbl stage={t.stage} size={10}/> · {resp?.name || "—"}
@@ -18507,7 +18525,7 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
             <span style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
               {isVencida(o) && <span style={{ fontSize: 10, color: C.dnInk, fontWeight: 700, padding: "2px 6px", background: C.dn + "10", borderRadius: 4 }}>Vencida</span>}
               {isUrgente(o) && <span style={{ fontSize: 10, color: C.wnInk, fontWeight: 700, padding: "2px 6px", background: C.amb + "10", borderRadius: 4 }}>Urgente</span>}
-              {orderMoney(o) > 0 && <span style={{ fontSize: 10, color: C.t2 }}>${orderMoney(o).toLocaleString("es-MX", { maximumFractionDigits: 0 })}</span>}
+              {esDireccion && orderMoney(o) > 0 && <span style={{ fontSize: 10, color: C.t2 }}>${orderMoney(o).toLocaleString("es-MX", { maximumFractionDigits: 0 })}</span>}
             </span>
           </button>
         ))}
@@ -18522,14 +18540,17 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
   );
 
   // SECCIÓN 4: los datos incompletos (sin «Sin precio»: tiene su sección arriba). El tono: alta (rojo), media (ámbar), baja (sin color).
+  // v10.84.136 — primero lo URGENTE, abierto (lo que suma en el número del menú): por entregar sin fecha, sin cantidad, la maquila sin proveedor o sin su
+  //   costo. Las demás sin fecha (todavía en proceso: la fecha se acuerda después) van plegadas y no suman.
   const TONO = { alta: { tinta: C.dnInk, punto: C.dn, fondo: C.dn + "08" }, media: { tinta: C.wnInk, punto: C.amb, fondo: C.amb + "08" }, baja: { tinta: C.t2, punto: C.t3, fondo: "transparent" } };
   const incompletas = [
-    { key: "vencidas", label: "Vencidas", tono: "alta", list: incomplete.vencidas, alwaysExpanded: true },
-    { key: "sinFecha", label: "Sin fecha de entrega", tono: "alta", list: incomplete.sinFecha, alwaysExpanded: true },
+    { key: "porEntregarSinFecha", label: "Por entregar, sin fecha de entrega", tono: "alta", list: urgentes.porEntregarSinFecha, alwaysExpanded: true },
     { key: "sinCantidad", label: "Sin cantidad", tono: "media", list: incomplete.sinCantidad, alwaysExpanded: true },
-    { key: "sinArchivoStageAvanzado", label: "Sin archivo en etapa avanzada", tono: "media", list: incomplete.sinArchivoStageAvanzado, alwaysExpanded: false },
     { key: "maquilaSinProveedor", label: "Maquila sin proveedor", tono: "alta", list: incomplete.maquilaSinProveedor, alwaysExpanded: true },
     { key: "maquilaSinCosto", label: "Maquila sin el costo del proveedor", tono: "alta", list: incomplete.maquilaSinCosto, alwaysExpanded: true },
+    { key: "vencidas", label: "Vencidas", tono: "alta", list: incomplete.vencidas, alwaysExpanded: true },
+    { key: "sinFecha", label: "Sin fecha de entrega, todavía en proceso", tono: "media", list: incomplete.sinFecha.filter(o => !POR_ENTREGAR.includes(o.stage)), alwaysExpanded: false },
+    { key: "sinArchivoStageAvanzado", label: "Sin archivo en etapa avanzada", tono: "media", list: incomplete.sinArchivoStageAvanzado, alwaysExpanded: false },
     { key: "sinAgente", label: "Sin vendedor asignado", tono: "baja", list: incomplete.sinAgente, alwaysExpanded: false },
     { key: "sinTelefono", label: "Sin teléfono del cliente", tono: "baja", list: incomplete.sinTelefono, alwaysExpanded: false },
     { key: "sinEmail", label: "Sin correo del cliente", tono: "baja", list: incomplete.sinEmail, alwaysExpanded: false }
@@ -18578,6 +18599,7 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
   );
 
   // SECCIÓN 5: las máquinas
+  const maquinasConCarga = esDireccion ? machineStatus.activeMachines : [...machineStatus.activeMachines].sort((a, b) => b.orders.length - a.orders.length);
   const secMaquinas = (
     <>
       <h3 style={titulo}><FactoryIcon size={16} weight="bold"/>Estado de las máquinas</h3>
@@ -18609,12 +18631,12 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
             <div style={{ fontSize: 11, fontWeight: 600, color: C.t2, marginTop: 12, marginBottom: 6, textTransform: "uppercase" }}>
               Máquinas con carga activa
             </div>
-            {machineStatus.activeMachines.map(m => {
+            {maquinasConCarga.map(m => {
               const machineName = MACHINES.find(x => x.id === m.id)?.name || m.id;
               return (
                 <div key={m.id} style={{ fontSize: 11, padding: "4px 0", display: "flex", justifyContent: "space-between", color: C.tx }}>
                   <span>{machineName} · {m.orders.length === 1 ? "1 orden" : m.orders.length + " órdenes"}</span>
-                  <span style={{ fontWeight: 600, color: C.tx }}>${m.money.toLocaleString("es-MX", { maximumFractionDigits: 0 })}</span>
+                  {esDireccion && <span style={{ fontWeight: 600, color: C.tx }}>${m.money.toLocaleString("es-MX", { maximumFractionDigits: 0 })}</span>}
                 </div>
               );
             })}
@@ -18675,7 +18697,10 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
             {esDireccion ? <><HeartbeatIcon size={22} weight="bold"/>Salud Operativa</> : <><NotePencilIcon size={22} weight="bold"/>Datos Pendientes</>}
           </h2>
           <p style={{ fontSize: 12, color: C.t2, margin: 0 }}>
-            {esDireccion ? "Supervisión diaria del taller." : "Lo que les falta capturar a las órdenes activas. Abajo, cómo va la planta."}
+            {/* v10.84.136 — a Lupita y Karla, cuántas tienen algo URGENTE (el número del menú); sin una lectura buena, sin número */}
+            {esDireccion ? "Supervisión diaria del taller." : !leido ? "Lo que les falta capturar a las órdenes activas. Abajo, cómo va la planta."
+              : (urgentes.n === 0 ? "Nada urgente por capturar" : (urgentes.n === 1 ? "1 orden con algo urgente por capturar" : urgentes.n + " órdenes con algo urgente por capturar") + "; lo demás puede esperar")
+                + ". Abajo, cómo va la planta."}
           </p>
         </div>
         {esDireccion && (
@@ -21768,6 +21793,8 @@ export default function PrintFlow() {
   },[user]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const torreCount=useMemo(()=>user==="admin"?orders.reduce((n,o)=>{const dg=diagnoseOrder(o);return n+(dg&&!dg.snoozed?1:0)},0):0,[user,orders,dayTick,maintKey]);// v10.73.84 (memos-invisible) — maintKey en deps: recomputa al caer/reparar una máquina
+  // v10.84.136 — «Datos Pendientes (N)» en el menú de Lupita y Karla: lo urgente (`datosUrgentes`, la misma cuenta que dice la vista)
+  const datosPendientesN=useMemo(()=>(user==="secretaria"||user==="karla")?datosUrgentes(orders).n:0,[user,orders]);
   const update=useCallback(async f=>{
     // Only update form-editable fields — never overwrite stage, validation, machine state
     // 🔒 v10.64.0 — NO re-agregar "production_number": el folio es inmutable (corte híbrido).
@@ -23658,7 +23685,8 @@ export default function PrintFlow() {
   if(user==="admin")navs.unshift({id:"torre",g:"op",l:"Torre"+(torreCount?" ("+torreCount+")":"")});
   // v10.32.0 — Datos Pendientes para Lupita en nav principal (antes de form), flujo: tasks → datos pendientes → nueva
   // v10.58.22: Karla también puede ver Datos Pendientes (vista incluye "Sin precio" con botón Editar Precio)
-  if(user==="secretaria"||user==="karla")navs.push({id:"health",g:"op",l:"Datos Pendientes"});
+  // v10.84.136 — con su número: lo urgente por capturar (datosPendientesN); sin una lectura buena, sin número
+  if(user==="secretaria"||user==="karla")navs.push({id:"health",g:"op",l:lectura.ok?"Datos Pendientes ("+datosPendientesN+")":"Datos Pendientes"});
   if(isSec(user)||user==="admin")navs.push({id:"form",g:"com",l:"Nueva"});
   if(isSec(user)||user==="admin"||user==="karla")navs.push({id:"oc",g:"com",l:"Órdenes de Compra"});
   if(user==="secretaria"||user==="admin")navs.push({id:"web_orders",g:"com",l:"Pedidos Web"+(webPendingCount?" ("+webPendingCount+")":"")});

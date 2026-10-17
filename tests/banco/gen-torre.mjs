@@ -44,8 +44,9 @@ const HOY = "2026-10-14T09:00:00-06:00", HACE4 = "2026-10-08T09:00:00-06:00", HA
 const DATOS = [
   // maquilas en proceso, sin fecha comprometida, 4 días en la etapa: para la regla, ROJAS
   ...["P-0701", "P-0702", "P-0703"].map(pn => o(pn, "maq_in_progress", HACE4, { order_type: "maquila", due_date: null, price: 0, maq_price: 10000, maq_cost: 6000, maq_provider: "Suajes SA", client: "MAQUILA SIN FECHA " + pn })),
-  // en diseño desde hoy, sin fecha: amarillas
-  ...["P-0704", "P-0705", "P-0706"].map(pn => o(pn, "design", HOY, { due_date: null, client: "SIN FECHA " + pn })),
+  // en Listas desde hoy, sin fecha: amarillas (v10.84.136: estaban «en diseño»; desde la decisión del 16-oct la Torre recuerda la fecha sólo de lo que ya
+  //   corre en la planta, y en diseño ya no serían datos por capturar: ver ANTES)
+  ...["P-0704", "P-0705", "P-0706"].map(pn => o(pn, "ready", HOY, { due_date: null, client: "SIN FECHA " + pn })),
   // sin precio (Karla)
   o("P-0707", "design", HOY, { price: 0, client: "SIN PRECIO" }),
 ];
@@ -64,7 +65,12 @@ const SANAS = [
   o("P-0622", "ready", HOY, { current_machine: "off_pm52", machine_queue_position: 1, client: "EN COLA SA" }),
 ];
 const EN_ESPERA = [o("P-0630", "salidas", HACE5, { snooze_reason: "El cliente no ha pedido factura", snooze_stage: "salidas", snoozed_by: "karla", client: "EN ESPERA SA" })];
-const ORDENES = SIN_LECTURA ? [] : CASO === "sana" ? SANAS : CASO === "calma" ? [...DATOS, ...SANAS] : [...DATOS, ...PARADAS, ...SANAS, ...EN_ESPERA];`,
+// v10.84.136 — sin fecha ANTES de la planta (en diseño; la maquila por enviar al proveedor): la Torre no las recuerda (la decisión de Marcelo del 16-oct)
+const ANTES = [
+  o("P-0708", "design", HOY, { due_date: null, client: "EN DISEÑO SIN FECHA" }),
+  o("P-0709", "maq_created", HOY, { order_type: "maquila", due_date: null, price: 0, maq_price: 9000, maq_cost: 5000, maq_provider: "Suajes SA", client: "MAQUILA POR ENVIAR SIN FECHA" }),
+];
+const ORDENES = SIN_LECTURA ? [] : CASO === "sana" ? SANAS : CASO === "calma" ? [...DATOS, ...ANTES, ...SANAS] : [...DATOS, ...ANTES, ...PARADAS, ...SANAS, ...EN_ESPERA];`,
   `// ── extraído de App.jsx por extraer.mjs ──\n` + codigo,
   `function Banco() {
   const [orders, setOrders] = useState(ORDENES);

@@ -1519,6 +1519,47 @@ for (const [quien, debe] of [["marcelo", true], ["karla", false], ["lupita", fal
   });
 }
 
+// ════════════════════════ «Datos Pendientes (N)» (v10.84.136) ════════════════════════
+// La decisión de Marcelo del 16-oct: el menú de Lupita y Karla dice cuántas órdenes tienen algo URGENTE por capturar (sin precio, sin cantidad, maquila
+// sin proveedor o costo, y sin fecha sólo ya por entregar); la que tiene dos faltas cuenta una vez; sin lectura, sin número. Aquí, porque el menú lo arma
+// App. Vuelta 1: escritas antes del cambio.
+const enUnMes = () => new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+const ORDENES_DATOS = () => [
+  ordenK("P-0920", { stage: "salidas" }),                                                  // por entregar sin fecha: cuenta
+  ordenK("P-0921", { stage: "packaging" }),                                                // por entregar sin fecha: cuenta
+  ordenK("P-0922", { stage: "design" }),                                                   // sin fecha, todavía en proceso: no cuenta
+  ordenK("P-0923", { stage: "ready", due_date: enUnMes(), price: 0 }),                     // sin precio: cuenta
+  ordenK("P-0924", { stage: "salidas", price: 0 }),                                        // sin precio y sin fecha: cuenta UNA vez
+  ordenK("P-0925", { stage: "in_production", due_date: enUnMes(), client_phone: "" }),     // sin teléfono del cliente: no cuenta
+];
+const entradaDatos = p => p.evaluate(() => [...document.querySelectorAll("button[title]")].map(b => b.title).filter(t => /^Datos Pendientes( \(\d+\))?$/.test(t)));
+for (const [n, quien] of [["ses-93-lupita-datos-pendientes-cuenta-lo-urgente", "lupita"], ["ses-94-karla-datos-pendientes-cuenta-lo-urgente", "karla"]]) {
+  await caso(n, async ({ p, s }) => {
+    s.filas = { orders: ORDENES_DATOS() };
+    await abrirYEntrar(p, s, quien);
+    await esperarMenu(p, /^Datos Pendientes/); await despertar(p); await p.waitForTimeout(400);
+    const menu = await entradaDatos(p);
+    await p.locator('button[title^="Datos Pendientes"]').first().click(); await p.waitForTimeout(700);
+    const sub = ((await texto(p)).match(/\d+ (orden|órdenes) con algo urgente por capturar|Nada urgente por capturar/) || [""])[0];
+    ok(n, JSON.stringify(menu) === '["Datos Pendientes (4)"]' && sub === "4 órdenes con algo urgente por capturar",
+      `${quien}: el menú ${JSON.stringify(menu)} (4: dos por entregar sin fecha, una sin precio y una sin precio y sin fecha; no suman la de diseño sin fecha ni la sin teléfono); la vista: «${sub || "no dice cuántas"}»`);
+  });
+}
+await caso("ses-95-datos-pendientes-sin-lectura-sin-numero", async ({ p, s }) => {
+  s.filas = { orders: "falla" };
+  await abrirYEntrar(p, s, "lupita");
+  const fallo = await esperarFalla(p); await despertar(p);
+  const antes = await entradaDatos(p);
+  s.filas = { orders: ORDENES_DATOS() };   // la base vuelve
+  const reintentar = p.getByRole("button", { name: /^Reintentar/ }).first();
+  const hay = await reintentar.isVisible().catch(() => false);
+  if (hay) await reintentar.click();
+  const llego = await esperarMenu(p, /^Datos Pendientes \(\d+\)$/);
+  const despues = await entradaDatos(p);
+  ok("ses-95-datos-pendientes-sin-lectura-sin-numero", fallo && JSON.stringify(antes) === '["Datos Pendientes"]' && hay && llego && JSON.stringify(despues) === '["Datos Pendientes (4)"]',
+    `con la lectura caída el menú decía ${JSON.stringify(antes)}; ${hay ? "con «Reintentar»" : "SIN «Reintentar»"} dice ${JSON.stringify(despues)}`);
+});
+
 await browser.close();
 await servidor.close();
 fin();

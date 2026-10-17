@@ -108,11 +108,12 @@ await caso("dp-07-estancadas-con-el-teclado", "rol=secretaria", async p => {
     `con Tab ${t ? "se llega a P-0448 en Estancadas" : "NO se llega a P-0448 en Estancadas"}; Enter ${(await lineas(p, "accion op-448 detail")).length ? "la abre" : "no la abre"}`);
 });
 await caso("dp-08-datos-incompletos-con-el-teclado", "rol=secretaria", async p => {
-  const t = await tabHasta(p, x => /P-0661/.test(x));
+  // (v10.84.136: era P-0661, en diseño sin fecha, que con la decisión del 16-oct va en la lista plegada; ahora P-0448, por entregar sin fecha, abierta)
+  const t = await tabHasta(p, x => /P-0448/.test(x) && !/estancada/i.test(x));
   if (t) await p.keyboard.press("Enter");
   await espera(p);
-  ok("dp-08-datos-incompletos-con-el-teclado", !!t && (await lineas(p, "accion op-661 detail")).length === 1,
-    `con Tab ${t ? "se llega a P-0661 (sin fecha)" : "NO se llega a P-0661 (sin fecha)"}; Enter ${(await lineas(p, "accion op-661 detail")).length ? "la abre" : "no la abre"}`);
+  ok("dp-08-datos-incompletos-con-el-teclado", !!t && (await lineas(p, "accion op-448 detail")).length === 1,
+    `con Tab ${t ? "se llega a P-0448 (por entregar, sin fecha)" : "NO se llega a P-0448 en los datos incompletos"}; Enter ${(await lineas(p, "accion op-448 detail")).length ? "la abre" : "no la abre"}`);
 });
 await caso("dp-09-las-que-no-caben-se-pueden-ver", "rol=secretaria&caso=muchos", async p => {
   await p.getByText(/Sin tel[eé]fono/).first().click(); await espera(p);
@@ -236,6 +237,74 @@ await caso("dp-28-la-lista-plegada-se-abre-con-el-teclado", "rol=secretaria&caso
 await caso("dp-16c-direccion-cabe-a-1366", "rol=admin", async p => {
   const r = await p.evaluate(() => ({ sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth }));
   ok("dp-16c-direccion-cabe-a-1366", r.sw <= r.cw, `Dirección a 1366: ancho de la página ${r.sw} en ${r.cw}`);
+});
+
+// ── vuelta 3 (v10.84.136): las decisiones de Marcelo del 16-oct: «Cómo va la planta» sin dinero para Lupita y Karla, y cuántas tienen algo URGENTE
+//   (el número del menú: sin precio, sin cantidad, maquila sin proveedor o costo, y sin fecha sólo ya por entregar). En el banco: P-0643 sin precio,
+//   P-0448 en Salidas sin fecha y P-0650, maquila sin proveedor NI costo (cuenta una vez): 3. P-0661, en diseño sin fecha, no suma. ──
+for (const [n, rol, quien] of [["29", "secretaria", "Lupita"], ["30", "karla", "Karla"]]) {
+  await caso(`dp-${n}-${quien.toLowerCase()}-la-planta-sin-dinero`, "rol=" + rol, async p => {
+    const t = await texto(p), i = t.indexOf("Cómo va la planta");
+    const pesos = i >= 0 ? (t.slice(i).match(/\$\s?[\d,]+/g) || []) : [];
+    ok(`dp-${n}-${quien.toLowerCase()}-la-planta-sin-dinero`, i >= 0 && pesos.length === 0,
+      `${quien}, «Cómo va la planta»: ${i < 0 ? "NO SALE" : pesos.length ? "trae dinero: " + pesos.slice(0, 4).join(", ") : "sin dinero"} (la prioridad, las estancadas y las máquinas)`);
+  });
+}
+await caso("dp-31-direccion-conserva-el-dinero", "rol=admin", async p => {
+  const t = await texto(p);
+  const atorados = /\$1,980 atorados/.test(t), estancada = /P-0448[^$]*\$75,000/.test(t), maquina = /Printmaster 74 · 1 orden\s*\$1,980/.test(t);
+  ok("dp-31-direccion-conserva-el-dinero", atorados && estancada && maquina,
+    `Dirección: «$1,980 atorados» ${atorados ? "sí" : "NO"}; P-0448 con sus $75,000 ${estancada ? "sí" : "NO"}; la Printmaster 74 con $1,980 ${maquina ? "sí" : "NO"}`);
+});
+const urgentesDice = t => (t.match(/\d+ (orden|órdenes) con algo urgente por capturar|Nada urgente por capturar/) || [""])[0];
+for (const [n, rol, quien] of [["32", "secretaria", "Lupita"], ["33", "karla", "Karla"]]) {
+  await caso(`dp-${n}-${quien.toLowerCase()}-dice-cuantas-son-urgentes`, "rol=" + rol, async p => {
+    const sub = urgentesDice(await texto(p));
+    ok(`dp-${n}-${quien.toLowerCase()}-dice-cuantas-son-urgentes`, sub === "3 órdenes con algo urgente por capturar",
+      `${quien}: «${sub || "no dice cuántas son urgentes"}» (3: P-0643 sin precio, P-0448 por entregar sin fecha, P-0650 maquila sin proveedor ni costo)`);
+  });
+}
+await caso("dp-34-lo-urgente-primero-y-lo-demas-plegado", "rol=secretaria", async p => {
+  const t = await texto(p);
+  const urgente = /Por entregar, sin fecha de entrega \(1\)/.test(t);
+  const plegada = p.getByRole("button", { name: /Sin fecha de entrega, todavía en proceso \(1\)/ });
+  const hay = await plegada.count(), abierta = hay ? await plegada.first().getAttribute("aria-expanded") : null;
+  const yUrg = await yDe(p, /Por entregar, sin fecha/), yVenc = await yDe(p, /^Vencidas \(/);
+  ok("dp-34-lo-urgente-primero-y-lo-demas-plegado", urgente && hay === 1 && abierta === "false" && !/P-0661/.test(t) && yUrg >= 0 && yUrg < yVenc,
+    `«Por entregar, sin fecha de entrega (1)» ${urgente ? "sí" : "NO"}${yUrg >= 0 && yVenc >= 0 ? (yUrg < yVenc ? ", antes de «Vencidas»" : ", DESPUÉS de «Vencidas»") : ""}; «Sin fecha de entrega, todavía en proceso» ${hay ? (abierta === "false" ? "plegada" : "ABIERTA") : "NO SALE"}; P-0661 (en diseño) ${/P-0661/.test(t) ? "A LA VISTA" : "no está a la vista"}`);
+});
+await caso("dp-35-capturan-la-fecha-con-la-vista-abierta", "rol=secretaria", async p => {
+  await p.evaluate(() => window.__cambiar("op-448", { due_date: "2026-10-20" })); await espera(p, 400);
+  const t = await texto(p), sub = urgentesDice(t);
+  ok("dp-35-capturan-la-fecha-con-la-vista-abierta", sub === "2 órdenes con algo urgente por capturar" && !/Por entregar, sin fecha/.test(t),
+    `a P-0448 (en Salidas) le capturan la fecha: «${sub || "no dice cuántas"}»; «Por entregar, sin fecha» ${/Por entregar, sin fecha/.test(t) ? "SIGUE" : "se va"}`);
+});
+await caso("dp-36-sin-lectura-sin-numero", "rol=secretaria&lectura=no", async p => {
+  const t = await texto(p), sub = urgentesDice(t);
+  ok("dp-36-sin-lectura-sin-numero", !sub && /Sin cifras/.test(t), `sin lectura: ${sub ? "DICE «" + sub + "»" : "no dice cuántas son urgentes"}`);
+});
+await caso("dp-37-en-calma-nada-urgente", "rol=karla&caso=calma", async p => {
+  const sub = urgentesDice(await texto(p));
+  ok("dp-37-en-calma-nada-urgente", sub === "Nada urgente por capturar", `todo capturado: «${sub || "no dice"}»`);
+});
+// vuelta 2: por donde no se diseñó (la maquila recibida sin fecha, la que Dirección dejó en espera, una que llega a Salidas con la vista abierta)
+await caso("dp-38-la-maquila-recibida-sin-fecha-cuenta", "rol=secretaria", async p => {
+  await p.evaluate(() => window.__cambiar("op-662", { due_date: null })); await espera(p, 400);
+  const t = await texto(p), sub = urgentesDice(t);
+  ok("dp-38-la-maquila-recibida-sin-fecha-cuenta", sub === "4 órdenes con algo urgente por capturar" && /Por entregar, sin fecha de entrega \(2\)/.test(t),
+    `a P-0662 (recibida de maquila, por entregar) le quitan la fecha: «${sub || "no dice"}»; «Por entregar, sin fecha» ${(t.match(/Por entregar, sin fecha de entrega \(\d+\)/) || ["no sale"])[0]}`);
+});
+await caso("dp-39-la-que-direccion-dejo-en-espera-no-suma", "rol=secretaria", async p => {
+  await p.evaluate(() => window.__cambiar("op-643", { snooze_reason: "Esperando que el cliente confirme el precio", snooze_stage: "salidas" })); await espera(p, 400);
+  const t = await texto(p), sub = urgentesDice(t);
+  ok("dp-39-la-que-direccion-dejo-en-espera-no-suma", sub === "2 órdenes con algo urgente por capturar" && !/P-0643/.test(t),
+    `P-0643 (sin precio) queda en espera desde la Torre: «${sub || "no dice"}»; ${/P-0643/.test(t) ? "SIGUE en «sin precio»" : "sale de «sin precio», como antes de esta versión"}`);
+});
+await caso("dp-40-llega-a-salidas-sin-fecha", "rol=karla", async p => {
+  await p.evaluate(() => window.__cambiar("op-661", { stage: "salidas" })); await espera(p, 400);
+  const t = await texto(p), sub = urgentesDice(t);
+  ok("dp-40-llega-a-salidas-sin-fecha", sub === "4 órdenes con algo urgente por capturar" && !/todavía en proceso/.test(t),
+    `P-0661 (sin fecha) pasa de diseño a Salidas con la vista abierta: «${sub || "no dice"}»; «todavía en proceso» ${/todavía en proceso/.test(t) ? "SIGUE" : "se va (ya no queda ninguna)"}`);
 });
 
 await browser.close();
