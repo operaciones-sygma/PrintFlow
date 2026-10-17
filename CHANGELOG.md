@@ -33,9 +33,11 @@ corta no pasa, la base puede rechazar). Vuelta 1 contra v10.84.146: fallaban 8 d
 es del campo); en el arreglo, la fecha salía «lunes, 19 de octubre», con la coma de Intl (ahora «el lunes 19 de octubre»). Vuelta 2, por donde no se diseñó:
 Esc dos veces, «Seguir escribiendo», los bordes de los días (365, 366, -2) y de la razón (5 letras, sólo espacios), Esc y un clic fuera mientras guarda, el
 motivo con el teclado: sin fallas. Ahora 19 de 19; contra v10.84.146 fallan 12. El detector: antes, el botón apagado (1.4:1); después, sólo la jerarquía de
-letra de la app. Los 30 bancos se generan con el App.jsx nuevo; build y `probar-alcance` en verde.
+letra de la app. Los 30 bancos se generan con el App.jsx nuevo; build y `probar-alcance` en verde. Candado: 2376 de 2376 (19 nuevas), de a 4, 15.7 min, a la primera y sin inestables.
 
-**En producción:** (pendiente)
+**En producción:** 17-oct, READY `dpl_CxXSht7pLhZvrNnpywGfnBf412hR`, commit `66a4337`; vuelta atrás: promover `dpl_2Viv9drb6BxzwZmwCjzhJ6S4ZyKN` (el código de v10.84.146) o
+`git revert 66a4337`; la base no cambió. Revisado en producción: el código servido (`index-_uURHykc.js`) trae lo nuevo; el recorrido de los 8 roles:
+nada truena (contra la app publicada). La ventana se abre desde la ficha y el detalle de una orden; el recorrido no pone nada en espera (escrituras cortadas): la ventana nueva la prueba el banco.
 
 ## v10.84.146 — «Auditoría»: buscar una orden como se escribe, duplicados por serie y la clave con las series de hoy — 17-oct-2026
 
