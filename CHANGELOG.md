@@ -12,6 +12,39 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.144 — «Cancelaciones»: el lote pregunta antes de cancelar y dice qué cae con cada orden — 17-oct-2026
+
+**Qué pasaba.** La pasada de `/impeccable critique` de la madrugada del 17-oct sobre la vista «Cancelaciones» (`CancelacionesView`, cancelar en lote; 22/40,
+snapshot `.impeccable/critique/2026-10-17T06-36-46Z__src-app-jsx-cancelaciones.md`). Con el motivo escrito, **«Cancelar (N)» cancelaba de una vez** las N
+órdenes elegidas (Dirección, también las facturadas: su factura se cancela en CobranzaFlow), sin decir qué cae con cada una, cuando «Cancelar orden» del
+detalle lo dice todo y pregunta (v10.84.73): «lo que mueve dinero pregunta igual en las dos puertas» (v10.84.104). Además: el aviso del saldo a favor en ámbar
+(2.0:1), el rojo de «N seleccionadas» (4.3:1), «NC pend.» en ámbar, el botón apagado ilegible (blanco sobre gris claro, 1.4:1), letra de 9 px en la ficha
+para elegir, el número de la orden del historial sin teclado (un span con clic) y el buscador con «folio (D-/R-)», las series de Alpha (también en
+Devoluciones). El doble clic en el botón no mandaba dos lotes (React apagaba el botón a tiempo): se probó.
+
+**Qué se cambió:**
+- «Revisar y cancelar (N)» abre una confirmación (`ConfirmarCancelacionEnLote`) con cada orden y lo que le pasa, con las piezas y las frases del detalle
+  (`HechoDeCancelar`, `filaAlCancelar`): su factura y la nota de crédito pendiente, las partes que se cancelan, la factura agrupada, el plan matriz, el saldo a
+  favor que regresa (por orden: `ordenes_saldo_consumido` ya lo da) y la fila de su máquina; el motivo citado y a quién se avisa. «Sí, cancelar las N»
+  manda el lote; Esc y «Regresar» no pierden ni lo elegido ni el motivo; cambiar la selección o el motivo la cierra (nunca confirma otra lista que la que
+  enseñó); el segundo clic de un doble clic no cuenta.
+- Lo que cambia con la confirmación abierta: la que se cancela en otra sesión se dice y no se manda (si son todas, «Nada que cancelar»); si una recibe folio y
+  quien confirma no es Dirección, se cierra. Mientras se lee el saldo a favor dice «Revisando…» y no deja confirmar, con tope de 8 s (después dice que no se
+  pudo comprobar, y si contesta tarde, lo dice).
+- Tintas con AA (el saldo, «N seleccionadas», «CANCELADA», «nota de crédito pendiente»), el botón apagado legible, 10 px o más en la ficha para elegir
+  (compartida con Devoluciones y «Agregar producto existente»), el historial con el teclado, el buscador con las series de hoy y la explicación en renglones
+  de ~80 caracteres.
+
+**Cómo se probó.** Tanda nueva `cancelaciones-vista` (25; banco `gen-cancelaciones-vista.mjs`, montado con la línea de App; la base simulada: el saldo por
+orden, que falla, tarda, se cuelga o llega tarde, y el lote que rechaza la primera). Vuelta 1 contra v10.84.143: fallaban 11 de 17 (el lote cancelaba con el
+primer clic, el AA, el buscador, el historial). Vuelta 2, por donde no se diseñó: tres fallas en mi arreglo (la cancelada en otra sesión se mandaba, Lupita
+podía confirmar una que recibió folio, y se podía confirmar sin haber visto el saldo). Vuelta 3: la lectura del saldo colgada trababa la confirmación. Vuelta
+4: lo que llega pasado el tope se dice; sin fallas nuevas. Ahora 25 de 25; contra v10.84.143 fallan 19. El detector de la skill en el navegador: antes, el botón
+apagado (1.4:1), el ámbar (2.0:1), el rojo (4.3:1) y los renglones de ~127 caracteres; después, sólo la letra de la app. Los 27 bancos se generan con el
+App.jsx nuevo; build y `probar-alcance` en verde.
+
+**En producción:** (pendiente)
+
 ## v10.84.143 — «En espera»: sin lote para lo que espera al cliente, la más vieja primero y cómo contactarlo — 17-oct-2026
 
 **Qué pasaba.** La pasada de `/impeccable critique` de la noche del 16-oct sobre «En espera» (la vista de App y la ficha en su modo `inEsperaView`; 20/40,

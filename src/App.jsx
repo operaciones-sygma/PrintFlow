@@ -18713,11 +18713,11 @@ function OrderPickCard({o, selected, onToggle, accent, extra}){
       <div style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",gap:2}}>
         <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
           <span style={{fontSize:12,fontWeight:800,color:C.ac}}>{o.production_number||"—"}</span>
-          {o.invoice_folio?<span style={{fontSize:9,fontWeight:700,color:C.fac,background:C.fac+"15",padding:"1px 6px",borderRadius:4}} title="Tiene folio fiscal">{o.invoice_folio}</span>:<span style={{fontSize:9,color:C.t3}}>sin folio</span>}
-          <span style={{fontSize:9,color:C.t2,background:C.sf,padding:"1px 6px",borderRadius:4}}>{SM[o.stage]?.l||o.stage}</span>
+          {o.invoice_folio?<span style={{fontSize:10,fontWeight:700,color:C.fac,background:C.fac+"15",padding:"1px 6px",borderRadius:4}} title="Tiene folio fiscal">{o.invoice_folio}</span>:<span style={{fontSize:10,color:C.t2}}>sin folio</span>}
+          <span style={{fontSize:10,color:C.t2,background:C.sf,padding:"1px 6px",borderRadius:4}}>{SM[o.stage]?.l||o.stage}</span>
         </div>
         <div style={{fontSize:12,fontWeight:600,color:C.tx,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o.client||"—"}{o.client_company?" · "+o.client_company:""}</div>
-        <div style={{fontSize:10,color:C.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{[o.product_type,o.quantity?Number(o.quantity).toLocaleString("es-MX")+" pzas":null,dstr].filter(Boolean).join(" · ")}</div>
+        <div style={{fontSize:10,color:C.t2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{[o.product_type,o.quantity?Number(o.quantity).toLocaleString("es-MX")+" pzas":null,dstr].filter(Boolean).join(" · ")}</div>
         {extra}
       </div>
     </label>
@@ -18745,14 +18745,14 @@ function DevolucionesView({orders, role, userLogin, onCreateReturn, onDetail}){
     <div>
       <h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:8}}><ArrowUUpLeftIcon size={18} weight="bold"/>Devoluciones</h2>
       <p style={{fontSize:11,color:C.t2,margin:"0 0 14px",maxWidth:700}}>Registra una devolución (re-trabajo): la orden se marca <b>DEVUELTA</b> y se crea una orden nueva idéntica y editable que comparte el folio fiscal — <b>la misma venta, sin cobrar de nuevo</b>. Puedes seleccionar varias a la vez.</p>
-      <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar por cliente, folio (D-/R-), P-XXXX, producto…" style={{width:"100%",maxWidth:520,boxSizing:"border-box",padding:"9px 12px",border:"1px solid "+C.bd,borderRadius:10,fontSize:13,fontFamily:"'Geist',sans-serif",background:C.bg,color:C.tx,marginBottom:14}}/>
+      <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar por cliente, folio (F-…, RS-…), orden (P-…) o producto…" style={{width:"100%",maxWidth:520,boxSizing:"border-box",padding:"9px 12px",border:"1px solid "+C.bd,borderRadius:10,fontSize:13,fontFamily:"'Geist',sans-serif",background:C.bg,color:C.tx,marginBottom:14}}/>
       <div style={{background:C.card,borderRadius:16,boxShadow:C.sh2,padding:16,marginBottom:18}}>
         <div style={{fontSize:13,fontWeight:800,color:C.tx,marginBottom:10,display:"flex",alignItems:"center",gap:6}}><PlusIcon size={14} weight="bold" color={C.ac}/>Registrar devolución</div>
         {shownCands.length===0?<div style={{fontSize:12,color:C.t3,padding:"18px 0",textAlign:"center"}}>{sq?"Sin órdenes entregadas que coincidan.":"No hay órdenes entregadas para devolver."}</div>:
         <div style={{maxHeight:380,overflowY:"auto",display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(290px,1fr))",gap:8,padding:2}}>
           {shownCands.map(o=><OrderPickCard key={o.id} o={o} selected={sel.has(o.id)} onToggle={()=>toggle(o.id)} accent={C.ac}/>)}
         </div>}
-        {candidates.length>shownCands.length&&<div style={{fontSize:10.5,color:C.t3,marginTop:6}}>Mostrando {shownCands.length} de {candidates.length}. Usa la búsqueda para acotar.</div>}
+        {candidates.length>shownCands.length&&<div style={{fontSize:11,color:C.t2,marginTop:6}}>Mostrando {shownCands.length} de {candidates.length}. Usa la búsqueda para acotar.</div>}
         <textarea value={reason} onChange={e=>setReason(e.target.value)} placeholder="Motivo de la devolución (ej. error de corte, color fuera de tono)…" rows={2} style={{width:"100%",boxSizing:"border-box",marginTop:12,padding:"9px 12px",border:"1px solid "+C.bd,borderRadius:10,fontSize:13,fontFamily:"'Geist',sans-serif",background:C.bg,color:C.tx,resize:"vertical"}}/>
         {sel.size>0&&<div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:10,padding:"8px 10px",background:C.sf,borderRadius:10,border:"1px solid "+C.bd}}>
           {[...sel].map(id=>{const o=byId[id];return <span key={id} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,fontWeight:700,background:C.bg,border:"1px solid "+C.bd,borderRadius:999,padding:"3px 4px 3px 9px",color:C.tx}}>{o?.production_number||o?.invoice_folio||"(s/folio)"}<XIcon size={12} weight="bold" style={{cursor:"pointer",color:C.t3}} onClick={()=>toggle(id)} title="Quitar"/></span>})}
@@ -18785,6 +18785,51 @@ function DevolucionesView({orders, role, userLogin, onCreateReturn, onDetail}){
 // ═══ ❌ v10.72.83 — CANCELACIONES ═══
 // Cancela órdenes (con folio → NC pendiente admin-only + cascade a CobranzaFlow vía trigger; sin folio → cancelación directa).
 // Selección múltiple + motivo + historial + búsqueda inteligente.
+// v10.84.144 — /impeccable critique de «Cancelaciones» (17-oct, madrugada; 22/40): el lote cancelaba con el primer clic (con el motivo escrito), sin
+//   decir qué cae con cada orden, cuando «Cancelar orden» del detalle lo dice todo y pregunta (v10.84.73). «Lo que mueve dinero pregunta igual en las
+//   dos puertas» (v10.84.104). Ahora «Revisar y cancelar» abre esta confirmación: cada orden con lo que le pasa (las mismas piezas del detalle:
+//   `HechoDeCancelar`, `filaAlCancelar`; la factura y su nota de crédito, las partes, la agrupada, el plan matriz, el saldo a favor que regresa, la fila
+//   de su máquina), el motivo citado y a quién se avisa. Esc y «Regresar» no pierden nada; cambiar la selección o el motivo la cierra (nunca confirma
+//   otra lista que la que enseñó); el segundo clic de un doble clic no cuenta.
+function ConfirmarCancelacionEnLote({objs, orders, motivo, role, saldoPorOrden, saldoLeyendo, busy, onSi, onRegresar}){
+  useEscClose(onRegresar);
+  useDevolverFoco();
+  const ref=useRef(null);
+  useLayoutEffect(()=>{const el=ref.current;if(!el)return;el.scrollIntoView({block:"nearest",behavior:"instant"});el.focus({preventScroll:true});},[]);
+  // (vuelta 2) lo que se cancela en otra sesión con esto abierto no se manda, y se dice; mientras se lee el saldo a favor, se espera a saberlo
+  const cancelada=o=>o.stage==="cancelled"||o.stage==="maq_cancelled"||!!o.cancelled_at;
+  const n=objs.filter(o=>!cancelada(o)).length;
+  const hechos=o=>{
+    const h=[];
+    if(cancelada(o))return [<HechoDeCancelar key="x" tono="grave">Mientras tenías esto abierto, se canceló en otra sesión: no se manda.</HechoDeCancelar>];
+    const partes=(o.splits||[]).filter(s=>!s.cancelled_at&&s.invoice_folio).map(s=>s.invoice_folio);
+    if(o.invoice_folio)h.push(<HechoDeCancelar key="f" tono="grave" icono={FileTextIcon}>Su {o.invoice_type==="remision"?"remisión":"factura"} {o.invoice_folio} se cancela en CobranzaFlow y queda pendiente su nota de crédito; ya no se deshace desde PrintFlow.</HechoDeCancelar>);
+    if(partes.length)h.push(<HechoDeCancelar key="p" tono="grave" icono={FileTextIcon}>Ya está facturada por partes: se {partes.length===1?"cancela":"cancelan"} también en CobranzaFlow {partes.join(" y ")}.</HechoDeCancelar>);
+    if(o.grouped_invoice_folio&&!o.invoice_folio)h.push(<HechoDeCancelar key="g" tono="grave" icono={FileTextIcon}>Va en la factura agrupada {o.grouped_invoice_folio}: se cancela también esa factura y sus cobros en CobranzaFlow.</HechoDeCancelar>);
+    if(o.oc_invoice_group_id)h.push(<HechoDeCancelar key="m" tono="grave" icono={FileTextIcon}>Está en el plan matriz{o.purchase_order_id?" de "+o.purchase_order_id:""}: se cancelan también sus líneas.</HechoDeCancelar>);
+    const s=saldoPorOrden?saldoPorOrden[o.id]:0;
+    if(s>0)h.push(<HechoDeCancelar key="s" tono="aviso" icono={WalletIcon}>Regresan {pesosMx(s)} al saldo a favor de {(o.client||"").trim()||"su cliente"}.</HechoDeCancelar>);
+    const fila=filaAlCancelar(o,orders);if(fila)h.push(<HechoDeCancelar key="q" icono={FactoryIcon}>{fila}</HechoDeCancelar>);
+    if(!h.length)h.push(<HechoDeCancelar key="n">Sin factura: se cancela directo.</HechoDeCancelar>);
+    return h;
+  };
+  return <section ref={ref} tabIndex={-1} aria-labelledby="canc-lote-t" style={{marginTop:12,padding:"14px 16px",border:"1.5px solid "+C.dn+"55",borderRadius:12,background:C.bg,outline:"none"}}>
+    <h3 id="canc-lote-t" style={{fontSize:14,fontWeight:800,color:C.tx,margin:"0 0 4px",display:"flex",alignItems:"center",gap:6}}><XCircleIcon size={15} weight="bold" color={C.dn}/>Vas a cancelar {n===1?"1 orden":n+" órdenes"}</h3>
+    <p style={{fontSize:12,color:C.t2,margin:"0 0 10px",maxWidth:"70ch"}}>Motivo: «{motivo}». {role==="admin"?"Le avisamos a Producción":"Les avisamos a Producción y a Dirección"}, con el motivo.</p>
+    {saldoLeyendo?<ul style={{...listaDeHechos,marginBottom:10}}><HechoDeCancelar icono={HourglassIcon}>Revisando si alguna se pagó con saldo a favor…</HechoDeCancelar></ul>
+      :saldoPorOrden===null&&<ul style={{...listaDeHechos,marginBottom:10}}><HechoDeCancelar tono="aviso">No se pudo comprobar si alguna se pagó con saldo a favor: si así fue, ese importe regresa al saldo del cliente.</HechoDeCancelar></ul>}
+    <ul style={{listStyle:"none",margin:0,padding:0,display:"grid",gap:10}}>
+      {objs.map(o=><li key={o.id}>
+        <div style={{fontSize:12.5,fontWeight:700,color:C.tx}}>{o.production_number||o.id} · {(o.client||"").trim()||"Sin cliente"}</div>
+        <ul style={{...listaDeHechos,marginTop:4,gap:4}}>{hechos(o)}</ul>
+      </li>)}
+    </ul>
+    <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:14,flexWrap:"wrap"}}>
+      <button type="button" onClick={onRegresar} disabled={busy} style={{...bt(C.bg,C.tx),border:"1px solid "+C.bdSt}}>Regresar</button>
+      <button type="button" onClick={e=>{if(e.detail>1)return;onSi();}} disabled={busy||saldoLeyendo||n===0} style={busy||saldoLeyendo||n===0?{...bt(C.sf,C.t2),border:"1px solid "+C.bd,cursor:"not-allowed"}:bt(C.dnInk)}><XCircleIcon size={14} weight="bold"/>{busy?"Cancelando…":n===0?"Nada que cancelar":"Sí, cancelar "+(n===1?"la orden":"las "+n)}</button>
+    </div>
+  </section>;
+}
 function CancelacionesView({orders, role, onCancelOrders, onDetail}){
   const [sel,setSel]=useState(new Set());
   const [reason,setReason]=useState("");
@@ -18807,58 +18852,72 @@ function CancelacionesView({orders, role, onCancelOrders, onDetail}){
   // v10.84.18 — cuánto saldo del cliente devolvería la selección (ordenes_saldo_consumido es SECDEF:
   // el ledger tiene RLS de CobranzaFlow y desde aquí una lectura directa diría siempre «cero»).
   const [saldoSel,setSaldoSel]=useState(0);
+  const [saldoPorOrden,setSaldoPorOrden]=useState({}); // v10.84.144 — por orden (la confirmación dice a quién le regresa cuánto); null = no se pudo leer
+  const [saldoLeyendo,setSaldoLeyendo]=useState(false); // (vuelta 2) mientras pregunta, la confirmación lo dice y no deja confirmar
   useEffect(()=>{
     let vivo=true;
     const ids=[...sel];
-    if(!ids.length){setSaldoSel(0);return;}
+    if(!ids.length){setSaldoSel(0);setSaldoPorOrden({});setSaldoLeyendo(false);return;}
+    setSaldoLeyendo(true);
+    const tope=setTimeout(()=>{if(vivo){setSaldoSel(null);setSaldoPorOrden(null);setSaldoLeyendo(false);}},8000); // (vuelta 3) la que no contesta en 8 s cuenta como no leída (si contesta después, se dice)
     (async()=>{
       const {data,error}=await supabase.rpc("ordenes_saldo_consumido",{p_order_ids:ids});
       if(!vivo)return;
+      clearTimeout(tope);
       // 🔥 v10.84.23 — ERROR ≠ CERO. `error?0:` dejaba la pantalla de cancelación MASIVA idéntica a
       // cuando de verdad no hay saldo comprometido: se cancelaba creyendo que no mueve dinero y el
       // puente sí devolvía el importe a la bolsa del cliente. El hermano de esta misma versión
       // (CancelOrderModal, `setSaldoVuelve(error?"?":…)`) ya lo distinguía; aquí faltó.
       setSaldoSel(error?null:(data||[]).reduce((s,r)=>s+Number(r.monto||0),0));
+      if(error)setSaldoPorOrden(null);else{const m={};(data||[]).forEach(r=>{m[r.order_id]=(m[r.order_id]||0)+Number(r.monto||0);});setSaldoPorOrden(m);}
+      setSaldoLeyendo(false);
     })();
-    return()=>{vivo=false;};
+    return()=>{vivo=false;clearTimeout(tope);};
   },[sel]);
   const canSubmit=sel.size>0&&reason.trim().length>=5&&!busy&&!blockedByRole;
-  const submit=async()=>{ if(!canSubmit)return; setBusy(true); try{ const failed=await onCancelOrders([...sel],reason); setSel(new Set(failed||[])); if(!(failed&&failed.length))setReason(""); }finally{ setBusy(false); } };
+  // v10.84.144 — el botón del lote ya no cancela: abre la confirmación (con lo elegido y el motivo de ESE momento); cambiar algo la cierra
+  const [confirmar,setConfirmar]=useState(null);
+  useEffect(()=>{setConfirmar(null);},[sel,reason]);
+  useEffect(()=>{if(blockedByRole)setConfirmar(null);},[blockedByRole]); // (vuelta 2) si una recibe folio con esto abierto, ya es de Dirección
+  const ocupado=useRef(false);
+  const abrirConfirmacion=()=>{ if(!canSubmit)return; setConfirmar({ids:[...sel],motivo:reason.trim()}); };
+  const submit=async()=>{ if(ocupado.current||!confirmar||saldoLeyendo)return; const vivas=confirmar.ids.filter(id=>{const o=orders.find(x=>x.id===id);return o&&!isCancelled(o);}); if(!vivas.length){setConfirmar(null);return;} ocupado.current=true; setBusy(true); try{ const failed=await onCancelOrders(vivas,confirmar.motivo); setSel(new Set(failed||[])); if(!(failed&&failed.length))setReason(""); setConfirmar(null); }finally{ ocupado.current=false; setBusy(false); } };
   return (
     <div>
       <h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:8}}><XCircleIcon size={18} weight="bold"/>Cancelaciones</h2>
       {/* v10.84.18 (scan 5 de CobranzaFlow, P3) — «Sin folio: cancelación directa» escondía lo que más
           mueve: una orden de Corona liquidada con su bolsa devuelve ese importe al saldo del cliente. */}
-      <p style={{fontSize:11,color:C.t2,margin:"0 0 10px",maxWidth:700}}>Cancela una o varias órdenes. Si la orden ya tiene folio fiscal se marca con <b>nota de crédito pendiente</b> y se cancela su factura en CobranzaFlow (solo Dirección); sus cobros libres se anulan y los amarrados a un vale, a un saldo otorgado o a un depósito quedan vivos y abren una discrepancia. Sin folio la cancelación es directa, <b>pero si la orden se liquidó con el saldo del cliente ese importe regresa a su bolsa</b>.</p>
+      <p style={{fontSize:12,color:C.t2,margin:"0 0 10px",maxWidth:"62ch"}}>Cancela una o varias órdenes. Si la orden ya tiene folio fiscal se marca con <b>nota de crédito pendiente</b> y se cancela su factura en CobranzaFlow (solo Dirección); sus cobros libres se anulan y los amarrados a un vale, a un saldo otorgado o a un depósito quedan vivos y abren una discrepancia. Sin folio la cancelación es directa, <b>pero si la orden se liquidó con el saldo del cliente ese importe regresa a su bolsa</b>.</p>
       {/* v10.84.23 — null = no se pudo preguntar. Se dice, en vez de enseñar lo mismo que un cero. */}
-      {saldoSel===null&&sel.size>0&&<p style={{display:"flex",alignItems:"flex-start",gap:5,fontSize:12,color:C.amb,fontWeight:600,margin:"0 0 14px",maxWidth:700}}><WarningCircleIcon size={13} weight="fill" style={{flexShrink:0,marginTop:1}}/>No se pudo comprobar si lo seleccionado se pagó con saldo del cliente. Si lo tenía, cancelar se lo devuelve a su bolsa y eso ya no se deshace.</p>}
-      {saldoSel>0&&<p style={{display:"flex",alignItems:"flex-start",gap:5,fontSize:12,color:C.amb,fontWeight:600,margin:"0 0 14px",maxWidth:700}}><WarningCircleIcon size={13} weight="fill" style={{flexShrink:0,marginTop:1}}/>De lo seleccionado, ${saldoSel.toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2})} regresan al saldo del cliente en CobranzaFlow.</p>}
-      <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar por cliente, folio (D-/R-), P-XXXX, producto…" style={{width:"100%",maxWidth:520,boxSizing:"border-box",padding:"9px 12px",border:"1px solid "+C.bd,borderRadius:10,fontSize:13,fontFamily:"'Geist',sans-serif",background:C.bg,color:C.tx,marginBottom:14}}/>
+      {saldoSel===null&&sel.size>0&&<p style={{display:"flex",alignItems:"flex-start",gap:5,fontSize:12,color:C.wnInk,fontWeight:600,margin:"0 0 14px",maxWidth:"62ch"}}><WarningCircleIcon size={13} weight="fill" style={{flexShrink:0,marginTop:1}}/>No se pudo comprobar si lo seleccionado se pagó con saldo del cliente. Si lo tenía, cancelar se lo devuelve a su bolsa y eso ya no se deshace.</p>}
+      {saldoSel>0&&<p style={{display:"flex",alignItems:"flex-start",gap:5,fontSize:12,color:C.wnInk,fontWeight:600,margin:"0 0 14px",maxWidth:"62ch"}}><WarningCircleIcon size={13} weight="fill" style={{flexShrink:0,marginTop:1}}/>De lo seleccionado, ${saldoSel.toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2})} regresan al saldo del cliente en CobranzaFlow.</p>}
+      <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar por cliente, folio (F-…, RS-…), orden (P-…) o producto…" style={{width:"100%",maxWidth:520,boxSizing:"border-box",padding:"9px 12px",border:"1px solid "+C.bd,borderRadius:10,fontSize:13,fontFamily:"'Geist',sans-serif",background:C.bg,color:C.tx,marginBottom:14}}/>
       <div style={{background:C.card,borderRadius:16,boxShadow:C.sh2,padding:16,marginBottom:18}}>
         <div style={{fontSize:13,fontWeight:800,color:C.tx,marginBottom:10,display:"flex",alignItems:"center",gap:6}}><XCircleIcon size={14} weight="bold" color={C.dn}/>Cancelar órdenes</div>
         {shownCands.length===0?<div style={{fontSize:12,color:C.t3,padding:"18px 0",textAlign:"center"}}>{sq?"Sin órdenes cancelables que coincidan.":"No hay órdenes cancelables."}</div>:
         <div style={{maxHeight:380,overflowY:"auto",display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(290px,1fr))",gap:8,padding:2}}>
           {shownCands.map(o=><OrderPickCard key={o.id} o={o} selected={sel.has(o.id)} onToggle={()=>toggle(o.id)} accent={C.dn}/>)}
         </div>}
-        {candidates.length>shownCands.length&&<div style={{fontSize:10.5,color:C.t3,marginTop:6}}>Mostrando {shownCands.length} de {candidates.length}. Usa la búsqueda para acotar.</div>}
+        {candidates.length>shownCands.length&&<div style={{fontSize:11,color:C.t2,marginTop:6}}>Mostrando {shownCands.length} de {candidates.length}. Usa la búsqueda para acotar.</div>}
         <textarea value={reason} onChange={e=>setReason(e.target.value)} placeholder="Motivo de la cancelación (mín. 5 caracteres)…" rows={2} style={{width:"100%",boxSizing:"border-box",marginTop:12,padding:"9px 12px",border:"1px solid "+C.bd,borderRadius:10,fontSize:13,fontFamily:"'Geist',sans-serif",background:C.bg,color:C.tx,resize:"vertical"}}/>
-        {blockedByRole&&<div style={{fontSize:11,color:C.dn,fontWeight:600,marginTop:8,display:"flex",alignItems:"center",gap:5}}><WarningCircleIcon size={13} weight="fill"/>{selLinked} con vínculo fiscal requieren nota de crédito — solo Dirección puede cancelarlas. Quítalas de la selección.</div>}
+        {blockedByRole&&<div style={{fontSize:11,color:C.dnInk,fontWeight:600,marginTop:8,display:"flex",alignItems:"center",gap:5}}><WarningCircleIcon size={13} weight="fill"/>{selLinked} con vínculo fiscal requieren nota de crédito — solo Dirección puede cancelarlas. Quítalas de la selección.</div>}
         {sel.size>0&&<div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:10,padding:"8px 10px",background:C.sf,borderRadius:10,border:"1px solid "+C.bd}}>
           {[...sel].map(id=>{const o=orders.find(x=>x.id===id);return <span key={id} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,fontWeight:700,background:C.bg,border:"1px solid "+(o&&o.invoice_folio?C.fac:C.bd),borderRadius:999,padding:"3px 4px 3px 9px",color:C.tx}}>{o?.production_number||o?.invoice_folio||"(s/folio)"}{o?.production_number&&o.invoice_folio?" · "+o.invoice_folio:""}<XIcon size={12} weight="bold" style={{cursor:"pointer",color:C.t3}} onClick={()=>toggle(id)} title="Quitar"/></span>})}
         </div>}
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:10,gap:10,flexWrap:"wrap"}}>
-          <span style={{fontSize:11,color:sel.size>0?C.dn:C.t3,fontWeight:600}}>{sel.size>0?sel.size+" seleccionada"+(sel.size!==1?"s":"")+(selWithFolio>0?" · "+selWithFolio+" con folio (NC)":""):"Ninguna seleccionada"}</span>
-          <button onClick={submit} disabled={!canSubmit} style={{...bt(canSubmit?C.dn:C.bdSt),opacity:canSubmit?1:.7,cursor:canSubmit?"pointer":"not-allowed"}}><XCircleIcon size={14} weight="bold"/>{busy?"Procesando…":"Cancelar"+(sel.size>1?" ("+sel.size+")":"")}</button>
+          <span style={{fontSize:11,color:sel.size>0?C.dnInk:C.t2,fontWeight:600}}>{sel.size>0?sel.size+" seleccionada"+(sel.size!==1?"s":"")+(selWithFolio>0?" · "+selWithFolio+" con folio (NC)":""):"Ninguna seleccionada"}</span>
+          <button onClick={e=>{if(e.detail>1)return;abrirConfirmacion();}} disabled={!canSubmit||!!confirmar} style={canSubmit&&!confirmar?bt(C.dnInk):{...bt(C.sf,C.t2),border:"1px solid "+C.bd,cursor:"not-allowed"}}><XCircleIcon size={14} weight="bold"/>{busy?"Procesando…":"Revisar y cancelar"+(sel.size>1?" ("+sel.size+")":"")}</button>
         </div>
+        {confirmar&&<ConfirmarCancelacionEnLote objs={confirmar.ids.map(id=>orders.find(o=>o.id===id)).filter(Boolean)} orders={orders} motivo={confirmar.motivo} role={role} saldoPorOrden={saldoPorOrden} saldoLeyendo={saldoLeyendo} busy={busy} onSi={submit} onRegresar={()=>setConfirmar(null)}/>}
       </div>
-      <div style={{fontSize:13,fontWeight:800,color:C.tx,margin:"0 0 8px",display:"flex",alignItems:"center",gap:6}}><ClockCounterClockwiseIcon size={14} weight="bold" color={C.t2}/>Historial de cancelaciones <span style={{fontSize:11,fontWeight:600,color:C.t3}}>· {history.length}</span></div>
+      <div style={{fontSize:13,fontWeight:800,color:C.tx,margin:"0 0 8px",display:"flex",alignItems:"center",gap:6}}><ClockCounterClockwiseIcon size={14} weight="bold" color={C.t2}/>Historial de cancelaciones <span style={{fontSize:11,fontWeight:600,color:C.t2}}>· {history.length}</span></div>
       {history.length===0?<div style={{fontSize:12,color:C.t3,padding:"14px 0"}}>{sq?"Sin cancelaciones que coincidan con la búsqueda.":"Aún no hay cancelaciones registradas."}</div>:
       <div style={{background:C.card,borderRadius:14,boxShadow:C.sh2,overflow:"hidden"}}>
         {history.map(o=>(
           <div key={o.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderBottom:"1px solid "+C.bd,flexWrap:"wrap"}}>
-            <span style={{fontSize:10,fontWeight:800,color:C.dn,background:C.dn+"10",padding:"2px 7px",borderRadius:5,display:"inline-flex",alignItems:"center",gap:3,flexShrink:0,border:"1px solid "+C.dn+"40"}}><XCircleIcon size={10} weight="bold"/>CANCELADA</span>
-            <span onClick={()=>onDetail(o.id)} style={{fontSize:12.5,fontWeight:800,color:C.ac,cursor:"pointer",flexShrink:0}} title="Ver detalle">{o.production_number||o.id}</span>
-            {o.invoice_folio&&<span style={{fontSize:10,fontWeight:700,color:o.nc_emitted?C.ok:C.wn,flexShrink:0}} title={o.nc_emitted?"NC emitida":"NC pendiente"}>{o.invoice_folio} · {o.nc_emitted?"NC ✓":"NC pend."}</span>}
+            <span style={{fontSize:10,fontWeight:800,color:C.dnInk,background:C.dn+"10",padding:"2px 7px",borderRadius:5,display:"inline-flex",alignItems:"center",gap:3,flexShrink:0,border:"1px solid "+C.dn+"40"}}><XCircleIcon size={10} weight="bold"/>CANCELADA</span>
+            <button type="button" onClick={()=>onDetail(o.id)} style={{fontSize:12.5,fontWeight:800,color:C.ac,cursor:"pointer",flexShrink:0,background:"none",border:"none",padding:0,fontFamily:"inherit"}} title="Ver detalle">{o.production_number||o.id}</button>
+            {o.invoice_folio&&<span style={{fontSize:11,fontWeight:700,color:o.nc_emitted?C.okInk:C.wnInk,flexShrink:0}}>{o.invoice_folio} · {o.nc_emitted?"nota de crédito emitida":"nota de crédito pendiente"}</span>}
             <span style={{flex:1,minWidth:140,fontSize:12,color:C.tx,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o.client}{o.client_company?" · "+o.client_company:""}</span>
             <span style={{fontSize:10.5,color:C.t3,flexShrink:0,marginLeft:"auto"}}>{o.cancelled_at?fD(o.cancelled_at):""}{o.cancelled_by?" · "+o.cancelled_by:""}</span>
             {o.cancellation_reason&&<div style={{flexBasis:"100%",fontSize:11,color:C.t2,fontStyle:"italic",paddingLeft:2}}>{o.cancellation_reason}</div>}
