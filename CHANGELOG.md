@@ -40,9 +40,11 @@ por donde no se diseñó: las remisiones, un periodo sin folios, buscar un folio
 fallas. Vuelta 3: el detalle no se llevaba el foco y el Tab se salía a la página de atrás (arreglado); vuelta 4: lo mismo en los compartidos, sin fallas.
 Ahora 22 de 22; contra v10.84.145 fallan 15. El detector de la skill: antes, el verde (3.0:1), gris sobre gris (1.1:1), el rojo (4.3:1), el ámbar (2.6:1), las
 etapas (3.3:1, 13 veces) y renglones de ~202 caracteres; después, sólo un falso positivo (toma un tinte translúcido como sólido) y la letra de la app. Los 29
-bancos se generan con el App.jsx nuevo; build y `probar-alcance` en verde.
+bancos se generan con el App.jsx nuevo; build y `probar-alcance` en verde. Candado: 2357 de 2357 (22 nuevas), de a 4, 15.7 min, a la segunda: el primero (01:57) frenó por oc-21, que cayó al abrir la página con net::ERR_NETWORK_CHANGED (Windows desconectó y reconectó la red entre las 01:48:30 y las 01:49:47, registro NetworkProfile) y es de dinero (sin segunda oportunidad); la tanda oc completa, 3 de 3 con 126 de 126.
 
-**En producción:** (pendiente)
+**En producción:** 17-oct, READY `dpl_3yLSEbQhUqxJ8A7gJhoY57tMtyag`, commit `f85bc5b`; vuelta atrás: promover `dpl_9ZNiNgiiUZDsK4AoAf38x43v7DvL` (el código de v10.84.145) o
+`git revert f85bc5b`; la base no cambió. Revisado en producción: el código servido (`index-D-QnJ_MK.js`) trae lo nuevo; el recorrido de los 8 roles:
+nada truena (contra la app publicada). La vista sólo se abre con el archivo completo cargado: el recorrido llega a su botón de cargar; la pantalla nueva la prueba el banco.
 
 ## v10.84.145 — «Archivo»: el ingreso se llama como es, el vendedor cuenta lo que lleva y la cancelada va por su fecha — 17-oct-2026
 
