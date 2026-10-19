@@ -197,7 +197,12 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.157 (19-oct, ~02:55, READY `dpl_4GdDem6DrVQ9zhq7aRrbMGc2t2XS`, commit `9077e8d`; vuelta atrás: promover
+- **LIVE:** v10.84.158 (19-oct, ~04:34, READY `dpl_Fo7YxapPHp1Tqm2QfQhhpiYFNCCC`, commit `fb06eb5`; vuelta atrás: promover
+  `dpl_5vMaLpj4k9GXpEthgA6khZsDfnqE` (el código de v10.84.157) o `git revert fb06eb5`; la base no cambió; candado 2485 de 2485 (9 nuevas), de a 4, 15.9 min,
+  a la primera y sin inestables; recorrido de producción: nada truena). **El marco** (la barra de arriba y el menú, su critique 25/40): Inventario Cuadra,
+  Apartado Corona y Exportar CSV teñidos como la campana (ya no llenos de color) y, desde 1200 px, con su palabra; «Ir a…» con su atajo; el sol «17 hoy»;
+  el menú se pliega sin animar su ancho.
+  v10.84.157 (19-oct, ~02:55, READY `dpl_4GdDem6DrVQ9zhq7aRrbMGc2t2XS`, commit `9077e8d`; vuelta atrás: promover
   `dpl_CEVvzzpAatkAQuyQNCoxPFsRjwSr` (el código de v10.84.156) o `git revert 9077e8d`; la base no cambió; candado 2476 de 2476 (36 nuevas), de a 4,
   15.9 min, a la primera y sin inestables; recorrido de producción: nada truena). **La ficha de la orden** (`OCard`, su critique 23/40): 🔑 la ficha que
   no es tuya lleva UN renglón al pie («Le toca a … · etapa», «Recordar», «Imprimir», «Historial», «⋯» con la merma, cambiar de OC y cancelar; sin «solo

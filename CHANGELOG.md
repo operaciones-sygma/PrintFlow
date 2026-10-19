@@ -36,6 +36,10 @@ nombre y nada se sale, que debe seguir igual). **Vuelta 2**, con el arreglo: 5 d
 0s», la de omisión, y la prueba lo tomaba por animación). **Vuelta 3**, por donde no se diseñó (el borde de 1200 px de los dos lados y la barra más llena,
 la de Dirección, a 1366): 3 de 3. Las tandas que tocan la barra y la ficha, completas: sesion, despertador, dashboard, todas y ficha, **228 de 228**.
 
+**En producción:** 19-oct, ~04:34; commit fb06eb5; READY `dpl_Fo7YxapPHp1Tqm2QfQhhpiYFNCCC` (produccion.sygma.mx); vuelta atrás: promover
+`dpl_5vMaLpj4k9GXpEthgA6khZsDfnqE` (el código de v10.84.157) o `git revert fb06eb5`; la base no cambió. Candado: 2485 de 2485 (9 nuevas), de a 4, 15.9
+min, a la primera y sin inestables. Revisado en producción sin escribir: `npm run recorrido` contra produccion.sygma.mx, 8 roles y 99 pasos, nada truena.
+
 ## v10.84.157 — La ficha de la orden: un renglón al pie para quien no actúa, y lo raro en «⋯» — 19-oct-2026
 
 **Qué pasaba** (`/impeccable critique` de la ficha, `OCard`, la madrugada del 19-oct: **23/40**; snapshot
