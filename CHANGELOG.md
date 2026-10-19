@@ -12,6 +12,30 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.158 — El marco: las herramientas de arriba teñidas y con su palabra, «Ir a…» y «17 hoy» — 19-oct-2026
+
+**Qué pasaba** (`/impeccable critique` del marco —la barra de arriba y el menú—, la madrugada del 19-oct: **25/40**; snapshot
+`.impeccable/critique/2026-10-19T09-25-00Z__src-app-jsx-shell-navegaci-n.md`; la anterior era del 23-jun, 33/40). Lo rodea todo, para los 8 roles. Visto
+con las capturas del recorrido de producción de esa noche y el código, y el detector dentro de la app de producción como Lupita (metido por el
+depurador: la página es https); medido en la base (30 días):
+- **Tres botones LLENOS de color, sólo con ícono** (Inventario Cuadra verde, Apartado Corona turquesa, Exportar CSV pizarra): lo más saturado de cada
+  pantalla, sin palabra, y a quien no los usa: el Inventario Cuadra lo movieron Karla (43 ventas, 4 ajustes) y Dirección (4); **Gerardo y Lupita, 0**.
+- La paleta de comandos se anunciaba con su atajo («Ctrl K»), junto al buscador; lo que hace, sólo en el title.
+- El sol del Despertador con un número solo («17»), su color fijo (#b45309); «Mis Órdenes | Todas» a 10 px; el menú animaba su ancho (el detector).
+
+**Qué se cambió** (sólo pantalla; la base no se tocó):
+- **Las tres herramientas, teñidas como la campana** (el ícono en el color de cada una, en su tinta) y, **desde 1200 px de ancho, con su palabra**:
+  «Inventario», «Corona», «CSV». El nombre completo sigue para el lector de pantalla y en el title (el recorrido y las pruebas las buscan por él).
+- **«Ir a…»** en el botón de la paleta, con el atajo al lado en su recuadro.
+- **«17 hoy»** en el sol (en su tinta); «Mis Órdenes | Todas» a 11 px; el menú se pliega sin animar su ancho.
+
+**Cómo se probó.** Tanda `sesion` (la app real compilada contra la base simulada), 9 nuevas (ses-107 a ses-114). **Vuelta 1**, escrita antes del arreglo
+y corrida contra el código de antes en una copia aparte (`git worktree` en HEAD con las pruebas nuevas): la primera corrida no pudo ni entrar (las cuentas
+de la simulada son por persona, `lupita` y `gerardo`, no por rol: era de la prueba); ya corregida, **5 de 6 fallaban** (la que pasaba: a 1024 tienen su
+nombre y nada se sale, que debe seguir igual). **Vuelta 2**, con el arreglo: 5 de 6; la que faltaba era de la prueba (sin transición el navegador dice «all
+0s», la de omisión, y la prueba lo tomaba por animación). **Vuelta 3**, por donde no se diseñó (el borde de 1200 px de los dos lados y la barra más llena,
+la de Dirección, a 1366): 3 de 3. Las tandas que tocan la barra y la ficha, completas: sesion, despertador, dashboard, todas y ficha, **228 de 228**.
+
 ## v10.84.157 — La ficha de la orden: un renglón al pie para quien no actúa, y lo raro en «⋯» — 19-oct-2026
 
 **Qué pasaba** (`/impeccable critique` de la ficha, `OCard`, la madrugada del 19-oct: **23/40**; snapshot

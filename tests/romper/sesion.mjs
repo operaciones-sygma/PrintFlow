@@ -1685,6 +1685,81 @@ await caso("ses-106-la-maquila-recibida-tambien", async ({ p, s }) => {
   ok("ses-106-la-maquila-recibida-tambien", abrio, `la maquila recibida que esperaba la factura: «Asignar folio y entregar» ${abrio ? "se abre" : "NO se abre"}`);
 });
 
+// ── v10.84.158 — EL MARCO (la barra de arriba y el menú), su /impeccable critique (19-oct, 25/40; snapshot .impeccable/critique/2026-10-19T09-25-00Z__…).
+//   Escritas antes del arreglo (vuelta 1). En 30 días, el Inventario Cuadra lo movieron Karla y Dirección; Gerardo y Lupita, 0, y en cada pantalla
+//   tenían tres botones llenos de color sólo con ícono (Inventario, Corona, CSV), lo más saturado de la pantalla; la paleta se llamaba «Ctrl K». ──
+// (vuelta 1: las cuentas de la base simulada son por persona —lupita, gerardo—, no por rol: la primera corrida no pudo ni entrar; era de la prueba)
+// la luminancia del fondo de un botón, mezclando los fondos translúcidos con lo de abajo (memoria: contraste con fondos translúcidos)
+const herramientas = p => p.evaluate(() => {
+  const nums = c => (c.match(/[\d.]+/g) || []).map(Number);
+  const lum = ([r, g, b]) => { const f = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+  const fondo = el => { const capas = []; for (let x = el; x; x = x.parentElement) { const v = nums(getComputedStyle(x).backgroundColor); if (v.length === 3 || (v.length === 4 && v[3] >= 0.999)) { capas.push([v[0], v[1], v[2], 1]); break; } if (v.length === 4 && v[3] > 0) capas.push(v); }
+    let c = [255, 255, 255]; for (let i = capas.length - 1; i >= 0; i--) { const [r, g, b, a] = capas[i]; c = [r * a + c[0] * (1 - a), g * a + c[1] * (1 - a), b * a + c[2] * (1 - a)]; } return c; };
+  return ["Inventario Cuadra", "Apartado Corona", "Exportar CSV"].map(n => { const b = document.querySelector(`button[aria-label^="${n}"]`); if (!b) return { n, hay: false };
+    return { n, hay: true, lleno: lum(fondo(b)) < 0.4, texto: b.innerText.replace(/\s+/g, " ").trim() }; });
+});
+await caso("ses-107-las-herramientas-de-arriba-sin-color-lleno", async ({ p, s }) => {
+  await abrirYEntrar(p, s, "lupita"); await despertar(p);
+  const h = (await herramientas(p)).filter(x => x.hay);
+  const llenas = h.filter(x => x.lleno).map(x => x.n);
+  ok("ses-107-las-herramientas-de-arriba-sin-color-lleno", h.length === 3 && llenas.length === 0,
+    `Lupita a 1366: ${h.length} herramientas arriba; ${llenas.length ? "LLENAS de color: " + llenas.join(", ") : "ninguna llena de color"}`);
+});
+await caso("ses-108-las-herramientas-de-arriba-dicen-que-son", async ({ p, s }) => {
+  await abrirYEntrar(p, s, "lupita"); await despertar(p);
+  const h = (await herramientas(p)).filter(x => x.hay);
+  const mudas = h.filter(x => !x.texto).map(x => x.n);
+  ok("ses-108-las-herramientas-de-arriba-dicen-que-son", h.length === 3 && mudas.length === 0,
+    `Lupita a 1366: ${mudas.length ? "sólo ícono (sin palabra a la vista): " + mudas.join(", ") : "cada una con su palabra: " + h.map(x => "«" + x.texto + "»").join(" ")}`);
+});
+await caso("ses-109-la-paleta-dice-que-hace", async ({ p, s }) => {
+  await abrirYEntrar(p, s, "gerardo"); await despertar(p);
+  const t = ((await p.getByRole("button", { name: "Abrir paleta de comandos" }).first().innerText().catch(() => "")) || "").replace(/\s+/g, " ").trim();
+  ok("ses-109-la-paleta-dice-que-hace", /Ir a/i.test(t), `el botón de la paleta dice «${t}» (se pide que diga qué hace: «Ir a…», con su atajo al lado)`);
+});
+await caso("ses-110-el-menu-no-anima-su-ancho", async ({ p, s }) => {
+  await abrirYEntrar(p, s, "gerardo"); await despertar(p);
+  const t = await p.evaluate(() => { const m = [...document.querySelectorAll("div")].find(d => getComputedStyle(d).position === "sticky" && d.querySelector('button[title="Dashboard"]'));
+    return m ? getComputedStyle(m).transitionProperty + " / " + getComputedStyle(m).transitionDuration : null; });
+  // (vuelta 2: sin transición, el navegador dice «all / 0s», la de omisión; la primera versión tomaba «all» como animación: era de la prueba)
+  const anima = t != null && /\bwidth\b|\ball\b/.test(t.split(" / ")[0]) && t.split(" / ")[1].split(",").some(d => parseFloat(d) > 0);
+  ok("ses-110-el-menu-no-anima-su-ancho", t != null && !anima, `la transición del menú: ${t ?? "no encontré el menú"} (animar el ancho recalcula toda la página en cada cuadro)`);
+});
+await caso("ses-111-mis-ordenes-se-lee", async ({ p, s }) => {
+  await abrirYEntrar(p, s, "lupita"); await despertar(p);
+  const px = await p.evaluate(() => { const b = [...document.querySelectorAll("button:not([title])")].find(x => /^Mis Órdenes$/.test(x.innerText.trim())); return b ? parseFloat(getComputedStyle(b).fontSize) : null; });
+  ok("ses-111-mis-ordenes-se-lee", px != null && px >= 11, `«Mis Órdenes | Todas» a ${px ?? "?"} px (se pide 11 o más)`);
+});
+await caso("ses-112-angosto-sin-palabra-pero-con-nombre", async ({ p, s }) => {
+  await abrirYEntrar(p, s, "lupita"); await despertar(p);
+  const h = (await herramientas(p)).filter(x => x.hay);
+  const sinNombre = await p.evaluate(() => ["Inventario Cuadra", "Apartado Corona", "Exportar CSV"].filter(n => !document.querySelector(`button[aria-label^="${n}"]`)));
+  const ancho = await p.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1);
+  ok("ses-112-angosto-sin-palabra-pero-con-nombre", h.length === 3 && sinNombre.length === 0 && ancho,
+    `a 1024: ${h.length} herramientas con su nombre para el lector de pantalla${sinNombre.length ? "; SIN nombre: " + sinNombre.join(", ") : ""}; la página ${ancho ? "no se sale" : "SE SALE de ancho"}`);
+}, { viewport: { width: 1024, height: 768 } });
+// ── vuelta 3: por donde no se diseñó: el borde de 1200 px y la barra más llena (Dirección: el sol, la campana, las tres herramientas, «Mis Órdenes») ──
+for (const [ancho, conPalabra] of [[1200, true], [1199, false]]) {
+  await caso(`ses-113-el-borde-de-1200-a-${ancho}`, async ({ p, s }) => {
+    await abrirYEntrar(p, s, "lupita"); await despertar(p);
+    const h = (await herramientas(p)).filter(x => x.hay);
+    const ok_ = h.length === 3 && h.every(x => conPalabra ? !!x.texto : !x.texto);
+    const sale = await p.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
+    ok(`ses-113-el-borde-de-1200-a-${ancho}`, ok_ && !sale, `a ${ancho}: ${h.map(x => x.n.split(" ")[0] + (x.texto ? " «" + x.texto + "»" : " (sólo ícono)")).join(", ")}; la página ${sale ? "SE SALE de ancho" : "no se sale"}`);
+  }, { viewport: { width: ancho, height: 800 } });
+}
+await caso("ses-114-la-barra-de-direccion-cabe-a-1366", async ({ p, s }) => {
+  await abrirYEntrar(p, s, "marcelo"); await despertar(p);
+  const r = await p.evaluate(() => {
+    const salir = [...document.querySelectorAll("button")].find(b => b.innerText.trim() === "Salir");
+    const buscar = document.querySelector('input[placeholder="Buscar orden..."]');
+    const rs = salir?.getBoundingClientRect();
+    return { sale: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1, salir: rs ? rs.right <= innerWidth : false, buscar: buscar ? Math.round(buscar.getBoundingClientRect().width) : null };
+  });
+  ok("ses-114-la-barra-de-direccion-cabe-a-1366", !r.sale && r.salir && (r.buscar ?? 0) >= 90,
+    `Dirección a 1366: la página ${r.sale ? "SE SALE" : "no se sale"}; «Salir» ${r.salir ? "a la vista" : "FUERA de la pantalla"}; el buscador mide ${r.buscar} px (se piden 90 o más)`);
+});
+
 await browser.close();
 await servidor.close();
 fin();

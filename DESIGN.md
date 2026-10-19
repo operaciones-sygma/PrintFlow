@@ -224,6 +224,10 @@ La tarjeta de orden/registro, y el patrón a replicar en CobranzaFlow para factu
 - Acciones: 3-4 utilitarias visibles como íconos; las destructivas/raras se esconden tras un menú "⋯ Más" con etiquetas de texto.
 - La card es enfocable por teclado (role=button, tabIndex=0, Enter/Espacio abre el detalle) y tiene aria-label.
 - **Borde-acento (firma):** a diferencia de la card genérica, la OCard SIEMPRE lleva un borde completo de 1.5px tintado con el color de su etapa al ~40% (`+"66"`); urgente lo pinta en rojo peligro. No es una franja lateral: es el contorno entero, sutil. Reemplaza al viejo side-tab. El color aquí SÍ tiene significado (codifica etapa), así que no rompe la regla "color con significado"; convive con el chip de etapa (icono+palabra) para a11y. Aplica igual a las cards de lista derivadas (salidas, archivo, resultados de búsqueda).
+- **Las herramientas de la barra de arriba van teñidas y con su palabra** (v10.84.158, la critique del marco, 25/40): eran tres botones llenos de color,
+  sólo con ícono (Inventario, Corona, CSV), lo más saturado de la pantalla y a quien no los usa. El color lleno es para LA acción de una vista, no para
+  una herramienta que está siempre; la palabra desde 1200 px, el nombre completo siempre en aria-label/title. Un botón no se anuncia con su atajo:
+  «Ir a…» y el atajo al lado. Un número solo dice poco: «17 hoy».
 - **La ficha que no es tuya lleva UN renglón al pie** (v10.84.157, la critique de la ficha, 23/40): «Le toca a Gerardo · Máquina» (la etapa por su
   nombre, sin emoji), «Recordar», «Imprimir» con su nombre, «Historial» y un «⋯» («Más de P-…») con lo raro: la merma, cambiar de OC, cancelar. Nunca
   una caja que diga lo que la persona NO puede («Orden validada — solo lectura» salía en 19 de 21 fichas de Lupita) ni un destructivo a la vista
