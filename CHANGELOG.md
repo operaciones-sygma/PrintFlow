@@ -12,6 +12,32 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.159 — El reloj de la máquina dice desde cuándo en toda pantalla, y a Producción el precio se le marca sólo cuando falta — 19-oct-2026
+
+**Qué pasaba** (`/impeccable critique` de «Mis Pendientes» de Producción, la mañana del 19-oct: **27/40**; snapshot
+`.impeccable/critique/2026-10-19T11-46-13Z__src-app-jsx-mis-pendientes-produccion.md`). Producción es lo que más se mueve en la app (708 movimientos en
+30 días). Visto contra la app publicada como Producción (la cuenta `visor`, escrituras cortadas) a 1366 y 1920, el lunes a las 5:40, y con el detector
+dentro de la página (3, menores: dos textos de 11 px y la letra de la casa):
+- **El reloj de la máquina en horas corridas, distinto del tablero.** La ficha decía «66h 50m», «113h 23m», «160h 45m» (cuentan noches y fin de semana);
+  el tablero, de las mismas órdenes, «desde el vie 10:49» desde v10.84.58. El detalle, «308h 38m» de lo que entró el 6-oct; la columna «Activa» del
+  CTP de Germán, «65h 0m».
+- **«✓ Precio» en las 18 fichas de Gerardo**: Producción no ve el monto, ve si hay precio; todas lo tenían, así que no distinguía nada, y la que no lo
+  tiene era un reloj de arena sin palabra.
+
+**Qué se cambió** (sólo pantalla; la base no se tocó):
+- `LiveTimer` con `desde` en la ficha (`OCard`), el detalle (`DetailModal`) y la «Activa» del CTP (`PreprensaBoard`): lo de antes de hoy, «desde el
+  vie 12:43»; lo de hoy, en minutos, como el tablero, «Así va la planta», la Torre y «En la planta».
+- A Producción, la marca del precio sólo cuando falta: «⌛ Sin precio» (en su tinta). Quien ve el monto lo sigue viendo igual.
+
+**Cómo se probó.** 7 pruebas nuevas (caso `lunes` del banco del tablero: tres órdenes que entraron a su máquina hace 65 horas). **Vuelta 1**, escrita
+antes del arreglo y corrida contra el código de antes: **fallaban las 5 primeras** (fic-28 «65h 0m», tab-144 «65h 0m», det-205 «308h 38m», fic-29 y
+fic-30). det-105 pedía horas y minutos (el formato, no lo que significa): ahora acepta también «desde …» (era de la prueba). **Vuelta 2**, con el
+arreglo: 6 de 6. **Vuelta 3**, por donde no se diseñó (lo de hoy sigue en minutos —la prueba calcula qué toca si corre pasada la medianoche—, y quien ve
+el monto lo sigue viendo): 2 de 2. La tanda `ficha` completa, 37 de 37. Compartido: `OCard` y `LiveTimer` (los prueba el candado entero).
+
+**Para Marcelo.** «Así va la planta» pinta en ámbar todo lo que empezó antes de hoy: el lunes, todas las máquinas (lo del viernes). ¿Lo del día hábil
+anterior es alarma, o sólo lo de más atrás? Y la barra «Progreso 8/13» repite la etapa en cada ficha de Producción: se quedó (es de todas las vistas).
+
 ## v10.84.158 — El marco: las herramientas de arriba teñidas y con su palabra, «Ir a…» y «17 hoy» — 19-oct-2026
 
 **Qué pasaba** (`/impeccable critique` del marco —la barra de arriba y el menú—, la madrugada del 19-oct: **25/40**; snapshot

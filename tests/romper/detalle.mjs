@@ -644,7 +644,8 @@ await caso("det-104-maquila-falta-arriba", "caso=maquila&rol=secretaria", async 
 });
 await caso("det-105-maquina-y-reloj", "caso=alertas&rol=produccion", async p => {
   const t = await textoArriba(p);
-  const reloj = /\d+\s*(m|min|h|d)\b/.test(t.replace(/Entrega[^\n·]*/, ""));
+  // v10.84.159 — o DESDE CUÁNDO, si entró antes de hoy (det-205): la prueba pedía horas y minutos, que era el formato y no lo que significa
+  const reloj = /\d+\s*(m|min|h|d)\b|desde (ayer|el [^:]+?) \d{1,2}:\d{2}/.test(t.replace(/Entrega[^\n·]*/, ""));
   ok("det-105-maquina-y-reloj", /Printmaster 74/.test(t) && reloj, `arriba: ${/Printmaster 74/.test(t) ? "la máquina" : "SIN la máquina"} y ${reloj ? "cuánto lleva" : "SIN el tiempo"}`);
 });
 await caso("det-106-le-toca-a", "caso=salidas&etapa=ctp&rol=admin", async p => {
@@ -1310,6 +1311,14 @@ await caso("det-204-la-foliada-con-cobros-no", "caso=salidas&rol=karla", async p
   await p.evaluate(() => window.__cambiar({ invoice_folio: "F-181", invoice_type: "factura", payment_status: "partial" })); await espera(p, 300);
   const conCobro = await enMas(p, /Corregir precio/); await p.keyboard.press("Escape"); await espera(p, 200);
   ok("det-204-la-foliada-con-cobros-no", !conCobro, `F-181 con un pago parcial: «Corregir precio» ${conCobro ? "SÍ está (la base lo frena: «ya tiene cobros»)" : "no está"}`);
+});
+
+// v10.84.159 — el reloj del detalle dice DESDE CUÁNDO cuando la orden entró a su máquina antes de hoy (como el tablero desde v10.84.58): P-0591
+//   lleva en la Printmaster 74 desde el 6-oct, y el detalle lo decía en cientos de horas corridas
+await caso("det-205-el-reloj-dice-desde-cuando", "caso=alertas&rol=produccion", async p => {
+  const t = await textoArriba(p);
+  const reloj = (t.match(/desde (ayer|el [^:]+?) \d{1,2}:\d{2}|\b\d+h \d+m\b|\b\d+m\b/) || ["(sin reloj)"])[0];
+  ok("det-205-el-reloj-dice-desde-cuando", /^desde /.test(reloj), `P-0591, en la Printmaster 74 desde el 6-oct: «${reloj}»`);
 });
 
 await browser.close();

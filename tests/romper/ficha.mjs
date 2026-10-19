@@ -266,5 +266,33 @@ await caso("fic-20-a-1920-una-fila-de-acciones", "vista=fichas&rol=produccion", 
   ok("fic-20-a-1920-una-fila-de-acciones", misma, e && i ? `a 1920: «Empaque» y los íconos ${misma ? "en la misma fila" : "en DOS renglones"}` : "no encontré «Empaque» o «Imprimir»");
 }, { width: 1920, height: 1080 });
 
+// v10.84.159 — EL RELOJ DE LA MÁQUINA DICE DESDE CUÁNDO, en la ficha como en el tablero (la critique de «Mis Pendientes» de Producción, 19-oct):
+// el lunes en la mañana la ficha decía «65h 46m» de una orden que entró a su máquina el viernes, y el tablero, de la misma, «desde el vie 10:49»
+// (v10.84.58: las horas corridas cuentan las noches y el fin de semana, y pasando de 24 h se leen igual que unos minutos).
+const RELOJ = /desde (ayer|el [^:]+?) \d{1,2}:\d{2}|\b\d+h \d+m\b|\b\d+m\b/;
+await caso("fic-28-el-reloj-dice-desde-cuando", "vista=fichas&rol=produccion&caso=lunes", async p => {
+  const t = ((await ficha(p, "P-0591").innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  const reloj = (t.match(RELOJ) || ["(sin reloj)"])[0];
+  ok("fic-28-el-reloj-dice-desde-cuando", /^desde /.test(reloj), `P-0591, en la Printmaster 74 desde hace 65 h: «${reloj}»`);
+});
+
+// v10.84.159 — LA MARCA DEL PRECIO, SÓLO CUANDO FALTA (la misma critique): Producción no ve el monto, ve si hay precio. El lunes, las 18 fichas
+// de Gerardo decían «✓ Precio» en verde (todas lo tenían: no distinguía nada), y la que no lo tiene lo decía con un reloj de arena sin palabra.
+await caso("fic-29-con-precio-sin-marca", "vista=fichas&rol=produccion", async p => {
+  const t = ((await ficha(p, "P-0593").innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  ok("fic-29-con-precio-sin-marca", !!t && !/\bPrecio\b/.test(t), `P-0593 (con precio), vista por Producción: ${/\bPrecio\b/.test(t) ? "dice «Precio»" : "sin marca"}`);
+});
+await caso("fic-30-sin-precio-lo-dice", "vista=fichas&rol=produccion", async p => {
+  await p.evaluate(() => window.__cambiar("P-0593", { price: 0 })); await espera(p, 400);
+  const t = ((await ficha(p, "P-0593").innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  ok("fic-30-sin-precio-lo-dice", /Sin precio/.test(t), `P-0593 sin precio, vista por Producción: ${/Sin precio/.test(t) ? "dice «Sin precio»" : "no lo dice con palabras"}`);
+});
+
+// (vuelta 3) la otra rama del mismo renglón: quien SÍ ve el precio (Lupita) sigue viendo el monto, no «Sin precio» ni nada de Producción
+await caso("fic-31-lupita-sigue-viendo-el-monto", "vista=fichas&rol=secretaria", async p => {
+  const t = ((await ficha(p, "P-0593").innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  ok("fic-31-lupita-sigue-viendo-el-monto", /\$5,649\.00/.test(t) && !/Sin precio/.test(t), `P-0593 vista por Lupita: ${/\$5,649\.00/.test(t) ? "con su monto" : "SIN el monto"}`);
+});
+
 await browser.close();
 for (const r of res) console.log(r);

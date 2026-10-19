@@ -4969,7 +4969,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
             <span style={{fontSize:20,fontWeight:800,color:C.tx,lineHeight:1.15}}>{o.production_number||o.client}</span>
             <Badge color={primaria} style={{color:tintaAA(primaria)}}><StageLbl stage={o.stage} size={10}/></Badge>
             {o.source==="web"&&<Badge color={C.cart} style={{color:tintaAA(C.cart)}} icon={<GlobeIcon size={11} weight="bold"/>}>Web{o.web_order_ref?" · "+o.web_order_ref:""}</Badge>}
-            {enMaquina&&<span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:12,fontWeight:600,color:C.t2}}><FactoryIcon size={13} weight="bold"/>{nombreMaquina!==st?.lt?nombreMaquina+" ":null}<LiveTimer started={enMaquina.started}/></span>}
+            {enMaquina&&<span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:12,fontWeight:600,color:C.t2}}><FactoryIcon size={13} weight="bold"/>{nombreMaquina!==st?.lt?nombreMaquina+" ":null}<LiveTimer started={enMaquina.started} desde/>{/* v10.84.159 — desde cuándo («308h 38m» de lo que entró el 6-oct) */}</span>}
           </div>
           {o.production_number&&o.client&&<div style={{fontSize:15,fontWeight:700,color:C.tx,marginTop:3,lineHeight:1.3}}>{o.client}</div>}
           {(o.product_type||o.product||o.quantity)&&<div style={{fontSize:12,color:C.t2,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{[o.product_type||o.product,o.quantity?Number(o.quantity).toLocaleString("es-MX")+" pzas":null].filter(Boolean).join(" · ")}</div>}
@@ -15689,7 +15689,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsp
             {(o.created_at||o.due_date)&&<div style={{fontSize:compact?F.micro:F.meta,marginTop:1,color:C.t3}}>{o.created_at&&<><CalendarDotsIcon size={10} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>{fD(o.created_at)}</>}{o.created_at&&o.due_date&&" → "}{o.due_date&&<span style={{/* v10.84.124 — en su tinta: C.dn a 10 px daba 4.3:1 */color:late?C.dnInk:"inherit"}}><CalendarDotsIcon size={10} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>{fD(o.due_date)}</span>}</div>}
           </div>
           {!compact&&(!inEsperaView||(o.snooze_kind==="awaiting_client_invoice"&&!hp&&vOwns))&&<div style={{textAlign:"right",minWidth:70,flexShrink:0}}>
-            {!hp&&vOwns?(precioVenta(o)>0?<div style={{fontSize:F.title,fontWeight:800}}>{fmt(precioVenta(o))}</div>:<span style={{fontSize:10,color:C.t2}}>Sin precio</span>):!hp&&!vOwns?null:(precioVenta(o)>0?<span style={{fontSize:10,color:C.ok,display:"inline-flex",alignItems:"center",gap:2}}><CheckIcon size={10} weight="bold"/>Precio</span>:<span title="Precio pendiente" aria-label="Precio pendiente" style={{fontSize:10,color:C.wn,display:"inline-flex",alignItems:"center"}}><HourglassIcon size={11} weight="bold"/></span>)}
+            {!hp&&vOwns?(precioVenta(o)>0?<div style={{fontSize:F.title,fontWeight:800}}>{fmt(precioVenta(o))}</div>:<span style={{fontSize:10,color:C.t2}}>Sin precio</span>):!hp&&!vOwns?null:(precioVenta(o)>0?null:<span title="La orden todavía no tiene precio" style={{fontSize:10,fontWeight:600,color:tintaAA(C.wn),display:"inline-flex",alignItems:"center",gap:3}}><HourglassIcon size={11} weight="bold"/>Sin precio</span>)}{/* v10.84.159 — a Producción, la marca sólo cuando FALTA el precio, y con su palabra: «✓ Precio» iba en las 18 fichas de Gerardo (todas lo tenían: no distinguía nada) y la que no lo tenía era un reloj de arena sin palabra */}
           </div>}
         </div>
         {/* v10.73.8 — /impeccable layout: el bloque de estado fiscal + flags (folio, agrupada, splits, post-edit,
@@ -15737,7 +15737,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsp
           {banderasDeLaOrden(o)}
         </div>}
         </div>}
-        {!compact&&!inEsperaView&&["in_production","packaging","ctp"].includes(o.stage)&&(()=>{const a=(o.machine_log||[]).find(e=>!e.ended);return a?<div style={{marginTop:3}}><span style={{fontSize:F.meta,color:C.ac,display:"inline-flex",alignItems:"center",gap:3,verticalAlign:"middle"}}><FactoryIcon size={11} weight="bold"/>{MACHINES.find(x=>x.id===a.machine)?.name||a.machine}</span> <LiveTimer started={a.started}/></div>:null})()}
+        {!compact&&!inEsperaView&&["in_production","packaging","ctp"].includes(o.stage)&&(()=>{const a=(o.machine_log||[]).find(e=>!e.ended);return a?<div style={{marginTop:3}}><span style={{fontSize:F.meta,color:C.ac,display:"inline-flex",alignItems:"center",gap:3,verticalAlign:"middle"}}><FactoryIcon size={11} weight="bold"/>{MACHINES.find(x=>x.id===a.machine)?.name||a.machine}</span> <LiveTimer started={a.started} desde/>{/* v10.84.159 — desde cuándo, como el tablero (decía «65h 0m» el lunes de lo que entró el viernes) */}</div>:null})()}
         {!compact&&!inEsperaView&&<ProgressBar order={o}/>}{/* v10.73.32 — en la vista "En espera" no mostrar barra de avance ni timer: la orden está DETENIDA, es ruido */}
       </div>
     </div>
@@ -16848,7 +16848,7 @@ function PreprensaBoard({orders,onDrop,onAction,onPlateRequired,maintenance=[],r
             {activa&&<div key={activa.id} style={{border:"2px solid "+C.live,borderRadius:10,padding:8,marginBottom:8,background:C.live+"08"}}>
               <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
                 <span style={{fontSize:9,fontWeight:800,color:C.live,textTransform:"uppercase",display:"inline-flex",alignItems:"center",gap:3}}><FactoryIcon size={9} weight="bold"/>Activa</span>
-                {(()=>{const a=(activa.machine_log||[]).find(e=>!e.ended);return a?<LiveTimer started={a.started}/>:null})()}
+                {(()=>{const a=(activa.machine_log||[]).find(e=>!e.ended);return a?<LiveTimer started={a.started} desde/>:null/* v10.84.159 — desde cuándo, como «Así va la planta» */})()}
               </div>
               <div draggable onDragStart={e=>{e.dataTransfer.setData("orderId",activa.id);e.dataTransfer.setData("reorderMachine",m.id)}} onClick={()=>onAction(activa.id,"detail")}
                 style={{background:C.sf,borderRadius:8,padding:10,cursor:"grab",border:"1.5px solid "+(activa.priority==="urgente"?C.dn:C.ctp)+"66",display:"flex",gap:8,alignItems:"flex-start"}}><OrderThumb o={activa} size={38}/><div style={{flex:1,minWidth:0}}>

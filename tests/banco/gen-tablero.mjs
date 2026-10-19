@@ -84,7 +84,10 @@ const LLENO = [...NORMAL, ...Array.from({ length: 9 }, (_, i) => enMaquina("P-07
   ...Array.from({ length: 14 }, (_, i) => orden("P-08" + String(i).padStart(2, "0"), { stage: "ready", due_date: dia(i - 3), client: "CLIENTE EN LISTA " + (i + 1) }))];
 // v10.84.94 — «ctp2»: dos órdenes esperando CTP (la segunda sube al lugar de la primera cuando ésta se va: el doble clic de Germán)
 const CTP2 = [...NORMAL, orden("P-0598", { stage: "ctp", client: "CERVECERIA MODELO", product_type: "Etiquetas", quantity: 250 })];
-const ORDENES = CASO === "vacio" ? [] : CASO === "lleno" ? LLENO : CASO === "ctp2" ? CTP2 : NORMAL;
+// v10.84.159 — «lunes»: lo que entró a su máquina el viernes (65 h antes; la planta no trabaja el fin de semana): la máquina de la PM74, la
+// del CTP y Empaque. El reloj de cada pantalla tiene que decir DESDE CUÁNDO («desde el vie 12:00»), no «65h 0m» corridas (v10.84.58).
+const LUNES = NORMAL.map(o => ["P-0591", "P-0610", "P-0585"].includes(o.production_number) ? { ...o, machine_log: o.machine_log.map(e => ({ ...e, started: hace(65) })) } : o);
+const ORDENES = CASO === "vacio" ? [] : CASO === "lleno" ? LLENO : CASO === "ctp2" ? CTP2 : CASO === "lunes" ? LUNES : NORMAL;
 // una máquina en mantenimiento: el registro como lo carga App y MAINT_DOWN como lo llena (useMemo de maintKey)
 const MANT = CASO === "mantenimiento" ? [{ id: "m1", machine_id: "off_pm52", started_at: hace(3), ended_at: null, notes: "Rodillo dañado", started_by: "produccion" }] : [];
 // mant=<máquina>: además, esa máquina en mantenimiento (p. ej. una libre: mant=off_gto; v10.84.62)

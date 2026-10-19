@@ -224,6 +224,11 @@ La tarjeta de orden/registro, y el patrón a replicar en CobranzaFlow para factu
 - Acciones: 3-4 utilitarias visibles como íconos; las destructivas/raras se esconden tras un menú "⋯ Más" con etiquetas de texto.
 - La card es enfocable por teclado (role=button, tabIndex=0, Enter/Espacio abre el detalle) y tiene aria-label.
 - **Borde-acento (firma):** a diferencia de la card genérica, la OCard SIEMPRE lleva un borde completo de 1.5px tintado con el color de su etapa al ~40% (`+"66"`); urgente lo pinta en rojo peligro. No es una franja lateral: es el contorno entero, sutil. Reemplaza al viejo side-tab. El color aquí SÍ tiene significado (codifica etapa), así que no rompe la regla "color con significado"; convive con el chip de etapa (icono+palabra) para a11y. Aplica igual a las cards de lista derivadas (salidas, archivo, resultados de búsqueda).
+- **El reloj de la máquina dice desde cuándo, en toda pantalla** (v10.84.159, la critique de «Mis Pendientes» de Producción, 27/40): lo que entró antes
+  de hoy, «desde el vie 10:49» (`LiveTimer` con `desde`); lo de hoy, en minutos. Las horas corridas cuentan noches y fin de semana: el lunes la ficha
+  decía «66h 50m» y el detalle «308h 38m» de lo que el tablero ya decía «desde el vie» (v10.84.58). El mismo dato se dice igual en todas partes.
+- **Una marca que va en todas las fichas no distingue nada**: a Producción el precio se le marca sólo cuando FALTA, y con su palabra («Sin precio»);
+  la palomita «✓ Precio» iba en las 18 de Gerardo (v10.84.159).
 - **Las herramientas de la barra de arriba van teñidas y con su palabra** (v10.84.158, la critique del marco, 25/40): eran tres botones llenos de color,
   sólo con ícono (Inventario, Corona, CSV), lo más saturado de la pantalla y a quien no los usa. El color lleno es para LA acción de una vista, no para
   una herramienta que está siempre; la palabra desde 1200 px, el nombre completo siempre en aria-label/title. Un botón no se anuncia con su atajo:

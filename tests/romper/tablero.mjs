@@ -1246,5 +1246,31 @@ await caso("tab-143-por-partes-ficha-no-con-partes", "vista=fichas&rol=admin", a
   ok("tab-143-por-partes-ficha-no-con-partes", !hay, `Dirección, P-0585 que ya va por partes: «Facturar por partes» ${hay ? "SÍ está (lo que falta es «Facturar siguiente parte»)" : "no está"}`);
 });
 
+// v10.84.159 — el reloj de la tarjeta «Activa» del CTP (el tablero de Germán) dice desde cuándo, como «Así va la planta» (v10.84.58): el lunes,
+//   P-0610 llevaba «65h 0m» de un CTP que se cargó el viernes
+await caso("tab-144-el-reloj-del-ctp-dice-desde-cuando", "vista=german&rol=german&caso=lunes", async p => {
+  const t = await p.evaluate(() => {
+    const cajas = [...document.querySelectorAll("div")].filter(d => /activa/i.test(d.firstElementChild?.innerText || "") && /P-0610/.test(d.innerText || ""));
+    const tarjeta = cajas.sort((a, b) => a.innerText.length - b.innerText.length)[0];
+    return tarjeta ? tarjeta.innerText.replace(/\s+/g, " ") : "";
+  });
+  const reloj = (t.match(/desde (ayer|el [^:]+?) \d{1,2}:\d{2}|\b\d+h \d+m\b|\b\d+m\b/) || ["(sin reloj)"])[0];
+  ok("tab-144-el-reloj-del-ctp-dice-desde-cuando", /^desde /.test(reloj), t ? `la tarjeta «Activa» de P-0610 (en el CTP desde hace 65 h): «${reloj}»` : "no encontré la tarjeta «Activa» de P-0610");
+});
+
+// (vuelta 3) lo de HOY sigue en horas y minutos: «desde» es sólo para lo que empezó antes de hoy. P-0611 lleva media hora en la procesadora; si
+//   la prueba corre entre las 0:00 y las 0:30, empezó ayer y lo correcto es «desde ayer» (la prueba calcula cuál toca)
+await caso("tab-145-lo-de-hoy-en-minutos", "vista=german&rol=german&caso=lunes", async p => {
+  const r = await p.evaluate(() => {
+    const cajas = [...document.querySelectorAll("div")].filter(d => /activa/i.test(d.firstElementChild?.innerText || "") && /P-0611/.test(d.innerText || ""));
+    const tarjeta = cajas.sort((a, b) => a.innerText.length - b.innerText.length)[0];
+    const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+    return { t: tarjeta ? tarjeta.innerText.replace(/\s+/g, " ") : "", deHoy: Date.now() - 0.5 * 3600000 >= hoy.getTime() };
+  });
+  const reloj = (r.t.match(/desde (ayer|el [^:]+?) \d{1,2}:\d{2}|\b\d+h \d+m\b|\b\d+m\b/) || ["(sin reloj)"])[0];
+  ok("tab-145-lo-de-hoy-en-minutos", r.deHoy ? /^\d+(h \d+)?m$/.test(reloj) : /^desde ayer/.test(reloj),
+    r.t ? `P-0611, en la procesadora desde hace 30 min: «${reloj}»${r.deHoy ? "" : " (corrió pasada la medianoche: empezó ayer)"}` : "no encontré la tarjeta «Activa» de P-0611");
+});
+
 await browser.close();
 for (const r of res) console.log(r);
