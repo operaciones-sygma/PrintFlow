@@ -44,7 +44,11 @@ tab-148 aceptaba el turno sólo con «°» (lleva «º»): era de la prueba. **V
 renglones; la máquina y el CTP en mantenimiento con y sin trabajo; la búsqueda que resalta; la lectura que falló): 2 de 5 a la primera, «Fuera de
 servicio» del CTP en `wnInk` sobre el ámbar (4.4) y «El tablero no está filtrado» (4.1); el «▶ Activar» apagado de una máquina en mantenimiento (2.2)
 no pide AA (WCAG 1.4.3, componente inactivo): lo deshabilitado sale del barrido de contraste, no del de tamaño (era de la prueba). Luego 11 de 11. La
-tanda completa, 176 de 176.
+tanda completa, 176 de 176. Compartido: `DragCard` sólo lo usa el tablero (Empaque y la activa de cada máquina); `PreprensaBoard`, el tablero de Germán.
+
+**En producción** (19-oct, ~08:57, READY `dpl_Gr9E37eDo5bxRrMwrpuKTCFV5itD`, commit `c6c86fe`; vuelta atrás: promover `dpl_6UEDFLta1MV5Vp1vQFM51W9CjPEK`,
+el código de v10.84.159, o `git revert c6c86fe`). Candado **2503 de 2503** (11 nuevas), de a 4, 962 s, a la primera y sin inestables (Almacén dio el
+turno). Recorrido de producción sin escribir: 8 roles, 99 pasos, nada truena.
 
 ## v10.84.159 — El reloj de la máquina dice desde cuándo en toda pantalla, y a Producción el precio se le marca sólo cuando falta — 19-oct-2026
 
