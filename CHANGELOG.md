@@ -36,6 +36,11 @@ guarda de la oficina (det-212) pasaba. **Vuelta 2**, con el arreglo: 7 de 7. **V
 Producción, el vendedor que no es dueño sin las notas, Dirección con su orden y su ID interno): 3 de 4; det-213 buscaba el encabezado como h2/h3 y el
 detalle no los usa (era de la prueba: ahora cuenta cuántas veces sale la descripción en todo el detalle, 1). La tanda completa, 225 de 225.
 
+**En producción** (19-oct, ~09:38, READY `dpl_2JrJMx4AMmXPwkphT72mbCejf4fJ`, commit `9ae9d86`; vuelta atrás: promover `dpl_5qRH2qo93YKcqYjeroUu1DNQoYap`,
+el código de v10.84.160, o `git revert 9ae9d86`). Candado **2514 de 2514** (11 nuevas), de a 4, 964 s, a la primera y sin inestables (Almacén dio el
+turno). Recorrido de producción sin escribir: 8 roles, 99 pasos, nada truena. 🔑 Marcelo, 19-oct ~09:22: «hay que parar ya con los pases de mejoras de
+impeccable. termina lo que tenías planeado»: ésta es la última de PrintFlow de la noche.
+
 ## v10.84.160 — El tablero se lee de un vistazo: contadores y alarmas con AA, lo que se lee a 10 px y la ficha de Listas a lo ancho — 19-oct-2026
 
 **Qué pasaba** (`/impeccable critique` del tablero como Producción, la mañana del 19-oct: **27/40**; snapshot

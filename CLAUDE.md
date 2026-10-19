@@ -120,7 +120,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2503 pruebas, ~15 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2514 pruebas, ~15 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Las tandas con banco van de a 7 a la vez (`PROBAR_PARALELO`; con 11 juntas,
@@ -197,7 +197,12 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.160 (19-oct, ~08:57, READY `dpl_Gr9E37eDo5bxRrMwrpuKTCFV5itD`, commit `c6c86fe`; vuelta atrás: promover
+- **LIVE:** v10.84.161 (19-oct, ~09:38, READY `dpl_2JrJMx4AMmXPwkphT72mbCejf4fJ`, commit `9ae9d86`; vuelta atrás: promover
+  `dpl_5qRH2qo93YKcqYjeroUu1DNQoYap` (el código de v10.84.160) o `git revert 9ae9d86`; la base no cambió; candado 2514 de 2514 (11 nuevas), de a 4, 16 min,
+  a la primera y sin inestables). **El detalle de la orden, hoja de trabajo para el piso** (su critique como Producción, 27/40): 🔑 a quien corre el
+  trabajo (`hp`: Producción, Pre-prensa, Germán) las especificaciones y las notas primero; la oficina y Dirección conservan su orden; el cuerpo no repite
+  el tipo, la cantidad ni la descripción del encabezado. 🔑 Marcelo, 19-oct ~09:22: **se paran las pasadas de /impeccable** (terminar lo planeado).
+  v10.84.160 (19-oct, ~08:57, READY `dpl_Gr9E37eDo5bxRrMwrpuKTCFV5itD`, commit `c6c86fe`; vuelta atrás: promover
   `dpl_6UEDFLta1MV5Vp1vQFM51W9CjPEK` (el código de v10.84.159) o `git revert c6c86fe`; la base no cambió; candado 2503 de 2503 (11 nuevas), de a 4, 16 min,
   a la primera y sin inestables). **El tablero se lee de un vistazo** (su critique como Producción, 27/40): contadores, títulos y alarmas en su tinta
   (`tintaAA`), lo que se lee a 10 px (a 9 sólo el folio y el turno, que son chips), sin `opacity` en lo que se lee, y 🔑 la ficha de Listas como la de
