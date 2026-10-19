@@ -1272,5 +1272,130 @@ await caso("tab-145-lo-de-hoy-en-minutos", "vista=german&rol=german&caso=lunes",
     r.t ? `P-0611, en la procesadora desde hace 30 min: «${reloj}»${r.deHoy ? "" : " (corrió pasada la medianoche: empezó ayer)"}` : "no encontré la tarjeta «Activa» de P-0611");
 });
 
+// v10.84.160 — se lee de un vistazo (la critique del tablero como Producción, 19-oct, con el detector): los contadores y las alarmas sin AA
+//   («1 vencida» 4.3:1, el 16 de Listas 3.1, «Órdenes Listas» 2.7, Salidas 3.3, el «ACTIVA» del CTP de Germán 2.2), la fecha de la ficha de una
+//   máquina en gris sobre gris (4.1) y lo que se lee de cada orden (qué es, el papel, la entrega) a 9 px. Micro (9 px) es para etiquetas y chips de
+//   posición (DESIGN.md): el folio «#P-…» y el turno «1°» se quedan; lo demás que se lee va a 10 px (meta) o más.
+// cada texto a la vista: su contraste contra su fondo de verdad (fondos con transparencia compuestos hasta uno opaco; la letra con transparencia,
+//   compuesta sobre ese fondo) y su tamaño. Del <select> cuenta lo que enseña cerrado (sus opciones las pinta el sistema); fuera lo escondido y la
+//   bitácora del banco.
+const textosALaVista = p => p.evaluate(() => {
+  const nums = c => (c.match(/[\d.]+/g) || []).map(Number);
+  const lum = ([r, g, b]) => { const f = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+  const fondo = el => { const capas = []; for (let x = el; x; x = x.parentElement) { const v = nums(getComputedStyle(x).backgroundColor); if (v.length === 3 || (v.length === 4 && v[3] >= 0.999)) { capas.push([v[0], v[1], v[2], 1]); break; } if (v.length === 4 && v[3] > 0) capas.push(v); }
+    let c = [255, 255, 255]; for (let i = capas.length - 1; i >= 0; i--) { const [r, g, b, a] = capas[i]; c = [r * a + c[0] * (1 - a), g * a + c[1] * (1 - a), b * a + c[2] * (1 - a)]; } return c; };
+  const propio = e => [...e.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join("").replace(/\s+/g, " ").trim();
+  const out = [];
+  for (const e of document.querySelectorAll("body *")) {
+    if (e.closest("option, optgroup, script, style, svg, #log, [aria-hidden=true]")) continue;
+    const t = e.tagName === "SELECT" ? (e.options[e.selectedIndex]?.text || "").trim() : propio(e); if (!t) continue;
+    const r = e.getBoundingClientRect(), s = getComputedStyle(e);
+    if (!r.width || !r.height || s.visibility === "hidden") continue;
+    const bg = fondo(e); let col = nums(s.color);
+    if (col.length === 4 && col[3] < 1) col = [0, 1, 2].map(i => col[i] * col[3] + bg[i] * (1 - col[3]));
+    // la opacidad de la ficha o de la tarjeta (la cola del CTP iba a .85, la máquina en mantenimiento a .7) también le quita contraste
+    let op = 1; for (let x = e; x; x = x.parentElement) op *= Number(getComputedStyle(x).opacity);
+    if (op < 1) col = [0, 1, 2].map(i => col[i] * op + bg[i] * (1 - op));
+    const a = lum(col), b = lum(bg), fs = parseFloat(s.fontSize);
+    const grande = fs >= 24 || (fs >= 18.66 && Number(s.fontWeight) >= 700);
+    // lo deshabilitado no pide contraste (WCAG 1.4.3: «parte de un componente inactivo»; el «▶ Activar» de una máquina en mantenimiento va a .5
+    //   a propósito, con su porqué en el title); su tamaño sí cuenta
+    const apagado = !!e.closest("button:disabled, select:disabled, [aria-disabled=true]");
+    out.push({ t: t.slice(0, 44), fs, ratio: Math.round((Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) * 10) / 10, min: apagado ? 0 : grande ? 3 : 4.5 });
+  }
+  return out;
+});
+// los chips que DESIGN.md deja en micro: el folio de la ficha y el turno en la fila
+const esChipMicro = t => /^#?[PH]-\d{3,5}$/.test(t) || /^\d+[º°]$/.test(t);   // (el turno lleva «º», el ordinal; la primera versión sólo aceptaba «°»)
+const sinAA = l => l.filter(x => x.ratio < x.min);
+const chicos = l => l.filter(x => x.fs < 10 && !esChipMicro(x.t));
+const lista = (l, f) => [...new Map(l.map(x => [x.t + f(x), x])).values()].slice(0, Number(process.env.LISTA || 8)).map(x => "«" + x.t + "» " + f(x)).join(" · ");   // (LISTA=40: todos)
+await caso("tab-146-los-contadores-y-alarmas-con-aa", "vista=produccion", async p => {
+  const r = await p.evaluate(() => {
+    const nums = c => (c.match(/[\d.]+/g) || []).map(Number);
+    const lum = ([r, g, b]) => { const f = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+    const fondo = el => { const capas = []; for (let x = el; x; x = x.parentElement) { const v = nums(getComputedStyle(x).backgroundColor); if (v.length === 3 || (v.length === 4 && v[3] >= 0.999)) { capas.push([v[0], v[1], v[2], 1]); break; } if (v.length === 4 && v[3] > 0) capas.push(v); }
+      let c = [255, 255, 255]; for (let i = capas.length - 1; i >= 0; i--) { const [r, g, b, a] = capas[i]; c = [r * a + c[0] * (1 - a), g * a + c[1] * (1 - a), b * a + c[2] * (1 - a)]; } return c; };
+    const propio = e => [...e.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join("").replace(/\s+/g, " ").trim();
+    const razon = el => { if (!el) return null; const a = lum(nums(getComputedStyle(el).color)), b = lum(fondo(el)); return Math.round((Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) * 10) / 10; };
+    const todos = [...document.querySelectorAll("body *")].filter(e => e.getClientRects().length);
+    const porTexto = re => todos.find(e => re.test(propio(e)) && !e.closest("button"));
+    // el contador de una columna: el número en el mismo renglón que su título
+    const cuenta = titulo => { const fila = titulo?.parentElement?.parentElement; return fila ? [...fila.querySelectorAll("*")].find(e => /^\d+$/.test(propio(e))) : null; };
+    const chip = [...document.querySelectorAll("button[aria-expanded]")].find(b => /vencida/.test(b.textContent));
+    const listas = document.querySelector('[role="region"][aria-label="Órdenes Listas"]');
+    const tListas = listas && [...listas.querySelectorAll("*")].find(e => propio(e) === "Órdenes Listas");
+    const nListas = listas && [...listas.querySelectorAll("*")].find(e => /^\d+$/.test(propio(e)));
+    const emp = porTexto(/^Empaque$/), sal = porTexto(/^Salidas$/), maq = porTexto(/^Maquila$/);
+    return [["«2 vencidas»", razon(chip)], ["«Órdenes Listas»", razon(tListas)], ["su número", razon(nListas)], ["«Empaque»", razon(emp)], ["su número", razon(cuenta(emp))],
+      ["«Salidas»", razon(sal)], ["su número", razon(cuenta(sal))], ["«clic para ver»", razon(porTexto(/^clic para ver$/))], ["«Maquila»", razon(maq)],
+      ["«Enviar a proveedor»", razon(porTexto(/^Enviar a proveedor$/))]];
+  });
+  const malos = r.filter(([, x]) => x == null || x < 4.5);
+  ok("tab-146-los-contadores-y-alarmas-con-aa", malos.length === 0, r.map(([t, x]) => t + " " + (x == null ? "NO ESTÁ" : x + ":1")).join(" · "));
+});
+await caso("tab-147-todo-el-texto-del-tablero-con-aa", "vista=produccion", async p => {
+  const l = await textosALaVista(p), m = sinAA(l);
+  ok("tab-147-todo-el-texto-del-tablero-con-aa", l.length > 40 && m.length === 0, `${l.length} textos; ${m.length ? m.length + " sin AA: " + lista(m, x => x.ratio + ":1") : "todos con AA"}`);
+});
+await caso("tab-148-nada-que-se-lee-a-9-px", "vista=produccion", async p => {
+  const l = await textosALaVista(p), m = chicos(l);
+  ok("tab-148-nada-que-se-lee-a-9-px", l.length > 40 && m.length === 0, `${l.length} textos; ${m.length ? m.length + " de menos de 10 px: " + lista(m, x => x.fs + " px") : "ninguno de menos de 10 px (fuera de los chips de folio y turno)"}`);
+});
+await caso("tab-149-el-ctp-de-german-con-aa-y-sin-9-px", "vista=german&rol=german", async p => {
+  const l = await textosALaVista(p), m = sinAA(l), c = chicos(l);
+  ok("tab-149-el-ctp-de-german-con-aa-y-sin-9-px", l.length > 15 && !m.length && !c.length,
+    `${l.length} textos; ${m.length ? "sin AA: " + lista(m, x => x.ratio + ":1") : "todos con AA"}; ${c.length ? "de menos de 10 px: " + lista(c, x => x.fs + " px") : "ninguno de menos de 10 px"}`);
+});
+// la ficha de Listas: el folio «#P-…» iba en su propia columna, a todo el alto, y lo que es la orden se partía en ~117 px (en producción,
+//   «REPORTE DE / INSPECCION DE / ABORDO / 0404FSVR0014 · 1,000 / pzas», cinco renglones, con la ficha a 265 px de ancho): lo que es va a lo ancho
+const renglonesDelProducto = (p, pn, texto) => p.evaluate(([pn, texto]) => {
+  const f = [...document.querySelectorAll("[data-ficha]")].find(e => e.dataset.ficha === "OP-" + pn); if (!f) return null;
+  const el = [...f.querySelectorAll("*")].find(e => [...e.childNodes].some(n => n.nodeType === 3 && n.textContent.includes(texto))); if (!el) return { sin: true };
+  const s = getComputedStyle(el), lh = parseFloat(s.lineHeight) || parseFloat(s.fontSize) * 1.2;
+  return { renglones: Math.round(el.getBoundingClientRect().height / lh), alto: Math.round(f.getBoundingClientRect().height), ancho: Math.round(f.getBoundingClientRect().width) };
+}, [pn, texto]);
+// (vuelta 3, por donde no se diseñó) un nombre no se parte a media palabra (la vuelta 2 encontró «RESTAURANTE / S HAKUNA» con overflowWrap:anywhere)
+//   y el de 79 letras no pasa de 3 renglones (como en la ficha de una máquina, tab-31)
+const palabrasPartidas = (p, pn) => p.evaluate(pn => {
+  const f = [...document.querySelectorAll("[data-ficha]")].find(e => e.dataset.ficha === "OP-" + pn); if (!f) return null;
+  const nodo = [...f.querySelectorAll("*")].flatMap(e => [...e.childNodes]).find(n => n.nodeType === 3 && n.textContent.trim().length > 8 && /^[A-ZÁÉÍÓÚÑ.,\s]+$/.test(n.textContent.trim()));
+  if (!nodo) return { sin: true };
+  const partidas = []; const re = /\S+/g; let m;
+  while ((m = re.exec(nodo.textContent))) { const r = document.createRange(); r.setStart(nodo, m.index); r.setEnd(nodo, m.index + m[0].length);
+    const tops = new Set([...r.getClientRects()].filter(x => x.width > 0).map(x => Math.round(x.top))); if (tops.size > 1) partidas.push(m[0]); }
+  const el = nodo.parentElement, lh = parseFloat(getComputedStyle(el).lineHeight) || 15;
+  return { nombre: nodo.textContent.trim(), partidas, renglones: Math.round(el.getBoundingClientRect().height / lh) };
+}, pn);
+await caso("tab-152-listas-sin-partir-palabras", "vista=produccion", async p => {
+  const [a, b] = [await palabrasPartidas(p, "P-0603"), await palabrasPartidas(p, "P-0602")];
+  const bien = x => x && !x.sin && x.partidas.length === 0;
+  ok("tab-152-listas-sin-partir-palabras", bien(a) && bien(b) && b.renglones <= 3,
+    [a, b].map(x => !x ? "no encontré la ficha" : x.sin ? "no encontré el nombre" : `«${x.nombre.slice(0, 30)}»: ${x.partidas.length ? "PARTE «" + x.partidas.join("», «") + "»" : "sin partir palabras"}, ${x.renglones} renglón(es)`).join(" · "));
+});
+// la máquina y el CTP en mantenimiento (sin trabajo, y con trabajo), la búsqueda que resalta y la lectura que falla: el mismo barrido
+for (const [n, q, nota, prep] of [
+  ["153", "vista=produccion&caso=mantenimiento&mant=off_gto", "la PM52 (con trabajo) y la GTO (libre) en mantenimiento", null],
+  ["154", "vista=german&rol=german&mant=pp_proc", "la Procesadora en mantenimiento y sin trabajo", p => p.evaluate(() => window.__cambiar("P-0611", { stage: "placas_listas", current_machine: null, machine_queue_position: null }))],
+  ["155", "vista=produccion&buscar=P-0601", "con la búsqueda que resalta P-0601", null],
+  ["156", "vista=produccion&lectura=fallo", "con la lectura que falló", null],
+]) {
+  await caso(`tab-${n}-barrido-${q.replace(/^vista=\w+&?/, "").replace(/[&=]/g, "-") || "normal"}`, q, async p => {
+    if (prep) { await prep(p); await espera(p, 500); }
+    const l = await textosALaVista(p), m = sinAA(l), c = chicos(l);
+    ok(`tab-${n}-barrido-${q.replace(/^vista=\w+&?/, "").replace(/[&=]/g, "-") || "normal"}`, l.length > 10 && !m.length && !c.length,
+      `${nota}: ${l.length} textos; ${m.length ? "sin AA: " + lista(m, x => x.ratio + ":1") : "todos con AA"}; ${c.length ? "de menos de 10 px: " + lista(c, x => x.fs + " px") : "ninguno de menos de 10 px"}`);
+  });
+}
+for (const [n, vp] of [["150", { width: 1366, height: 768 }], ["151", { width: 1920, height: 1080 }]]) {
+  await caso(`tab-${n}-listas-lo-que-es-a-lo-ancho-${vp.width}`, "vista=produccion", async p => {
+    await p.evaluate(() => window.__cambiar("P-0601", { client: "AUTOBUSES DE LA PIEDAD", product_type: "REPORTE DE INSPECCION DE ABORDO 0404FSVR0014", quantity: 1000, paper_type: "AUTOCOPIANTE BCO. COPIA ROSA, COPIA FINAL AZUL" }));
+    await espera(p, 400);
+    const r = await renglonesDelProducto(p, "P-0601", "REPORTE DE INSPECCION");
+    ok(`tab-${n}-listas-lo-que-es-a-lo-ancho-${vp.width}`, !!r && !r.sin && r.renglones <= 2,
+      !r ? "no encontré la ficha de P-0601 en Listas" : r.sin ? "la ficha no dice qué es" : `a ${vp.width}, «REPORTE DE INSPECCION DE ABORDO 0404FSVR0014 · 1,000 pzas» en ${r.renglones} renglones (la ficha: ${r.ancho}×${r.alto} px)`);
+  }, vp);
+}
+
 await browser.close();
 for (const r of res) console.log(r);

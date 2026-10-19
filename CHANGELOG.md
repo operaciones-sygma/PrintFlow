@@ -12,6 +12,40 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.160 — El tablero se lee de un vistazo: contadores y alarmas con AA, lo que se lee a 10 px y la ficha de Listas a lo ancho — 19-oct-2026
+
+**Qué pasaba** (`/impeccable critique` del tablero como Producción, la mañana del 19-oct: **27/40**; snapshot
+`.impeccable/critique/2026-10-19T14-32-10Z__src-app-jsx-kanban-tablero-de-produccion.md`). El tablero quedó cerrado el 8-oct por tres revisiones
+independientes (20 → 25 → 24/40); desde entonces se le movieron «Así va la planta», las acciones de Empaque y el reloj. En la base: 445 entradas a
+máquina en 30 días; hoy, 16 en Listas, 12 en máquina, 5 en Empaque y 14 en Salidas; lo que es cada orden mide 34 letras la mitad de las veces. Visto
+contra la app publicada como Producción a 1366 y 1920, con el detector dentro de la página:
+- **Lo que Gerardo lee de cada orden, a 9 px**: qué es («Formatos · 5,000»), el papel y la entrega, en las fichas de las máquinas, la cola, Salidas y el
+  CTP; qué máquina es («Guillotina», «Suajadora»), «ACTIVA», «EN ESPERA» (en el CTP, a 8) y «Mover a máquina…». DESIGN.md deja micro (9) para chips.
+- **Los contadores y las alarmas sin AA**: «1 vencida» 4.3:1 (blanco sobre el rojo pleno), el número de Listas 3.1 y su título 2.7, Empaque 4.1, Salidas
+  3.3 y «clic para ver» 2.9, Maquila 2.5, el «ACTIVA» del CTP 2.1, «Órdenes para CTP» 3.2; la fecha de cada ficha de máquina en gris `t3` sobre el gris
+  de la ficha (4.1-4.2), los textos de ejemplo en `ph` («Enviar a proveedor» 2.9), la cola del CTP a `opacity .85` y la máquina en mantenimiento a .7.
+- **La ficha de Listas desperdiciaba su ancho**: el folio «#P-0667» tenía su propia columna a todo el alto y lo que es la orden se partía en ~117 px
+  (en producción, «REPORTE DE / INSPECCION DE / ABORDO / 0404FSVR0014 · 1,000 / pzas»).
+
+**Qué se cambió** (sólo pantalla; la base no se tocó; `Kanban`, `DragCard` y `PreprensaBoard`):
+- Los contadores, títulos y alarmas en su tinta (`tintaAA`): el chip de vencidas, Listas, Empaque, Salidas, Maquila, el CTP; la fecha vencida en `dnInk`
+  en toda ficha y la otra en `t2`; los textos de ejemplo en `t2`; los grises sobre un tinte (los encabezados de grupo, «clic para abrir», «El tablero
+  no está filtrado») en `tintaAA(C.t2)`; sin `opacity` en lo que se lee.
+- Lo que se lee, a 10 px (meta); a 9 sólo el folio «#P-…» y el turno «1º», que son chips.
+- 🔑 **La ficha de Listas como la de una máquina**: junto a la foto, el nombre a lo ancho (hasta 3 renglones; el completo en el title) y el asa con el
+  folio; lo que es y el papel, a todo lo ancho bajo la foto. Con la orden de producción: de 5 renglones a 2, y la ficha de 261 a 208 px.
+
+**Cómo se probó.** 11 pruebas nuevas en `tablero` (tab-146 a tab-156); `textosALaVista` mide TODO el texto a la vista (su contraste contra el fondo
+compuesto, con la opacidad, y su tamaño). **Vuelta 1**, escrita antes del arreglo y corrida contra el código de antes: **fallaban las 6** (202 textos: 24
+sin AA y 44 de menos de 10 px; el CTP con 6 sin AA; lo que es la orden en 5 renglones a 1366 y a 1920). **Vuelta 2**, con el arreglo: 1 de 6; quedaban
+los encabezados de grupo y «clic para abrir» (4.2), qué máquina es a 9 px, «Placas» y «Limpieza» del CTP (3.6), y la ficha de Listas: con el folio en el
+renglón del nombre, el `overflowWrap:anywhere` partía «RESTAURANTE / S HAKUNA» y el nombre de 79 letras iba en 9 renglones (se rehízo como `DragCard`).
+tab-148 aceptaba el turno sólo con «°» (lleva «º»): era de la prueba. **Vuelta 3**, por donde no se diseñó (sin partir palabras y el nombre largo en 3
+renglones; la máquina y el CTP en mantenimiento con y sin trabajo; la búsqueda que resalta; la lectura que falló): 2 de 5 a la primera, «Fuera de
+servicio» del CTP en `wnInk` sobre el ámbar (4.4) y «El tablero no está filtrado» (4.1); el «▶ Activar» apagado de una máquina en mantenimiento (2.2)
+no pide AA (WCAG 1.4.3, componente inactivo): lo deshabilitado sale del barrido de contraste, no del de tamaño (era de la prueba). Luego 11 de 11. La
+tanda completa, 176 de 176.
+
 ## v10.84.159 — El reloj de la máquina dice desde cuándo en toda pantalla, y a Producción el precio se le marca sólo cuando falta — 19-oct-2026
 
 **Qué pasaba** (`/impeccable critique` de «Mis Pendientes» de Producción, la mañana del 19-oct: **27/40**; snapshot

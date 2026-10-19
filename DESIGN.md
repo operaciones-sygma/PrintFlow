@@ -224,6 +224,12 @@ La tarjeta de orden/registro, y el patrón a replicar en CobranzaFlow para factu
 - Acciones: 3-4 utilitarias visibles como íconos; las destructivas/raras se esconden tras un menú "⋯ Más" con etiquetas de texto.
 - La card es enfocable por teclado (role=button, tabIndex=0, Enter/Espacio abre el detalle) y tiene aria-label.
 - **Borde-acento (firma):** a diferencia de la card genérica, la OCard SIEMPRE lleva un borde completo de 1.5px tintado con el color de su etapa al ~40% (`+"66"`); urgente lo pinta en rojo peligro. No es una franja lateral: es el contorno entero, sutil. Reemplaza al viejo side-tab. El color aquí SÍ tiene significado (codifica etapa), así que no rompe la regla "color con significado"; convive con el chip de etapa (icono+palabra) para a11y. Aplica igual a las cards de lista derivadas (salidas, archivo, resultados de búsqueda).
+- **Lo que se lee va a 10 px o más; micro (9) es sólo para chips** (v10.84.160, la critique del tablero como Producción, 27/40): qué es la orden, el
+  papel, la entrega, «ACTIVA», «EN ESPERA» y lo que dice un `<select>` son meta (10) o body (11); a 9 px sólo el folio «#P-…» y el turno «1°». Gerardo
+  lee el tablero de pie, a un metro de una pantalla de 1366. 🔑 **Un contador o un título de color va en su tinta** (`tintaAA(color)` de fondo con letra
+  blanca, o de letra): el verde pleno de Listas daba 3.1:1, el de Salidas 3.3, el morado de Empaque 4.1, el cian del CTP 3.7, el «ACTIVA» verde del
+  CTP 2.2 y el chip rojo de vencidas 4.3. Un texto de ejemplo («Enviar a proveedor», «Disponible») va en `t2`, no en `ph`; nada que se lea lleva
+  `opacity` (la cola del CTP iba a .85). La fecha vencida, `dnInk` en toda ficha. `tablero` lo mide con TODO el texto a la vista (tab-147 a 149).
 - **El reloj de la máquina dice desde cuándo, en toda pantalla** (v10.84.159, la critique de «Mis Pendientes» de Producción, 27/40): lo que entró antes
   de hoy, «desde el vie 10:49» (`LiveTimer` con `desde`); lo de hoy, en minutos. Las horas corridas cuentan noches y fin de semana: el lunes la ficha
   decía «66h 50m» y el detalle «308h 38m» de lo que el tablero ya decía «desde el vie» (v10.84.58). El mismo dato se dice igual en todas partes.
