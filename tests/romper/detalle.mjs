@@ -1321,6 +1321,74 @@ await caso("det-205-el-reloj-dice-desde-cuando", "caso=alertas&rol=produccion", 
   ok("det-205-el-reloj-dice-desde-cuando", /^desde /.test(reloj), `P-0591, en la Printmaster 74 desde el 6-oct: «${reloj}»`);
 });
 
+// v10.84.161 — el detalle, hoja de trabajo para el piso (la critique del detalle como Producción, 19-oct): Gerardo abre la orden desde el tablero para
+//   correrla y a 1366 lo primero eran «Tipo» y «Cantidad» (los dice el encabezado), la categoría, quién la creó y el vendedor; los acabados y las
+//   notas («OC 9889») quedaban abajo del corte del cuerpo (414 px a la vista de 775). A quien corre el trabajo (Producción, Pre-prensa, Germán), lo
+//   que se corre primero; a todos, sin repetir lo del encabezado. La oficina conserva su orden (el cliente primero).
+const delDetalle = p => dlg(p).evaluate(d => {
+  const propio = e => [...e.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join("").replace(/\s+/g, " ").trim();
+  const secciones = [...d.querySelectorAll("div")].map(e => ({ t: propio(e), y: e.getBoundingClientRect().top }))
+    .filter(x => /^(Cliente|Producto|Especificaciones|Notas)$/.test(x.t));
+  const cuerpo = [...d.querySelectorAll("*")].find(e => { const s = getComputedStyle(e); return /(auto|scroll)/.test(s.overflowY) && e.clientHeight > 150; });
+  const fondo = cuerpo ? cuerpo.getBoundingClientRect().bottom : innerHeight;
+  const filas = [...d.querySelectorAll("dl")].map(x => ({ l: (x.querySelector("dt")?.textContent || "").trim(), v: (x.querySelector("dd")?.textContent || "").trim(), abajo: x.getBoundingClientRect().bottom }));
+  const notas = [...d.querySelectorAll("div")].find(e => /OC 9889/.test(propio(e)));
+  return { orden: secciones.sort((a, b) => a.y - b.y).map(x => x.t), filas: filas.map(f => ({ l: f.l, v: f.v, aLaVista: f.abajo <= fondo + 1 })),
+    notasALaVista: notas ? notas.getBoundingClientRect().top < fondo - 8 : null, encabezado: (d.querySelector("h2, h3")?.closest("div")?.parentElement?.innerText || "").replace(/\s+/g, " ").slice(0, 200) };
+});
+const ESPECS = ["Papel", "Medidas", "Tintas Frente", "Acabados"];
+for (const [n, rol, etapa] of [["206", "produccion", "in_production"], ["209", "preprensa", "design"], ["210", "german", "ctp"]]) {
+  await caso(`det-${n}-${rol}-ve-primero-lo-que-corre`, `caso=factura&rol=${rol}&etapa=${etapa}`, async p => {
+    const r = await delDetalle(p);
+    const iE = r.orden.indexOf("Especificaciones"), iP = r.orden.indexOf("Producto");
+    const ocultas = ESPECS.filter(l => { const f = r.filas.find(x => x.l === l); return !f || !f.aLaVista; });
+    ok(`det-${n}-${rol}-ve-primero-lo-que-corre`, iE >= 0 && (iP < 0 || iE < iP) && ocultas.length === 0,
+      `${rol}, a 1366: ${r.orden.join(" → ") || "(sin secciones)"}; ${ocultas.length ? "abajo del corte: " + ocultas.join(", ") : "papel, medidas, tintas y acabados a la vista"}`);
+  });
+}
+await caso("det-207-las-notas-a-la-vista-de-produccion", "caso=factura&rol=produccion&etapa=in_production", async p => {
+  await p.evaluate(() => window.__cambiar({ notes: "OC 9889 · empacar de 100 en 100 con ligas" })); await espera(p, 400);
+  const r = await delDetalle(p);
+  ok("det-207-las-notas-a-la-vista-de-produccion", r.notasALaVista === true, r.notasALaVista == null ? "las notas no salen en el detalle" : `las notas («OC 9889…») ${r.notasALaVista ? "a la vista" : "ABAJO del corte (hay que bajar para leerlas)"}; orden: ${r.orden.join(" → ")}`);
+});
+for (const [n, rol] of [["208", "karla"], ["211", "produccion"]]) {
+  await caso(`det-${n}-sin-repetir-el-encabezado-${rol}`, `caso=factura&rol=${rol}`, async p => {
+    const r = await delDetalle(p);
+    const repetidas = r.filas.filter(f => (f.l === "Tipo" && f.v === "Formatos") || (f.l === "Cantidad" && /5,000/.test(f.v))).map(f => f.l + " «" + f.v + "»");
+    ok(`det-${n}-sin-repetir-el-encabezado-${rol}`, repetidas.length === 0, repetidas.length ? `repite lo del encabezado («Formatos · 5,000 pzas»): ${repetidas.join(", ")}` : "el cuerpo no repite el tipo ni la cantidad del encabezado");
+  });
+}
+// (vuelta 3, por donde no se diseñó) la orden SIN tipo: el encabezado enseña la descripción, y el cuerpo no la repite; la maquila como Producción (sin
+//   especificaciones) abre y dice lo que es; el vendedor que no es dueño sigue sin ver las notas (pueden traer acuerdos); Dirección conserva su orden
+await caso("det-213-sin-tipo-no-repite-la-descripcion", "caso=factura&rol=produccion&etapa=in_production", async p => {
+  await p.evaluate(() => window.__cambiar({ product_type: null })); await espera(p, 400);
+  // (la primera versión buscaba el encabezado como h2/h3, y el detalle no los usa: era de la prueba; ahora cuenta cuántas veces sale en todo el detalle)
+  const veces = await dlg(p).evaluate(d => (d.textContent.match(/FORMATO 5 PUNTOS DE SEGURIDAD/g) || []).length);
+  ok("det-213-sin-tipo-no-repite-la-descripcion", veces === 1,
+    `sin tipo: «FORMATO 5 PUNTOS DE SEGURIDAD» sale ${veces} vez/veces en el detalle (${veces === 1 ? "en el encabezado" : veces ? "el cuerpo la REPITE" : "NO dice qué es"})`);
+});
+await caso("det-214-la-maquila-como-produccion", "caso=maquila&rol=produccion", async p => {
+  const r = await delDetalle(p);
+  ok("det-214-la-maquila-como-produccion", r.orden.includes("Producto") && !r.filas.some(f => f.l === "Costo" || f.l === "Precio"),
+    `una maquila, como Producción: ${r.orden.join(" → ") || "(sin secciones)"}; ${r.filas.some(f => f.l === "Costo" || f.l === "Precio") ? "VE el costo o el precio" : "sin costo ni precio"}`);
+});
+await caso("det-215-el-vendedor-ajeno-no-ve-las-notas", "caso=factura&rol=vendedor&login=otro", async p => {
+  await p.evaluate(() => window.__cambiar({ notes: "OC 9889 · le dejamos el 10% por pronto pago" })); await espera(p, 400);
+  const t = await textoDlg(p);
+  ok("det-215-el-vendedor-ajeno-no-ve-las-notas", !/OC 9889/.test(t), `un vendedor que no es dueño: las notas ${/OC 9889/.test(t) ? "SE VEN (pueden traer acuerdos y descuentos)" : "no se ven"}`);
+});
+await caso("det-216-direccion-conserva-su-orden", "caso=factura&rol=admin", async p => {
+  const r = await delDetalle(p);
+  const iC = r.orden.indexOf("Cliente"), iP = r.orden.indexOf("Producto"), iE = r.orden.indexOf("Especificaciones");
+  ok("det-216-direccion-conserva-su-orden", iC === 0 && iP < iE && r.filas.some(f => f.l === "ID interno"), `Dirección: ${r.orden.join(" → ")}; ${r.filas.some(f => f.l === "ID interno") ? "con su ID interno" : "SIN el ID interno"}`);
+});
+// la oficina conserva su orden: el cliente y lo que es, antes que las especificaciones (Lupita captura y llama al cliente)
+await caso("det-212-la-oficina-conserva-su-orden", "caso=factura&rol=secretaria", async p => {
+  const r = await delDetalle(p);
+  const iC = r.orden.indexOf("Cliente"), iP = r.orden.indexOf("Producto"), iE = r.orden.indexOf("Especificaciones");
+  ok("det-212-la-oficina-conserva-su-orden", iC === 0 && iP >= 0 && iP < iE, `Lupita: ${r.orden.join(" → ")}`);
+});
+
 await browser.close();
 for (const r of res) console.log(r);
 const fallan = res.filter(r => r.startsWith("FALLA")).length;

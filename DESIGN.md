@@ -224,6 +224,10 @@ La tarjeta de orden/registro, y el patrón a replicar en CobranzaFlow para factu
 - Acciones: 3-4 utilitarias visibles como íconos; las destructivas/raras se esconden tras un menú "⋯ Más" con etiquetas de texto.
 - La card es enfocable por teclado (role=button, tabIndex=0, Enter/Espacio abre el detalle) y tiene aria-label.
 - **Borde-acento (firma):** a diferencia de la card genérica, la OCard SIEMPRE lleva un borde completo de 1.5px tintado con el color de su etapa al ~40% (`+"66"`); urgente lo pinta en rojo peligro. No es una franja lateral: es el contorno entero, sutil. Reemplaza al viejo side-tab. El color aquí SÍ tiene significado (codifica etapa), así que no rompe la regla "color con significado"; convive con el chip de etapa (icono+palabra) para a11y. Aplica igual a las cards de lista derivadas (salidas, archivo, resultados de búsqueda).
+- **El detalle se ordena por lo que viene a hacer quien lo abre** (v10.84.161, la critique del detalle como Producción, 27/40): quien CORRE el
+  trabajo (Producción, Pre-prensa, Germán: `hp`) ve primero las especificaciones y las notas, y después el producto y el nombre interno; la oficina y
+  Dirección, el cliente y lo que es primero. Y el cuerpo no repite lo que el encabezado ya dice (tipo, cantidad, la descripción cuando es lo que el
+  encabezado enseña): a 1366 el cuerpo enseña ~414 px y cada renglón repetido empuja los acabados y las notas abajo del corte.
 - **Lo que se lee va a 10 px o más; micro (9) es sólo para chips** (v10.84.160, la critique del tablero como Producción, 27/40): qué es la orden, el
   papel, la entrega, «ACTIVA», «EN ESPERA» y lo que dice un `<select>` son meta (10) o body (11); a 9 px sólo el folio «#P-…» y el turno «1°». Gerardo
   lee el tablero de pie, a un metro de una pantalla de 1366. 🔑 **Un contador o un título de color va en su tinta** (`tintaAA(color)` de fondo con letra

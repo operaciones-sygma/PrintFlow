@@ -12,6 +12,30 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.161 — El detalle de la orden, hoja de trabajo para el piso: lo que se corre primero y sin repetir el encabezado — 19-oct-2026
+
+**Qué pasaba** (`/impeccable critique` del detalle como Producción, la mañana del 19-oct: **27/40**; snapshot
+`.impeccable/critique/2026-10-19T15-15-36Z__src-app-jsx-detailmodal.md`). El detalle quedó cerrado el 7-oct por tres revisiones independientes (23 → 24
+→ 27/40); desde entonces le entraron «Corregir precio», «Facturar por partes» en «Más» y el reloj «desde». Gerardo lo abre desde el tablero para ver
+cómo se corre una orden. Visto contra la app publicada como Producción a 1366 (P-0632 en la Printmaster 52), con el detector dentro del diálogo (0):
+- **Para correr el trabajo había que bajar**: el cuerpo enseña 414 px de 775; arriba iban el nombre interno y «Producto» (tipo, categoría, cantidad,
+  quién la creó, vendedor), y las tintas de vuelta, los acabados (suaje y barniz mate) y las notas («OC 9889») quedaban abajo del corte.
+- **El cuerpo repetía el encabezado**: «Tipo» y «Cantidad» son el renglón de arriba («ETIQUETA FRONTAL DELDHY PV26 · 500 pzas»); sin tipo, la
+  descripción salía dos veces.
+
+**Qué se cambió** (sólo pantalla; la base no se tocó; `DetailModal`):
+- 🔑 A quien corre el trabajo (Producción, Pre-prensa, Germán: `hp`), las especificaciones y las notas primero; luego el producto y el nombre interno.
+  La oficina y Dirección conservan su orden (el cliente y lo que es primero).
+- El cuerpo ya no repite el tipo ni la cantidad del encabezado, ni la descripción cuando es lo que el encabezado enseña.
+- «Enviar a Maquila» sigue en el pie del detalle (se decidió en v10.84.157 que el detalle conserva todas las acciones).
+
+**Cómo se probó.** 11 pruebas nuevas en `detalle` (det-206 a det-216); `delDetalle` lee el orden de las secciones y qué filas quedan arriba del corte
+del cuerpo. **Vuelta 1**, escrita antes del arreglo y corrida contra el código de antes: **fallaban las 6** (Producción, Pre-prensa y Germán con
+«Producto → Especificaciones» y las tintas o los acabados abajo del corte; las notas abajo; «Tipo» y «Cantidad» repetidos para Karla y Producción); la
+guarda de la oficina (det-212) pasaba. **Vuelta 2**, con el arreglo: 7 de 7. **Vuelta 3**, por donde no se diseñó (la orden sin tipo, la maquila como
+Producción, el vendedor que no es dueño sin las notas, Dirección con su orden y su ID interno): 3 de 4; det-213 buscaba el encabezado como h2/h3 y el
+detalle no los usa (era de la prueba: ahora cuenta cuántas veces sale la descripción en todo el detalle, 1). La tanda completa, 225 de 225.
+
 ## v10.84.160 — El tablero se lee de un vistazo: contadores y alarmas con AA, lo que se lee a 10 px y la ficha de Listas a lo ancho — 19-oct-2026
 
 **Qué pasaba** (`/impeccable critique` del tablero como Producción, la mañana del 19-oct: **27/40**; snapshot
