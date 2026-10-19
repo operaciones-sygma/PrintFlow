@@ -3188,7 +3188,7 @@ function GuideBanner({text,color=C.ac}) {
 }
 function ProgressBar({order}) {
   const {cur,tot,pct:p}=getProgress(order); const s=SM[order.stage];
-  return <div style={{marginTop:6}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}><span style={{fontSize:9,color:C.t2}}>Progreso</span><span style={{/* v10.84.125 — en su tinta (el color de la etapa a 9 px daba 3.3:1) */fontSize:9,color:tintaAA(s?.c||C.t2),fontWeight:600}}>{cur}/{tot}</span></div><div style={{background:C.sf,borderRadius:4,height:6,overflow:"hidden"}}><div style={{width:"100%",height:"100%",background:s?.c||C.ac,borderRadius:4,transformOrigin:"left",transform:"scaleX("+(p/100)+")",transition:"transform .5s cubic-bezier(.22,1,.36,1)"}}/></div></div>;
+  return <div style={{marginTop:6}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}><span style={{/* v10.84.157 — 10 px, el piso de la casa (eran 9) */fontSize:10,color:C.t2}}>Progreso</span><span style={{/* v10.84.125 — en su tinta (el color de la etapa a 9 px daba 3.3:1) */fontSize:10,color:tintaAA(s?.c||C.t2),fontWeight:600}}>{cur}/{tot}</span></div><div style={{background:C.sf,borderRadius:4,height:6,overflow:"hidden"}}><div style={{width:"100%",height:"100%",background:s?.c||C.ac,borderRadius:4,transformOrigin:"left",transform:"scaleX("+(p/100)+")",transition:"transform .5s cubic-bezier(.22,1,.36,1)"}}/></div></div>;
 }
 function LiveTimer({started,desde}) {
   const [el,setEl]=useState(0);
@@ -15406,13 +15406,14 @@ function StageFlowButtons({o,role,onAction:onActionSinEscudo,variante}){
       {o.stage==="placas_listas"&&(role==="produccion"||role==="admin")&&<button onClick={()=>onAction(o.id,"advance","ready")} style={B(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Recoger Placas → Lista p/ imprimir</button>}
       {/* v10.23.0 — Botón "Volver a Lista" movido al Kanban en v10.24.0 (solo bajo DragCard) */}
       {o.stage==="ready"&&<div style={{fontSize:12,color:C.ac,padding:"8px 0"}}><HandPointingIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Arrastra esta orden a una máquina en el <strong>Tablero</strong></div>}
-      {o.stage==="in_production"&&<><button onClick={()=>onAction(o.id,"advance","packaging")} style={B(C.emp)}><PackageIcon size={14} weight="bold"/>Empaque</button><button onClick={()=>onAction(o.id,"send_maquila")} style={B(C.maq)}><TruckIcon size={14} weight="bold"/>Enviar a Maquila</button></>}
+      {/* v10.84.157 — en la ficha, «Enviar a Maquila» va a su «⋯» (como en el tablero: 0 desde máquina en 60 días contra 286 a Empaque); el detalle lo conserva */}
+      {o.stage==="in_production"&&<><button onClick={()=>onAction(o.id,"advance","packaging")} style={B(C.emp)}><PackageIcon size={14} weight="bold"/>Empaque</button>{det&&<button onClick={()=>onAction(o.id,"send_maquila")} style={B(C.maq)}><TruckIcon size={14} weight="bold"/>Enviar a Maquila</button>}</>}
       {/* v10.40.0 — Botón "Regresar" genérico (sustituye "Regresar a CTP" y "Devolver a Diseño")
           Aparece cuando el rol tiene al menos 1 opción de stage destino. Filtro está dentro de getRevertOptions. */}
       {o.stage==="maquila_out"&&<button onClick={()=>onAction(o.id,"advance","maquila_in")} style={B(C.maqin)}><DownloadSimpleIcon size={14} weight="bold"/>Recibido de Maquila</button>}
       {o.stage==="maquila_in"&&role==="admin"&&<><button onClick={()=>onAction(o.id,"advance","ready")} style={B(C.ios)}><ArrowsClockwiseIcon size={14} weight="bold"/>Volver a Producción</button><button onClick={()=>onAction(o.id,"advance","packaging")} style={B(C.emp)}><PackageIcon size={14} weight="bold"/>Empaque</button></>}
       {o.stage==="maquila_in"&&role!=="admin"&&<div style={{fontSize:12,color:T(C.maqin),padding:"8px 0"}}><HandPointingIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Arrastra a máquina de acabados, Empaque o Maquila en el <strong>Tablero</strong></div>}
-      {o.stage==="packaging"&&(role==="produccion"||role==="admin")&&<><button onClick={()=>onAction(o.id,"advance","salidas")} style={B(C.sal)}><ExportIcon size={14} weight="bold"/>Enviar a Salidas</button><button onClick={()=>onAction(o.id,"send_maquila")} style={B(C.maq)}><TruckIcon size={14} weight="bold"/>Enviar a Maquila</button>{o.stock_role==="production"&&!o.stock_loaded&&<button onClick={()=>onAction(o.id,"load_stock")} style={B(C.emr)} title="Orden legacy (pre-v10.46) — ingresa al inventario interno. Para órdenes nuevas Cuadra, usa la 3ra opción en Asignar Folio."><PackageIcon size={14} weight="bold"/>Cargar a Stock <span style={{opacity:0.6,fontSize:9}}>(legacy)</span></button>}</>}
+      {o.stage==="packaging"&&(role==="produccion"||role==="admin")&&<><button onClick={()=>onAction(o.id,"advance","salidas")} style={B(C.sal)}><ExportIcon size={14} weight="bold"/>Enviar a Salidas</button>{det&&<button onClick={()=>onAction(o.id,"send_maquila")} style={B(C.maq)}><TruckIcon size={14} weight="bold"/>Enviar a Maquila</button>}{o.stock_role==="production"&&!o.stock_loaded&&<button onClick={()=>onAction(o.id,"load_stock")} style={B(C.emr)} title="Orden legacy (pre-v10.46) — ingresa al inventario interno. Para órdenes nuevas Cuadra, usa la 3ra opción en Asignar Folio."><PackageIcon size={14} weight="bold"/>Cargar a Stock <span style={{opacity:0.6,fontSize:9}}>(legacy)</span></button>}</>}
       {/* v10.42.2 — Rescate: Karla puede cargar a stock una orden de Cuadra que se envió por accidente a Salidas */}
       {o.stage==="salidas"&&o.stock_role==="production"&&!o.stock_loaded&&(role==="karla"||role==="admin")&&<button onClick={()=>onAction(o.id,"load_stock")} style={B(C.emr)} title="Orden legacy (pre-v10.46) que iba a inventario. Para órdenes nuevas Cuadra, usa la 3ra opción en Asignar Folio."><PackageIcon size={14} weight="bold"/>Cargar a Stock <span style={{opacity:0.6,fontSize:9}}>(legacy)</span></button>}
       {o.stage==="salidas"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&!o.return_covered_by_folio&&!o.has_matrix_lines&&!o.has_splits&&!o.grouped_invoice_folio/* v10.80.13: mismo predicado que "Facturar por partes" de al lado. Sin esto la orden con splits ya asignados veia "Asignar Folio y Entregar", que le pondria un folio NUEVO a algo ya facturado */&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"deliver_with_invoice")} style={B(C.ok)}><FileTextIcon size={14} weight="bold"/>Asignar Folio y Entregar</button>}
@@ -15565,9 +15566,33 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsp
   const [expanded,setExpanded]=useState(false);
   const [badgesOpen,setBadgesOpen]=useState(false); // v10.73.7 distill: overflow "+N" de la fila de badges
   const [moreOpen,setMoreOpen]=useState(false); // v10.73.9 harden: menú "⋯ Más" de acciones destructivas
-  useEffect(()=>{ if(!moreOpen) return; const h=()=>setMoreOpen(false); const k=e=>{if(e.key==="Escape")setMoreOpen(false);}; document.addEventListener("mousedown",h); document.addEventListener("keydown",k); return ()=>{document.removeEventListener("mousedown",h);document.removeEventListener("keydown",k);}; },[moreOpen]);
+  const masRef=useRef(null);   // v10.84.157 — el botón del «⋯» (el de la fila de acciones o el del pie): Esc le regresa el foco
+  const masCaja=useRef(null);  // v10.84.157 — el botón del «⋯» y su menú: un mousedown ahí adentro no lo cierra
+  // v10.84.157 — Esc cierra el «⋯» y el foco regresa a su botón (masRef: el de la fila de acciones o el del pie; nunca hay los dos). Y el «clic
+  //   afuera» se escucha EN CAPTURA (como el «⋯» del tablero): cada «⋯» detiene su mousedown, así que abrir el de otra ficha no cerraba éste y
+  //   quedaban dos abiertos (vuelta 3 de la critique). Lo de adentro (masCaja: el botón y su menú) no lo cierra.
+  useEffect(()=>{ if(!moreOpen) return; const h=e=>{if(masCaja.current&&masCaja.current.contains(e.target))return;setMoreOpen(false);}; const k=e=>{if(e.key==="Escape"){setMoreOpen(false);masRef.current?.focus();}}; document.addEventListener("mousedown",h,true); document.addEventListener("keydown",k); return ()=>{document.removeEventListener("mousedown",h,true);document.removeEventListener("keydown",k);}; },[moreOpen]);
   const hasContent=((o.timeline?.length>0)||(o.comments?.length>0)||(o.notes_log?.length>0)||(o.waste_log?.length>0));
   const hasSecondary=!compact&&(hasContent||vOwns);
+  // v10.84.157 — la ficha, su /impeccable critique (19-oct, 23/40; snapshot .impeccable/critique/2026-10-19T07-53-27Z__…). La ficha que NO es tuya
+  //   (Lupita medía ~400 px: 2 enteras a 1366) lleva UN renglón al pie: a quién le toca y en qué etapa (sin emoji), «Recordar», «Imprimir» con su
+  //   nombre, «Historial» y un «⋯» con lo raro (cambiar de OC y cancelar: 1 cancelación de Lupita en 60 días); sin «Orden validada — solo lectura».
+  //   En Máquina y Empaque, «Enviar a maquila» y «Registrar merma» van al «⋯», como en el tablero desde v10.84.63 (0 y 0 en 60 días contra 286 a
+  //   Empaque; el bote de basura se leía «borrar»). La guía ya no es una caja en cada ficha (21 veces la misma frase): queda de ayuda en la fila.
+  const pieDeOtro=!compact&&!canAct&&!inEsperaView;
+  const puedeImprimirAqui=isSec(role)&&(role==="secretaria"||!o.created_by||o.created_by===userLogin||agentMatch);
+  const mermaEnMas=(role==="produccion"||role==="admin")&&["in_production","maquila_out","maquila_in","packaging","salidas","delivered"].includes(o.stage);
+  const maquilaEnMas=canAct&&(o.stage==="in_production"||(o.stage==="packaging"&&(role==="produccion"||role==="admin")));
+  const vivaSinFolio=!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&!o.invoice_folio;
+  const cambiarOCPie=pieDeOtro&&vivaSinFolio&&!!o.purchase_order_id&&!o.cart_folio&&((isSec(role)&&secOwns)||role==="karla");
+  const cancelarPie=pieDeOtro&&vivaSinFolio&&isSec(role)&&secOwns&&(role!=="secretaria"||cancelaLaSecretaria(o));
+  const pn=o.production_number||o.id;
+  // cada opción del «⋯» pone el escudo antes de actuar: el segundo clic de un doble clic caía en la ficha (que abre el detalle)
+  const delMas=(accion)=>()=>{escudoDeClics(500);setMoreOpen(false);onAction(o.id,accion);};
+  // «Historial» (antes «Más ⟲2» en su propio renglón): en la fila de acciones o en el pie
+  const historialBtn=<button onClick={e=>{e.stopPropagation();setExpanded(v=>!v);}} aria-expanded={expanded} aria-label={(expanded?"Ocultar el historial y las notas de ":"Historial y notas de ")+pn+(o.timeline?.length>0?" ("+o.timeline.length+" movimientos)":"")}
+    title={expanded?"Ocultar el historial y las notas":"Historial y notas"} style={{...bs(expanded?C.ac+"14":C.sf,expanded?C.ac:C.t2),gap:4,padding:"6px 10px"}}>
+    <ClockCounterClockwiseIcon size={14} weight="bold"/>{o.timeline?.length>0?<span style={{fontSize:11,fontWeight:700}}>{o.timeline.length}</span>:null}{(o.comments?.length>0||o.notes_log?.length>0)?<ChatCircleIcon size={12} weight="bold"/>:null}</button>;
   // v10.73.7 — /impeccable distill: la fila de badges pasa de ~16 chips de IGUAL peso a 3 TIERS por importancia,
   // para que el ojo triague de un vistazo. T1 alertas (exigen acción/cuidado) → T2 identidad (qué ES la orden) →
   // T3 metadata (contexto secundario). T1+T2 siempre visibles; T3 colapsa tras un chip "+N" expandible.
@@ -15641,7 +15666,8 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsp
         lateral (side-tab) y pasa a un BORDE COMPLETO sutil tintado del color de etapa (en la card
         style, 1.5px al ~40%); el chip de etapa con icono+label sigue como indicador primario (a11y). */}
     {isDraggable&&!compact&&!noDragHint&&<div style={{display:"flex",alignItems:"center",gap:4,marginBottom:4,padding:"2px 6px",opacity:.5}}><DotsSixVerticalIcon size={13} color={C.ac}/><span style={{fontSize:9,color:C.ac,fontWeight:500}}>Arrastra al Tablero</span></div>}
-    {canAct&&guide&&!compact&&!inEsperaView&&<GuideBanner text={guide} color={st?.c}/>}
+    {/* v10.84.157 — la guía de la etapa ya no es una caja arriba de cada ficha (la misma frase en las 21 de Gerardo, encima de botones que dicen lo
+        mismo): queda como ayuda (title) de la fila de acciones, abajo */}
     <div style={{display:"flex",gap:10}}>
       {(o.image_url||o.image_url_2||o.image||(o.file_url&&/\.(jpe?g|png|gif|webp)$/i.test(o.file_name||"")))&&<div style={{position:"relative",flexShrink:0}}><SignedImg src={o.image_url||o.image_url_2||o.image||o.file_url} alt="" loading="lazy" decoding="async" fallback={<div style={{width:compact?32:48,height:compact?32:48,borderRadius:10,background:C.bg}}/>} style={{width:compact?32:48,height:compact?32:48,objectFit:"cover",borderRadius:10}}/>{o.image_url&&o.image_url_2&&<div title="2 imágenes adjuntas" aria-label="2 imágenes adjuntas" style={{position:"absolute",bottom:-2,right:-2,background:C.fac,color:"#fff",borderRadius:8,padding:"1px 5px",fontSize:9,fontWeight:700,boxShadow:"0 1px 3px rgba(0,0,0,0.2)"}}>+1</div>}</div>}
       <div style={{flex:1,minWidth:0}}>
@@ -15716,10 +15742,13 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsp
       </div>
     </div>
 
-    {!compact&&canAct&&!inEsperaView&&<div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:6,marginTop:10,flexWrap:"wrap",opacity:busy?0.5:1,pointerEvents:busy?"none":"auto",position:"relative"}}>
+    {!compact&&canAct&&!inEsperaView&&<div onClick={e=>e.stopPropagation()} title={guide||undefined} style={{display:"flex",gap:6,marginTop:10,flexWrap:"wrap",opacity:busy?0.5:1,pointerEvents:busy?"none":"auto",position:"relative"}}>
       {busy&&<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",zIndex:2}}><span role="status" aria-live="polite" style={{fontSize:12,fontWeight:600,color:C.ac,background:C.bg+"ee",padding:"4px 12px",borderRadius:8,display:"inline-flex",alignItems:"center",gap:6}}><HourglassIcon size={13} weight="bold"/>Procesando...</span></div>}
-      <StageFlowButtons o={o} role={role} onAction={onAction}/>
+      {/* v10.84.157 — la pausada no ofrece avanzar (como el detalle: `canActFlow&&!snoozeActive(o)`): decía «Arrastra esta orden a una máquina» encima
+          de su franja con «Quitar espera» */}
+      {!snoozeActive(o)&&<StageFlowButtons o={o} role={role} onAction={onAction}/>}
       <div role="group" aria-label="Acciones de la orden" style={{display:"flex",gap:4,marginLeft:"auto"}}>
+        {hasSecondary&&historialBtn}
         {/* v10.20.0 — Duplicar disponible para admin (siempre) y para secretaria/vendedor con ownership, excepto cancelled */}
         {!o.stage.includes("cancelled")&&(role==="admin"||(isSec(role)&&secOwns))&&<button onClick={()=>onAction(o.id,"duplicate")} style={bs(C.sf,C.fac)} title="Duplicar" aria-label="Duplicar"><CopySimpleIcon size={15} weight="bold"/></button>}
         <button onClick={()=>onAction(o.id,"print")} style={bs(C.sf,C.t2)} title="Imprimir" aria-label="Imprimir"><PrinterIcon size={15} weight="bold"/></button>
@@ -15732,20 +15761,23 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsp
         {/* 🛡️ v10.73.9 — /impeccable harden: las acciones destructivas/raras (Regresar, Cancelar, Cancelar-NC, Borrar)
             salen del muro de iconos a un menú "⋯ Más" con ETIQUETAS de texto + divisor antes de Borrar. Antes eran
             iconos rojos de 15px casi idénticos (label solo en hover) → riesgo de mis-click en acciones con consecuencia fiscal. */}
-        {(hasDangerMenu||canSnooze||hayFiscal)&&<div style={{position:"relative"}}>
-          <button onMouseDown={e=>e.stopPropagation()} onClick={e=>{e.stopPropagation();setMoreOpen(v=>!v);}} style={bs(C.sf,moreOpen?C.ac:C.t2)} title="Más acciones" aria-haspopup="true" aria-expanded={moreOpen}><DotsThreeIcon size={15} weight="bold"/></button>
+        {(hasDangerMenu||canSnooze||hayFiscal||maquilaEnMas||mermaEnMas)&&<div ref={masCaja} style={{position:"relative"}}>
+          <button ref={masRef} onMouseDown={e=>e.stopPropagation()} onClick={e=>{e.stopPropagation();setMoreOpen(v=>!v);}} style={bs(C.sf,moreOpen?C.ac:C.t2)} title="Más acciones" aria-haspopup="true" aria-expanded={moreOpen}><DotsThreeIcon size={15} weight="bold"/></button>
           {moreOpen&&<div role="menu" onMouseDown={e=>e.stopPropagation()} style={{position:"absolute",right:0,top:"100%",marginTop:4,zIndex:41,background:C.bg,border:"1px solid "+C.bd,borderRadius:10,boxShadow:C.sh3,padding:4,minWidth:210,display:"flex",flexDirection:"column",gap:1}}>
-            {canSnooze&&!snoozeActive(o)&&<button role="menuitem" {...miHover} onClick={()=>{setMoreOpen(false);onAction(o.id,"snooze");}} style={mi(C.ac)}><BellSlashIcon size={14} weight="bold"/>Poner en espera</button>}
-            {canSnooze&&snoozeActive(o)&&<button role="menuitem" {...miHover} onClick={()=>{setMoreOpen(false);onAction(o.id,"unsnooze");}} style={mi(C.ac)}><BellRingingIcon size={14} weight="bold"/>{reactLabel}</button>}
-            {delDetalle.folioAnticipado&&<button role="menuitem" {...miHover} onClick={()=>{setMoreOpen(false);onAction(o.id,"pre_invoice");}} style={mi(C.fac)}><LightningIcon size={14} weight="fill"/>Asignar folio anticipado</button>}
-            {delDetalle.porPartes&&<button role="menuitem" {...miHover} onClick={()=>{setMoreOpen(false);onAction(o.id,"split_invoice");}} style={mi(C.fac)}><FilesIcon size={14} weight="bold"/>Facturar por partes</button>}
-            {delDetalle.devolverSaldo&&<button role="menuitem" {...miHover} onClick={()=>{setMoreOpen(false);onAction(o.id,"deshacer_saldo");}} style={mi(C.dnInk)}><ArrowUUpLeftIcon size={14} weight="bold"/>Devolver saldo</button>}
-            {delDetalle.deshacerCancelacion&&<button role="menuitem" {...miHover} onClick={()=>{setMoreOpen(false);onAction(o.id,"deshacer_cancelacion");}} style={mi(C.wnInk)}><ArrowsClockwiseIcon size={14} weight="bold"/>Deshacer cancelación</button>}
-            {(canSnooze||hayFiscal)&&hasDangerMenu&&<div style={{height:1,background:C.bd,margin:"3px 4px"}}/>}
-            {canRevertBtn&&<button role="menuitem" {...miHover} onClick={()=>{setMoreOpen(false);onAction(o.id,"revert");}} style={mi(C.wnInk)}><ArrowUUpLeftIcon size={14} weight="bold"/>Regresar a etapa anterior</button>}
-            {canCancelBtn&&<button role="menuitem" {...miHover} onClick={()=>{setMoreOpen(false);onAction(o.id,"cancel_order");}} style={mi(C.dnInk)}><XIcon size={14} weight="bold"/>Cancelar orden</button>}
-            {canCancelNCBtn&&<button role="menuitem" {...miHover} onClick={()=>{setMoreOpen(false);onAction(o.id,"cancel_with_nc");}} style={mi(C.dnInk)}><ReceiptIcon size={14} weight="bold"/>Cancelar con su folio</button>}
-            {canDeleteBtn&&<>{(canRevertBtn||canCancelBtn||canCancelNCBtn)&&<div style={{height:1,background:C.bd,margin:"3px 4px"}}/>}<button role="menuitem" {...miHover} onClick={()=>{setMoreOpen(false);onAction(o.id,"delete");}} style={mi(C.dnInk)}><TrashIcon size={14} weight="bold"/>Borrar orden</button></>}
+            {canSnooze&&!snoozeActive(o)&&<button role="menuitem" {...miHover} onClick={delMas("snooze")} style={mi(C.ac)}><BellSlashIcon size={14} weight="bold"/>Poner en espera</button>}
+            {canSnooze&&snoozeActive(o)&&<button role="menuitem" {...miHover} onClick={delMas("unsnooze")} style={mi(C.ac)}><BellRingingIcon size={14} weight="bold"/>{reactLabel}</button>}
+            {delDetalle.folioAnticipado&&<button role="menuitem" {...miHover} onClick={delMas("pre_invoice")} style={mi(C.fac)}><LightningIcon size={14} weight="fill"/>Asignar folio anticipado</button>}
+            {delDetalle.porPartes&&<button role="menuitem" {...miHover} onClick={delMas("split_invoice")} style={mi(C.fac)}><FilesIcon size={14} weight="bold"/>Facturar por partes</button>}
+            {delDetalle.devolverSaldo&&<button role="menuitem" {...miHover} onClick={delMas("deshacer_saldo")} style={mi(C.dnInk)}><ArrowUUpLeftIcon size={14} weight="bold"/>Devolver saldo</button>}
+            {delDetalle.deshacerCancelacion&&<button role="menuitem" {...miHover} onClick={delMas("deshacer_cancelacion")} style={mi(C.wnInk)}><ArrowsClockwiseIcon size={14} weight="bold"/>Deshacer cancelación</button>}
+            {/* v10.84.157 — lo raro de producción, con las palabras del tablero (v10.84.63): 0 maquilas desde máquina y 0 mermas en 60 días */}
+            {maquilaEnMas&&<button role="menuitem" {...miHover} onClick={delMas("send_maquila")} style={mi(C.tx)} title="A un proveedor de afuera; se elige en la ventana."><TruckIcon size={14} weight="bold"/>Enviar a maquila</button>}
+            {mermaEnMas&&<button role="menuitem" {...miHover} onClick={delMas("waste")} style={mi(C.tx)} title="Pliegos o piezas que se perdieron. No borra la orden."><FilesIcon size={14} weight="bold"/>Registrar merma</button>}
+            {(canSnooze||hayFiscal||maquilaEnMas||mermaEnMas)&&hasDangerMenu&&<div style={{height:1,background:C.bd,margin:"3px 4px"}}/>}
+            {canRevertBtn&&<button role="menuitem" {...miHover} onClick={delMas("revert")} style={mi(C.wnInk)}><ArrowUUpLeftIcon size={14} weight="bold"/>Regresar a etapa anterior</button>}
+            {canCancelBtn&&<button role="menuitem" {...miHover} onClick={delMas("cancel_order")} style={mi(C.dnInk)}><XIcon size={14} weight="bold"/>Cancelar orden</button>}
+            {canCancelNCBtn&&<button role="menuitem" {...miHover} onClick={delMas("cancel_with_nc")} style={mi(C.dnInk)}><ReceiptIcon size={14} weight="bold"/>Cancelar con su folio</button>}
+            {canDeleteBtn&&<>{(canRevertBtn||canCancelBtn||canCancelNCBtn)&&<div style={{height:1,background:C.bd,margin:"3px 4px"}}/>}<button role="menuitem" {...miHover} onClick={delMas("delete")} style={mi(C.dnInk)}><TrashIcon size={14} weight="bold"/>Borrar orden</button></>}
           </div>}
         </div>}
       </div>
@@ -15757,61 +15789,73 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsp
     {/* v10.72.57 — folio histórico para KARLA: el botón vive en el cluster canAct (admin lo ve), pero Karla
         tiene canAct=false en delivered y es la operadora primaria del feature → se lo damos fuera del gate. */}
     {!compact&&!canAct&&!inEsperaView&&role==="karla"&&(o.created_by==="import-historico"||EMISOR_ON)&&(o.created_by==="import-historico"?o.stage.includes("delivered"):["salidas","maq_received","delivered","maq_delivered"].includes(o.stage))/* v10.80.13: filtro de etapa, igual que sus dos hermanos. Sin el, con EMISOR_ON el boton salia en draft, design, ctp, prensa, empaque... donde el unico desenlace posible es un error crudo de SQL */&&!o.return_covered_by_folio&&!o.invoice_folio&&!o.grouped_invoice_folio&&!o.has_splits&&!o.has_matrix_lines&&!liquidadaConSaldoAFavor(o)/* v10.80.13 */&&!o.stage.includes("cancelled")&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,display:"flex",justifyContent:"flex-end"}}><button onClick={()=>onAction(o.id,"apply_historic_folio")} style={bs(C.fac+"15",C.fac)} title="Aplicar el folio fiscal real (histórico)"><ReceiptIcon size={13} weight="bold"/>Aplicar folio</button></div>}
-    {/* Cancel + Move buttons for sec/vendedor (+ Karla solo Mover) — visible outside canAct gate too */}
-    {!compact&&!canAct&&!inEsperaView&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&!o.invoice_folio&&((isSec(role)&&secOwns)||role==="karla")&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,display:"flex",justifyContent:"flex-end",gap:6}}>
-      {o.purchase_order_id&&!o.cart_folio&&<button onClick={()=>onAction(o.id,"move_to_oc")} style={bs(C.sf,C.ac)} title="Cambiar OC"><ArrowsLeftRightIcon size={13} weight="bold"/>Mover</button>}
-      {isSec(role)&&secOwns&&(role!=="secretaria"||cancelaLaSecretaria(o))&&<button onClick={()=>onAction(o.id,"cancel_order")} style={bs(C.sf,C.dnInk)} title="Cancelar orden"><XIcon size={13} weight="bold"/>Cancelar</button>}
-    </div>}
-
-    {/* v10.58.50: tarjeta MUDA → contexto accionable. Si el rol NO tiene acciones en
-        esta etapa, decir QUIÉN la tiene y permitir recordarle (Karla veía maquilas
-        retrasadas sin botón ni instrucción — P-3562 atorada 2 semanas sin escalarse). */}
-    {!compact&&!canAct&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&!["web_pending","web_rejected"].includes(o.stage)&&(()=>{
+    {/* v10.58.50: tarjeta MUDA → contexto accionable. Si el rol NO tiene acciones en esta etapa, decir QUIÉN la tiene y permitir recordarle
+        (Karla veía maquilas retrasadas sin botón ni instrucción — P-3562 atorada 2 semanas sin escalarse).
+        v10.84.157 — Y ES UN RENGLÓN, EL PIE DE LA FICHA QUE NO ES TUYA (la critique, 23/40: la de Lupita medía ~400 px con tres cajas apiladas,
+        «Mover/Cancelar», la caja ámbar de «le toca a…» y «Orden validada — solo lectura»; 2 fichas enteras a 1366). A quién le toca y en qué etapa,
+        con su nombre y sin emoji (decía «avanzar la orden de ✅ Lista para imprimir»), «Recordar» (Karla: 7 en 60 días) en sus tokens, «Imprimir» con
+        su nombre (era un ícono mudo en el renglón de «solo lectura»), «Historial» y un «⋯» con lo raro: la merma, cambiar de OC y cancelar (Lupita
+        canceló 1 en 60 días; lo destructivo, detrás de «⋯», como en la ficha de Dirección). «En espera» (la vista) se queda con su franja. */}
+    {!compact&&!canAct&&(()=>{
+      const enFlujo=!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&!["web_pending","web_rejected"].includes(o.stage);
       // v10.58.52: si está "en espera" (Torre), mostrar la razón en vez del nudge
-      if(snoozeActive(o))return snoozeBanner;
-      const resp=orderResponsible(o); // v10.58.65: maquila → vendedor (no Lupita)
-      if(!resp)return null;
-      const respName=resp.role==="both"?"Producción y Pre-prensa":resp.name;
+      const snz=enFlujo&&snoozeActive(o);
+      if(inEsperaView)return snz?snoozeBanner:null;
+      const resp=enFlujo&&!snz?orderResponsible(o):null; // v10.58.65: maquila → vendedor (no Lupita)
+      const respName=resp?(resp.role==="both"?"Producción y Pre-prensa":resp.name):"";
       const noPrice=isMaq&&(!Number(o.maq_price)||Number(o.maq_price)<=0);
       const noCost=isMaq&&(!Number(o.maq_cost)||Number(o.maq_cost)<=0);
       const maqMissing=["maq_created","maq_sent","maq_in_progress"].includes(o.stage)&&(noPrice||noCost);
-      const hint=maqMissing
-        ?("capturar "+[noPrice&&"precio cliente",noCost&&"costo proveedor"].filter(Boolean).join(" y ")+" y marcar recibida")
-        :("avanzar la orden de "+(st?.l||o.stage));
-      return <div onClick={e=>e.stopPropagation()} style={{marginTop:6,display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"#f59e0b08",border:"1px solid #f59e0b25",borderRadius:10,flexWrap:"wrap"}}>
-        <span style={{fontSize:11,color:C.t2,flex:1,minWidth:180}}><HourglassIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>{isMaq&&(o.maq_provider||"").trim()?("En maquila con "+o.maq_provider.trim()+" — "):""}le toca a <b style={{color:C.tx}}>{respName}</b>: {hint}</span>
-        {role!==resp.role&&resp.role!=="both"&&<button onClick={()=>onAction(o.id,"nudge_responsible")} style={{...bs("#f59e0b15","#b45309"),fontSize:10,padding:"4px 10px",border:"1px solid #f59e0b40",whiteSpace:"nowrap"}}><MegaphoneIcon size={12} weight="bold"/>Recordar a {resp.name}</button>}
-      </div>;
+      const recordar=!!resp&&role!==resp.role&&resp.role!=="both";
+      const hayMas=mermaEnMas||cambiarOCPie||cancelarPie;
+      if(!snz&&!resp&&!puedeImprimirAqui&&!hasSecondary&&!hayMas)return null;
+      const queHayEnMas=[mermaEnMas&&"registrar merma",cambiarOCPie&&"cambiar de OC",cancelarPie&&"cancelar la orden"].filter(Boolean).join(", ");
+      return <>{snz&&snoozeBanner}
+        <div data-pie-de-la-ficha onClick={e=>e.stopPropagation()} style={{marginTop:8,display:"flex",alignItems:"center",gap:"6px 8px",flexWrap:"wrap"}}>
+          {resp&&<span style={{flex:"1 1 220px",minWidth:0,fontSize:12,color:C.t2,lineHeight:1.4}}><HourglassIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>{isMaq&&(o.maq_provider||"").trim()?"Con "+o.maq_provider.trim()+" · ":""}Le toca a <b style={{color:C.tx}}>{respName}</b> · {st?.lt||st?.l||o.stage}{maqMissing?<span style={{color:C.wnInk,fontWeight:600}}> · falta {noPrice&&noCost?"el precio al cliente y el costo del proveedor":noPrice?"el precio al cliente":"el costo del proveedor"}</span>:null}</span>}
+          <div role="group" aria-label={"Más de la ficha de "+pn} style={{display:"flex",gap:4,marginLeft:"auto",alignItems:"center"}}>
+            {/* «Recordar» a secas: el nombre ya va en «Le toca a …» de al lado, y así el pie cabe en un renglón en la ficha de ~550 px de «Todas» y
+                de los pendientes (con «Recordar a Gerardo» se partía en dos); el nombre completo, para el lector de pantalla y en el title */}
+            {recordar&&<button onClick={()=>onAction(o.id,"nudge_responsible")} aria-label={"Recordar a "+resp.name} title={"Recordarle a "+resp.name+": le llega un aviso de que esta orden lo está esperando"} style={{...tenueAA(C.wn),padding:"6px 12px",fontSize:12,minHeight:40,whiteSpace:"nowrap"}}><MegaphoneIcon size={13} weight="bold"/>Recordar</button>}
+            {puedeImprimirAqui&&<button onClick={()=>onAction(o.id,"print")} style={bs(C.sf,C.t2)} title="Imprimir la hoja de la orden" aria-label={"Imprimir la hoja de "+pn}><PrinterIcon size={15} weight="bold"/></button>}
+            {hasSecondary&&historialBtn}
+            {hayMas&&<div ref={masCaja} style={{position:"relative"}}>
+              <button ref={masRef} onMouseDown={e=>e.stopPropagation()} onClick={e=>{e.stopPropagation();setMoreOpen(v=>!v);}} style={bs(C.sf,moreOpen?C.ac:C.t2)} aria-label={"Más de "+pn+": "+queHayEnMas} title={queHayEnMas.charAt(0).toUpperCase()+queHayEnMas.slice(1)} aria-haspopup="true" aria-expanded={moreOpen}><DotsThreeIcon size={15} weight="bold"/></button>
+              {moreOpen&&<div role="menu" onMouseDown={e=>e.stopPropagation()} style={{position:"absolute",right:0,top:"100%",marginTop:4,zIndex:41,background:C.bg,border:"1px solid "+C.bd,borderRadius:10,boxShadow:C.sh3,padding:4,minWidth:200,display:"flex",flexDirection:"column",gap:1}}>
+                {mermaEnMas&&<button role="menuitem" {...miHover} onClick={delMas("waste")} style={mi(C.tx)} title="Pliegos o piezas que se perdieron. No borra la orden."><FilesIcon size={14} weight="bold"/>Registrar merma</button>}
+                {cambiarOCPie&&<button role="menuitem" {...miHover} onClick={delMas("move_to_oc")} style={mi(C.ac)} title="Pasarla a otra orden de compra"><ArrowsLeftRightIcon size={14} weight="bold"/>Cambiar de OC</button>}
+                {cancelarPie&&(mermaEnMas||cambiarOCPie)&&<div style={{height:1,background:C.bd,margin:"3px 4px"}}/>}
+                {cancelarPie&&<button role="menuitem" {...miHover} onClick={delMas("cancel_order")} style={mi(C.dnInk)} title="Cancelar orden"><XIcon size={14} weight="bold"/>Cancelar orden</button>}
+              </div>}
+            </div>}
+          </div>
+        </div></>;
     })()}
 
     {/* Lupita: edit draft orders, locked after validation. v10.58.23: vendedor también si es agent */}
-    {!compact&&isSec(role)&&(role==="secretaria"||!o.created_by||o.created_by===userLogin||agentMatch)&&o.order_type!=="maquila"&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6}}>
-      {o.stage==="draft"&&!(o.validated_by_production&&o.validated_by_preprensa)&&<div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-        <GuideBanner text="Orden esperando validación. Puedes editar mientras no validen ambos" color={C.fac}/>
-        {canEditWebOrder(o,role)&&<button onClick={()=>onAction(o.id,"edit")} style={bt(C.fac)}><NotePencilIcon size={14} weight="bold"/>Editar Orden</button>}
-        <button onClick={()=>onAction(o.id,"print")} style={bs(C.sf,C.t2)}><PrinterIcon size={13} weight="bold"/>Imprimir</button>
+    {!compact&&isSec(role)&&(role==="secretaria"||!o.created_by||o.created_by===userLogin||agentMatch)&&o.order_type!=="maquila"&&((o.stage==="draft"&&!(o.validated_by_production&&o.validated_by_preprensa))||(role==="vendedor"&&canVendedorEditPreProd(role,userLogin,o)&&o.stage!=="draft"))&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6}}>
+      {/* v10.84.157 — sin la caja «Orden esperando validación…» (lo dicen «Prod» y «Pre-p» de al lado y el title de «Editar Orden») y sin su
+          «Imprimir»: va en el pie de la ficha, con su nombre */}
+      {o.stage==="draft"&&!(o.validated_by_production&&o.validated_by_preprensa)&&<div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+        {canEditWebOrder(o,role)&&<button onClick={()=>onAction(o.id,"edit")} style={bt(C.fac)} title="Puedes editarla mientras Producción y Pre-prensa no la validen"><NotePencilIcon size={14} weight="bold"/>Editar Orden</button>}
         <div style={{display:"flex",gap:4,fontSize:10,color:C.t2,alignItems:"center",padding:"4px 0"}}><span style={{color:o.validated_by_production?C.okInk:C.wnInk}}>{o.validated_by_production?<CheckCircleIcon size={10} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>:<HourglassIcon size={10} style={{verticalAlign:"-1px",marginRight:2}}/>}Prod</span><span style={{color:o.validated_by_preprensa?C.okInk:C.wnInk}}>{o.validated_by_preprensa?<CheckCircleIcon size={10} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>:<HourglassIcon size={10} style={{verticalAlign:"-1px",marginRight:2}}/>}Pre-p</span></div>
       </div>}
       {/* v10.58.41 — Genaro (vendedor owner) puede editar sus órdenes hasta antes de producción,
           incluso después de validadas, para corregir errores de captura. El historial registra
           cada cambio y se notifica al área responsable. */}
       {role==="vendedor"&&canVendedorEditPreProd(role,userLogin,o)&&o.stage!=="draft"&&<div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",padding:"6px 10px",background:C.fac+"08",borderRadius:10,border:"1px solid "+C.fac+"20"}}>
-        <span style={{fontSize:10,color:C.fac,fontWeight:600}}>Tu orden — puedes corregir antes de producción</span>
+        <span style={{fontSize:11,color:C.fac,fontWeight:600}}>Tu orden: puedes corregirla antes de producción</span>
         <button onClick={()=>onAction(o.id,"edit")} style={bt(C.fac)}><NotePencilIcon size={14} weight="bold"/>Editar Orden</button>
-        <button onClick={()=>onAction(o.id,"print")} style={bs(C.sf,C.t2)}><PrinterIcon size={15} weight="bold"/></button>
       </div>}
-      {/* Read-only solo si NO es vendedor-owner editable (preserva lógica original para Lupita) */}
-      {!(role==="vendedor"&&canVendedorEditPreProd(role,userLogin,o)&&o.stage!=="draft")&&(o.stage!=="draft"&&o.stage!=="salidas"&&o.stage!=="proof_client"||(o.validated_by_production&&o.validated_by_preprensa&&o.stage==="draft"))&&<div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",background:C.fac+"08",borderRadius:10,border:"1px solid "+C.fac+"20"}}>
-        <span style={{fontSize:11,color:C.fac,fontWeight:600}}><LockIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Orden validada — solo lectura</span>
-        <button onClick={()=>onAction(o.id,"print")} style={bs(C.sf,C.t2)}><PrinterIcon size={15} weight="bold"/></button>
-      </div>}
+      {/* v10.84.157 — sin «Orden validada — solo lectura»: le decía a Lupita, en 19 de 21 fichas, lo que no puede. Su «Imprimir» (un ícono sin
+          nombre) va en el pie de la ficha o en la fila de acciones, con su nombre. */}
     </div>}
 
     {/* Lupita: edit maquila orders (no validation lock). v10.58.23: vendedor también si es agent */}
     {/* v10.76.5/7 — Lupita edita también una maquila ENTREGADA mientras no esté fiscalmente comprometida (sin folio, grouped, splits ni matriz): permite corregir precio/costo mal capturado */}
-    {!compact&&isSec(role)&&(role==="secretaria"||!o.created_by||o.created_by===userLogin||agentMatch)&&o.order_type==="maquila"&&(!o.stage.includes("delivered")||(!o.invoice_folio&&!o.grouped_invoice_folio&&!o.has_splits&&!o.has_matrix_lines))&&!o.stage.includes("cancelled")&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,display:"flex",gap:6,flexWrap:"wrap"}}>
+    {!compact&&isSec(role)&&(role==="secretaria"||!o.created_by||o.created_by===userLogin||agentMatch)&&o.order_type==="maquila"&&(!o.stage.includes("delivered")||(!o.invoice_folio&&!o.grouped_invoice_folio&&!o.has_splits&&!o.has_matrix_lines))&&!o.stage.includes("cancelled")&&canEditWebOrder(o,role)&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,display:"flex",gap:6,flexWrap:"wrap"}}>
       {canEditWebOrder(o,role)&&<button onClick={()=>onAction(o.id,"edit")} style={bt(C.maq)}><NotePencilIcon size={14} weight="bold"/>Editar Maquila</button>}
-      <button onClick={()=>onAction(o.id,"print")} style={bs(C.sf,C.t2)}><PrinterIcon size={13} weight="bold"/>Imprimir</button>
+      {/* v10.84.157 — su «Imprimir» ya está en la fila de acciones o en el pie de la ficha (salía dos veces) */}
     </div>}
 
     {/* Banner especial: pedido web en draft, visible para pre-prensa y admin */}
@@ -15849,15 +15893,17 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsp
       </a>
     </div>}
     {!compact&&(role==="produccion"||role==="admin")&&["in_production","maquila_out","maquila_in","packaging","salidas","delivered"].includes(o.stage)&&expanded&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,padding:"8px 12px",background:C.wn+"06",borderRadius:10}}>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}><span style={{fontSize:11,color:C.wn,fontWeight:600}}><TrashIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Merma</span><button onClick={()=>onAction(o.id,"waste")} style={bs(C.wn)}>+ Registrar</button></div>
-      {(o.waste_log||[]).length>0&&<div style={{marginTop:4,display:"flex",gap:4,flexWrap:"wrap"}}>{(o.waste_log||[]).map((w,i)=><span key={i} style={{fontSize:9,color:C.wn,background:C.bg,padding:"2px 8px",borderRadius:6}}>{w.pliegos?<><FileTextIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:1}}/>{w.pliegos}pl</>:""}{w.pliegos&&w.qty?" ":""}{w.qty?<><PackageIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:1}}/>{w.qty}pz</>:""}{w.note?" — "+w.note:""}</span>)}</div>}
+      {/* v10.84.157 — la merma con el ícono del tablero (el bote se leía «borrar»), en su tinta y de 10 px o más */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}><span style={{fontSize:11,color:C.wnInk,fontWeight:600}}><FilesIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Merma</span><button onClick={()=>onAction(o.id,"waste")} style={tenueAA(C.wn)}>+ Registrar</button></div>
+      {(o.waste_log||[]).length>0&&<div style={{marginTop:4,display:"flex",gap:4,flexWrap:"wrap"}}>{(o.waste_log||[]).map((w,i)=><span key={i} style={{fontSize:10,color:C.wnInk,background:C.bg,padding:"2px 8px",borderRadius:6}}>{w.pliegos?<><FileTextIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:1}}/>{w.pliegos}pl</>:""}{w.pliegos&&w.qty?" ":""}{w.qty?<><PackageIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:1}}/>{w.qty}pz</>:""}{w.note?" — "+w.note:""}</span>)}</div>}
     </div>}
-    {!compact&&hasSecondary&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,display:"flex",alignItems:"center",gap:6}}>
+    {/* v10.84.157 — este renglón queda sólo en «En espera» (ahí la ficha no lleva fila de acciones ni pie): en las demás vistas «Historial» va en la
+        fila de acciones o en el pie, y la merma (el bote con «+», que se leía «borrar») en el «⋯» */}
+    {!compact&&hasSecondary&&inEsperaView&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,display:"flex",alignItems:"center",gap:6}}>
       <button onClick={()=>setExpanded(!expanded)} style={{...bs(C.sf,C.t2),boxShadow:"0 0 0 0.5px "+C.bd,padding:"3px 10px",fontSize:10,gap:4}}>
         {expanded?<><CaretUpIcon size={10} weight="bold"/>Menos</>:hasContent?<><CaretDownIcon size={10} weight="bold"/>Más{o.timeline?.length>0?<span style={{display:"inline-flex",alignItems:"center",gap:2}}><ClockCounterClockwiseIcon size={10} weight="bold"/>{o.timeline.length}</span>:null}{(o.comments?.length>0||o.notes_log?.length>0)?<ChatCircleIcon size={10} weight="bold"/>:null}</>:<><ChatCircleIcon size={10} weight="bold"/>Notas</>}
       </button>
       {!expanded&&(o.waste_log||[]).length>0&&<span style={{fontSize:9,color:C.wn,fontWeight:600}}><TrashIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>{(o.waste_log||[]).reduce((s,w)=>s+(w.pliegos||0),0)+(o.waste_log||[]).reduce((s,w)=>s+(w.qty||0),0)} merma</span>}
-      {!expanded&&(role==="produccion"||role==="admin")&&["in_production","maquila_out","maquila_in","packaging","salidas","delivered"].includes(o.stage)&&<button onClick={()=>onAction(o.id,"waste")} title="Registrar merma" aria-label="Registrar merma" style={{...tenueAA(C.wn),padding:"3px 10px",fontSize:11,minHeight:40}}><TrashIcon size={12} weight="bold"/>+</button>}
     </div>}
     {!compact&&expanded&&vOwns&&o.timeline?.length>0&&<div onClick={e=>e.stopPropagation()}><StageFlowHistory order={o}/></div>}
     {!compact&&expanded&&o.timeline?.length>0&&<div onClick={e=>e.stopPropagation()}><Timeline tl={o.timeline}/></div>}
@@ -16018,7 +16064,7 @@ function VistaTodas({orders,search,onClearSearch,role,userLogin,onAction,actionL
     </div>
     {lista.length===0
       ?<div style={{fontSize:12,color:C.t2,padding:"12px 2px"}}>{filtro==="canceladas"?"No hay órdenes canceladas":filtro==="entregadas"?"No hay órdenes entregadas":"No hay órdenes activas"}{search?" con «"+search+"»":""}.</div>
-      :<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(440px,1fr))",gap:10}}>{lista.slice(0,hasta).map(o=><OCard key={o.id} o={o} role={role} onAction={onAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin}/>)}</div>}
+      :<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(min(440px,100%),1fr))",gap:10}}>{lista.slice(0,hasta).map(o=><OCard key={o.id} o={o} role={role} onAction={onAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin}/>)}</div>}
     {quedan>0&&<div style={{display:"flex",alignItems:"center",justifyContent:"center",flexWrap:"wrap",gap:10,marginTop:14}}>
       <span style={{fontSize:12,color:C.t2}}>Se ven {Math.min(hasta,lista.length).toLocaleString("es-MX")} de {lista.length.toLocaleString("es-MX")}</span>
       <button onClick={()=>setHasta(h=>h+TODAS_DE_A)} style={{...bs(C.bg,C.tx),border:"1px solid "+C.bd}}>Ver {Math.min(TODAS_DE_A,quedan)} más (quedan {quedan.toLocaleString("es-MX")})</button>
@@ -23932,7 +23978,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           </div>}
           {/* v10.84.87 — sin una lectura buena no hay «Sin pendientes» (antes la palomita verde salía con la base caída o leyendo:
                la critique de «Mis Pendientes», P1-A; la regla 12 del CLAUDE.md). El aviso de arriba ya dice qué pasó y trae «Reintentar». */}
-          {!lectura.ok?<div role="status" data-pendientes-sin-lectura style={{textAlign:"center",padding:"40px 20px",color:C.t2}}><div style={{fontSize:15,fontWeight:700,color:C.tx}}>{lectura.fallo?"No se pudieron leer tus pendientes":"Leyendo tus pendientes…"}</div><div style={{fontSize:12,marginTop:4}}>{lectura.fallo?"Mientras no se lean de la base, esta lista no dice si tienes o no: arriba está «Reintentar».":"En cuanto lleguen de la base, salen aquí."}</div></div>:normalTasks.length===0&&visibleStale.length===0?<div style={{textAlign:"center",padding:"40px 20px"}}><div style={{display:"flex",justifyContent:"center"}}>{taskFilters.size>0?<MagnifyingGlassIcon size={46} color={C.t3}/>:<CheckCircleIcon size={46} weight="fill" color={C.ok}/>}</div><div style={{fontSize:15,fontWeight:700,marginTop:8}}>{taskFilters.size>0?"Sin resultados con esos filtros":(search?"Sin resultados":(algoMas||waitTasks.length>0?"Nada te toca ahora":"Sin pendientes"))}</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>{taskFilters.size>0?"Prueba quitando algún chip o presiona 'Limpiar'":(search?"Intenta con otro término":(algoMas||waitTasks.length>0?"Lo demás espera a otro, se mueve en el Tablero o está en pausa: abajo.":"Las órdenes aparecerán aquí cuando necesiten tu atención"))}</div>{taskFilters.size>0&&<button onClick={()=>setTaskFilters(new Set())} style={{...bs(C.sf,C.t2),marginTop:12,border:"0.5px solid "+C.bd}}><XIcon size={12} weight="bold"/>Limpiar filtros</button>}</div>:<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(440px,1fr))",gap:10}}>{normalTasks.map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin}/>)}</div>}{lectura.ok&&enTablero.length>0&&<div data-en-tablero role="status" style={{marginTop:14,display:"flex",alignItems:"center",gap:"6px 12px",flexWrap:"wrap",padding:"10px 14px",borderRadius:12,background:C.sf,border:"1px solid "+C.bd,fontSize:12.5,color:C.tx}}><FactoryIcon size={15} weight="bold" color={C.t2} style={{flexShrink:0}}/><span style={{flex:"1 1 260px"}}><b>{enTablero.length}</b> {enTablero.length===1?"orden se mueve":"órdenes se mueven"} en el Tablero ({[...new Set(enTablero.map(o=>o.stage==="ready"?"listas para máquina":"de regreso de maquila"))].join(" y ")}).</span><button onClick={()=>navClick("board")} style={{...bs(C.ac+"14",tintaAA(C.ac,7)),border:"1px solid "+C.ac+"44"}}>Ir al Tablero</button></div>}
+          {!lectura.ok?<div role="status" data-pendientes-sin-lectura style={{textAlign:"center",padding:"40px 20px",color:C.t2}}><div style={{fontSize:15,fontWeight:700,color:C.tx}}>{lectura.fallo?"No se pudieron leer tus pendientes":"Leyendo tus pendientes…"}</div><div style={{fontSize:12,marginTop:4}}>{lectura.fallo?"Mientras no se lean de la base, esta lista no dice si tienes o no: arriba está «Reintentar».":"En cuanto lleguen de la base, salen aquí."}</div></div>:normalTasks.length===0&&visibleStale.length===0?<div style={{textAlign:"center",padding:"40px 20px"}}><div style={{display:"flex",justifyContent:"center"}}>{taskFilters.size>0?<MagnifyingGlassIcon size={46} color={C.t3}/>:<CheckCircleIcon size={46} weight="fill" color={C.ok}/>}</div><div style={{fontSize:15,fontWeight:700,marginTop:8}}>{taskFilters.size>0?"Sin resultados con esos filtros":(search?"Sin resultados":(algoMas||waitTasks.length>0?"Nada te toca ahora":"Sin pendientes"))}</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>{taskFilters.size>0?"Prueba quitando algún chip o presiona 'Limpiar'":(search?"Intenta con otro término":(algoMas||waitTasks.length>0?"Lo demás espera a otro, se mueve en el Tablero o está en pausa: abajo.":"Las órdenes aparecerán aquí cuando necesiten tu atención"))}</div>{taskFilters.size>0&&<button onClick={()=>setTaskFilters(new Set())} style={{...bs(C.sf,C.t2),marginTop:12,border:"0.5px solid "+C.bd}}><XIcon size={12} weight="bold"/>Limpiar filtros</button>}</div>:<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(min(440px,100%),1fr))",gap:10}}>{normalTasks.map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin}/>)}</div>}{lectura.ok&&enTablero.length>0&&<div data-en-tablero role="status" style={{marginTop:14,display:"flex",alignItems:"center",gap:"6px 12px",flexWrap:"wrap",padding:"10px 14px",borderRadius:12,background:C.sf,border:"1px solid "+C.bd,fontSize:12.5,color:C.tx}}><FactoryIcon size={15} weight="bold" color={C.t2} style={{flexShrink:0}}/><span style={{flex:"1 1 260px"}}><b>{enTablero.length}</b> {enTablero.length===1?"orden se mueve":"órdenes se mueven"} en el Tablero ({[...new Set(enTablero.map(o=>o.stage==="ready"?"listas para máquina":"de regreso de maquila"))].join(" y ")}).</span><button onClick={()=>navClick("board")} style={{...bs(C.ac+"14",tintaAA(C.ac,7)),border:"1px solid "+C.ac+"44"}}>Ir al Tablero</button></div>}
           {lectura.ok&&esperan.length>0&&<details data-espera-a-otro style={{marginTop:14,background:C.sf,border:"1px solid "+C.bd,borderRadius:14,padding:"12px 14px"}}><summary style={{cursor:"pointer",fontSize:13.5,fontWeight:700,color:C.tx,display:"flex",alignItems:"center",gap:8,listStyle:"none",flexWrap:"wrap"}}><CaretDownIcon size={12} weight="bold" color={C.t3} className="imp-caret" style={{flexShrink:0,transition:"transform .18s ease"}}/><span style={{background:C.bg,color:C.tx,minWidth:24,height:24,borderRadius:12,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,padding:"0 7px",border:"1px solid "+C.bd}}>{esperan.length}</span>Espera a otro <span style={{fontSize:11,fontWeight:500,color:C.t2}}>· {effRole==="vendedor"?"tus órdenes en curso: dónde van y desde cuándo":"por ahora no tienes nada que hacer en ellas"}</span></summary>
             <div role="list" style={{marginTop:8}}>{esperan.map(o=>{const r=orderResponsible(o),d=dondeVa(o),desde=desdeCuando(o),rec=accionesDeLaFicha(o,effRole,userLogin).recordar,est=getStale(o);/* en un borrador, quién falta de validar */const quien=o.stage==="draft"?(!o.validated_by_production&&!o.validated_by_preprensa?"Producción y Pre-prensa":!o.validated_by_production?"Gerardo (validar producción)":!o.validated_by_preprensa?"Noemí (validar pre-prensa)":null):(r?.name||null);return <div role="listitem" key={o.id} data-espera={o.production_number||o.id} style={{display:"flex",alignItems:"center",gap:"4px 12px",flexWrap:"wrap",padding:"9px 2px",borderTop:"1px solid "+C.bd,fontSize:12.5}}>
               <button onClick={()=>handleAction(o.id,"detail")} title="Abrir el detalle" style={{background:"none",border:"none",padding:"4px 0",cursor:"pointer",fontFamily:"inherit",fontSize:12.5,fontWeight:700,color:tintaAA(C.ac,7),textAlign:"left"}}>{nombreDeOrden(o)}</button>
@@ -24002,7 +24048,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 return <div style={{display:"flex",flexDirection:"column",gap:14}}>{stages.map((st,gi)=>{const list=byStage[st].slice().sort((a,b)=>(untilMs(a)-untilMs(b))||(desde(a)-desde(b))||(a.client||"").localeCompare(b.client||""));/* v10.84.143 — sin las que esperan la factura del cliente: cada cliente pide la suya, y el lote afirmaba que los N la pidieron a la vez (y las regresaba a «vencidas») */const reactList=list.filter(canReact).filter(o=>o.snooze_kind!=="awaiting_client_invoice");const isOpen=st in esperaGroupPrefs?!!esperaGroupPrefs[st]:(openAll||gi===0);return <details key={st} open={isOpen} onToggle={e=>{if(e.currentTarget.open!==isOpen)setEsperaGroupOpen(st,e.currentTarget.open);}}>
                   <summary style={{cursor:"pointer",listStyle:"none",display:"flex",alignItems:"center",gap:8,margin:"0 2px 8px"}} title="Clic para plegar/desplegar"><CaretDownIcon size={11} weight="bold" color={C.t3} className="imp-caret" style={{flexShrink:0,transition:"transform .18s ease"}}/><StageLbl stage={st} size={13}/><span style={{fontSize:11,fontWeight:700,color:C.tx,background:(SM[st]?.c||C.t3)+"1a",padding:"1px 9px",borderRadius:9,border:"1px solid "+(SM[st]?.c||C.bd)+"40"}}>{list.length}</span><span style={{flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:F.meta}}>{/* v10.73.41 — preview del grupo COLAPSADO: riesgo + motivo del más urgente, para decidir "abro o sigo" sin expandir */}{!isOpen&&(()=>{const ov=list.filter(vencidaAhora).length;const sn=list.filter(o=>o.due_date&&!isOverdue(o.due_date)&&!esperaAlCliente(o)&&bizDaysUntil(o.due_date)<=3).length;/* v10.84.140 — sin las listas que esperan la factura del cliente */const top=list[0];if(!ov&&!sn&&!top?.snooze_reason)return null;return <>{ov>0&&<span style={{color:C.dnInk,fontWeight:600}}>· {ov} vencida{ov>1?"s":""} </span>}{sn>0&&<span style={{color:C.wnInk,fontWeight:600}}>· {sn} con entrega en 3 días o menos </span>}{top?.snooze_reason&&<span style={{color:C.t2}}>· {top.snooze_reason}</span>}</>;})()}</span></summary>
                   {reactList.length>=2&&<div style={{margin:"0 2px 10px"}}><EsperaGroupBatchBtn count={reactList.length} onReactivate={()=>unsnoozeBatch(reactList)}/></div>}
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(440px,1fr))",gap:10}}>{list.map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin} inEsperaView exiting={exitingIds.has(o.id)}/>)}</div>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(min(440px,100%),1fr))",gap:10}}>{list.map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin} inEsperaView exiting={exitingIds.has(o.id)}/>)}</div>
                 </details>;})}</div>;
               })()}
         </div>}

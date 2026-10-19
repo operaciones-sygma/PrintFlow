@@ -151,6 +151,24 @@ await caso("td-14-los-filtros-con-el-teclado", "", async p => {
   const presionado = await filtro(p, "Activas").getAttribute("aria-pressed").catch(() => null);
   ok("td-14-los-filtros-con-el-teclado", !!llego && presionado === "true", `con Tab ${llego ? "se llega a «Activas»" : "NO se llega al filtro"}; Enter: aria-pressed ${presionado}`);
 });
+// v10.84.157 (la critique de la ficha, 19-oct; vuelta 1: escrita antes del arreglo) — en una pantalla angosta la ficha cabe en su columna: la cuadrícula
+//   pedía 440 px aunque hubiera menos y la ficha se salía por la derecha (también en los pendientes y en «En espera», la misma cuadrícula)
+await caso("td-15-la-ficha-cabe-en-su-columna", "", async p => {
+  const r = await p.evaluate(() => { const f = document.querySelector('[role="button"][aria-label^="Orden "]'); const g = f?.parentElement;
+    return f && g ? { f: Math.round(f.getBoundingClientRect().width), g: Math.round(g.clientWidth) } : null; });
+  ok("td-15-la-ficha-cabe-en-su-columna", !!r && r.f <= r.g + 1, r ? `a 390: la ficha mide ${r.f} px en una columna de ${r.g}` : "no encontré la ficha");
+}, { viewport: { width: 390, height: 844 } });
+// v10.84.157 (vuelta 3) — la ficha que no es de quien la ve lleva su pie en UN renglón: «Le toca a Gerardo · …» y «Recordar», «Imprimir», «Historial»
+//   y «⋯» (con «Recordar a Gerardo» se partía en dos a este ancho, el de la app: ~550 px a 1366 y a 1920)
+for (const ancho of [1366, 1920]) {
+  await caso(`td-16-el-pie-en-un-renglon-a-${ancho}`, "rol=secretaria", async p => {
+    const r = await p.evaluate(() => { const f = [...document.querySelectorAll('[role="button"][aria-label^="Orden "]')].find(x => x.querySelector("[data-pie-de-la-ficha]"));
+      const pie = f?.querySelector("[data-pie-de-la-ficha]"); if (!pie) return null;
+      const tops = [...pie.children].filter(c => c.getClientRects().length).map(c => { const b = c.getBoundingClientRect(); return Math.round(b.top + b.height / 2); });
+      return { pn: f.getAttribute("aria-label").split(",")[0], ancho: Math.round(f.getBoundingClientRect().width), renglones: new Set(tops.map(t => Math.round(t / 10))).size, texto: pie.innerText.replace(/\s+/g, " ").slice(0, 90) }; });
+    ok(`td-16-el-pie-en-un-renglon-a-${ancho}`, !!r && r.renglones === 1, r ? `${r.pn} (ficha de ${r.ancho} px): el pie en ${r.renglones} renglón(es) · «${r.texto}»` : "ninguna ficha trae el pie de quien no actúa");
+  }, { viewport: { width: ancho, height: ancho === 1920 ? 1080 : 768 } });
+}
 
 await browser.close();
 for (const r of res) console.log(r);

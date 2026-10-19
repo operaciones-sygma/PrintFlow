@@ -1135,7 +1135,10 @@ for (const rol of ["produccion", "karla", "german", "admin"]) {
 // el botón de la merma (Gerardo, en máquina): tiene nombre para el lector de pantalla, va teñido y se lee (antes: naranja relleno, «+»
 //   blanco de 9 px, sin nombre)
 await caso("tab-136-ficha-merma-con-nombre-y-legible", "vista=fichas&rol=produccion", async p => {
-  const b = fichaPn(p, "P-0591").getByRole("button", { name: "Registrar merma" });
+  // (desde v10.84.157 la merma va en el «⋯» de la ficha, como en el tablero desde v10.84.63: 0 mermas en 60 días y el bote se leía «borrar»;
+  //   la prueba sigue pidiendo lo mismo: que tenga nombre, se lea y no vaya rellena)
+  await fichaPn(p, "P-0591").getByRole("button", { name: "Más acciones" }).click().catch(() => {}); await espera(p, 300);
+  const b = p.getByRole("menuitem", { name: "Registrar merma" });
   const hay = await b.count();
   const m = hay ? await b.first().evaluate(e => { const nums = c => (c.match(/[\d.]+/g) || []).map(Number);
     const lum = ([r, g, bb]) => { const f = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(bb); };
@@ -1200,8 +1203,18 @@ for (const rol of ["produccion", "preprensa", "german", "secretaria", "vendedor"
 
 // v10.84.113 — Lupita cancela en cualquier etapa lo que no tiene nada facturado; lo facturado, Dirección (la base lo frena). Su ficha completa ya
 //   enseñaba «Cancelar» fuera de sus etapas (el detalle no: incoherente), también en lo que va por partes o se pagó con saldo, que la base le rechaza.
-const cancelarEnFicha = (p, pn) => p.evaluate(pn => { const c = [...document.querySelectorAll('[role="button"][aria-label^="Orden "]')].find(x => x.getAttribute("aria-label").startsWith("Orden " + pn));
-  return c ? c.querySelectorAll('button[title="Cancelar orden"]').length : -1; }, pn);
+// (desde v10.84.157 «Cancelar orden» de la ficha que no es suya vive en su «⋯», «Más de P-…»: antes era un botón a la vista en cada ficha; se
+//   abre el «⋯» y se cuenta la opción)
+const cancelarEnFicha = async (p, pn) => {
+  const f = p.locator('[role="button"][aria-label^="Orden ' + pn + ',"]').first();
+  if (!(await f.count())) return -1;
+  const mas = f.getByRole("button", { name: new RegExp("^(Más acciones|Más de " + pn + ")") });
+  if (!(await mas.count())) return 0;
+  await mas.first().click(); await espera(p, 300);
+  const n = await p.getByRole("menuitem", { name: /Cancelar orden/ }).count();
+  await p.keyboard.press("Escape"); await espera(p, 200);
+  return n;
+};
 await caso("tab-139-lupita-cancela-en-empaque", "vista=fichas&rol=secretaria", async p => {
   const n = await cancelarEnFicha(p, "P-0585");
   ok("tab-139-lupita-cancela-en-empaque", n === 1, `Lupita, P-0585 en Empaque sin facturar: «Cancelar» ${n === 1 ? "está" : n === -1 ? "(no encontré la ficha)" : "NO está"}`);

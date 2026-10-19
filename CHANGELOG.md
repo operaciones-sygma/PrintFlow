@@ -12,6 +12,52 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.157 — La ficha de la orden: un renglón al pie para quien no actúa, y lo raro en «⋯» — 19-oct-2026
+
+**Qué pasaba** (`/impeccable critique` de la ficha, `OCard`, la madrugada del 19-oct: **23/40**; snapshot
+`.impeccable/critique/2026-10-19T07-53-27Z__src-app-jsx-ocard-tarjeta-de-orden.md`; la anterior era del 1-jul, 28/40 leyendo el código). Marcelo,
+al irse a dormir: «Sigue con pasadas para mejorar la ui de printflow y CobranzaFlow lo que mas lo necesiten… Te doy autonomia». La ficha sale en «Todas»,
+en los pendientes de cada quien, en «En espera», en la OC y en las estancadas: la ve toda la planta todo el día. Medido en los bancos a 1366 y en la base
+(60 días, sólo lectura):
+- **La ficha de Lupita medía 361-412 px: 2 fichas enteras por pantalla.** Tres cajas apiladas que no le servían: «Cancelar» a la vista en cada ficha (en
+  60 días canceló **1** orden; Dirección 6), «Orden validada — solo lectura» en 19 de 21 fichas (le decía lo que no puede) con un ícono de imprimir sin
+  nombre, y la caja ámbar «le toca a Gerardo: avanzar la orden de ✅ Lista para imprimir».
+- **En Máquina y Empaque la ficha ponía al frente lo que no se usa:** «Enviar a Maquila» del tamaño de «Empaque» (**0** desde máquina contra **286** a
+  Empaque) y el bote de basura con «+» de la merma (**0** mermas; el bote se lee «borrar»). El tablero ya los tenía en «⋯» desde v10.84.63: la misma
+  orden ofrecía otra cosa según dónde se viera.
+- La misma guía en cada ficha («Al terminar, pásala a Empaque o a Maquila…» en las 21 de Gerardo; «Asigna el folio fiscal…» encima de «Asignar Folio y
+  Entregar»), tres filas de controles, «Progreso» y su cuenta a 9 px, «Recordar a…» a 10 px con colores fijos, y a 390 px la cuadrícula de 440 px se
+  salía de su columna.
+
+**Qué se cambió** (sólo pantalla; la base no se tocó):
+- **La ficha que no es tuya lleva UN renglón al pie:** «Le toca a Gerardo · Máquina» (con el nombre de la etapa, sin emoji; en la maquila, con quién y qué
+  le falta), «Recordar» en sus tokens y a 12 px (el nombre completo, «Recordar a Gerardo», para el lector de pantalla y en el title: con él escrito el pie
+  se partía en dos a ~550 px), «Imprimir» con su nombre (Lupita y el vendedor), «Historial» y un «⋯» («Más de P-…») con lo raro: la merma, cambiar de OC
+  y **cancelar** (lo destructivo, detrás de «⋯», como en la ficha de Dirección). Sin «Orden validada — solo lectura». En el borrador, «Editar Orden» con
+  «Prod · Pre-p» (sin la caja «Orden esperando validación…»); el vendedor, «Tu orden: puedes corregirla antes de producción».
+- **Producción:** «Empaque» (o «Enviar a Salidas») al frente; **«Enviar a maquila» y «Registrar merma» en el «⋯» de la ficha**, con las palabras y el
+  ícono del tablero (también para Dirección). El detalle conserva «Enviar a Maquila» en su fila. En la merma abierta, el ícono del tablero y su tinta.
+- **La guía de la etapa ya no es una caja en cada ficha:** queda como ayuda (`title`) de la fila de acciones. «Historial» (antes «Más ⟲2» en su renglón)
+  va en la fila de acciones o en el pie; el renglón aparte queda sólo en «En espera».
+- **La pausada no ofrece avanzar** (como el detalle): decía «Arrastra esta orden a una máquina en el Tablero» encima de su franja con «Quitar espera».
+- Cada opción del «⋯» pone el escudo de clics (el segundo clic de un doble clic caía en la ficha y abría el detalle); Esc cierra el «⋯» y regresa el
+  foco a su botón; 🔥 el «clic afuera» se escucha en captura: abrir el «⋯» de otra ficha dejaba dos abiertos (venía de antes, también en el de
+  Dirección). «Progreso» a 10 px. Las tres cuadrículas de fichas (Todas, pendientes, En espera) con `minmax(min(440px,100%),1fr)`.
+- **Resultado:** en «Todas» a 1366 la ficha de Lupita mide ~215 px (era 361) y caben 4 enteras (eran 2); en los pendientes, 6 (eran 2; la más alta, 265
+  px, era 412). La de todos los días en máquina mide **197 px** (era 290); la más alta de Producción, 267 (era 360).
+
+**Cómo se probó.** Tanda nueva **`ficha`** (33, en el banco del tablero, `vista=fichas`) y 3 nuevas en `todas` (18). **Vuelta 1**, escrita antes del
+arreglo: **contra el código de antes fallaban 21 de 26** (las 5 que pasaban: «Recordar» que avisa, los botones con nombre de tres roles y la fila a 1920).
+**Vuelta 2** con el arreglo: 25 de 26; la que faltaba era de la prueba (medía el renglón de la cuadrícula, que estira cada ficha al alto de su vecina:
+P-0603 de ~200 px salía con 267) y se corrigió para medir el alto propio; destapó la pausada que ofrecía avanzar (arreglada, fic-21), y el tope de 260 era
+un número puesto antes de medir: quedó en «la de todos los días ≤ 220 y ninguna > 280». **Vuelta 3**, por donde no se diseñó (dos «⋯» a la vez, clic
+afuera, cambiar de OC, el borrador, la maquila sin precio, 1920): 🔥 dos «⋯» abiertos a la vez (arreglado) y el pie en dos renglones a ~550 px
+(«Recordar» corto; td-16 a 1366 y 1920). **Corrida doble** (las mismas tandas contra `git show HEAD:src/App.jsx`): con el código de antes, ficha 5 de 33,
+todas 15 de 18 (las 3 nuevas fallan), tablero 161 de 163, En espera 25 y Dashboard 24; con el nuevo, 33, 18, 163, 25 y 24. **Ninguna regresión.** Las 2
+del tablero que fallan con el de antes son las que afirmaban el diseño viejo y se ajustaron sin cambiar lo que piden: tab-136 (la merma con nombre,
+legible y no rellena: ahora en el «⋯») y el ayudante de tab-139 a 141 (Lupita cancela lo no facturado: ahora la opción del «⋯»). Compartido: `OCard` y
+`StageFlowButtons` (el detalle no cambia: su variante conserva sus botones); lo prueban ficha, tablero, todas, espera, dashboard y detalle (el candado).
+
 ## v10.84.156 — El Inventario Cuadra dice lo que se llevó cada cliente del apartado — 17-oct-2026
 
 **Qué pasaba.** Una pregunta de la critique del Inventario Cuadra (v10.84.130) que no tenía recomendación; Marcelo, 17-oct, a la recomendación: «si hazlo».
