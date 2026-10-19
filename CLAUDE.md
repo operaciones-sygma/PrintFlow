@@ -197,7 +197,14 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.156 (17-oct, ~11:58, READY `dpl_89b1jFb8nRAS1zLrqRKdm2Z4u51K`, commits adaf229 da6d7a2 bac2dba fb7d2b3 4492caa 6cf8fda fb3f7e9; vuelta atrás: promover `dpl_86uHod2eQLEWYLj8Y1ogQuEWQ68W` (el código
+- **LIVE:** v10.84.157 (19-oct, ~02:55, READY `dpl_4GdDem6DrVQ9zhq7aRrbMGc2t2XS`, commit `9077e8d`; vuelta atrás: promover
+  `dpl_CEVvzzpAatkAQuyQNCoxPFsRjwSr` (el código de v10.84.156) o `git revert 9077e8d`; la base no cambió; candado 2476 de 2476 (36 nuevas), de a 4,
+  15.9 min, a la primera y sin inestables; recorrido de producción: nada truena). **La ficha de la orden** (`OCard`, su critique 23/40): 🔑 la ficha que
+  no es tuya lleva UN renglón al pie («Le toca a … · etapa», «Recordar», «Imprimir», «Historial», «⋯» con la merma, cambiar de OC y cancelar; sin «solo
+  lectura»); «Enviar a maquila» y «Registrar merma» en el «⋯» de la ficha como en el tablero; la guía de la etapa en el title de la fila; la pausada no
+  ofrece avanzar; el «clic afuera» del «⋯» en captura. Tanda nueva `ficha`. 🔑 Las pasadas de /impeccable volvieron (Marcelo, 19-oct ~1:30: «Sigue con
+  pasadas para mejorar la ui de printflow y CobranzaFlow lo que mas lo necesiten… Te doy autonomia»), con las reglas de «listo» de SYGMA.
+  v10.84.156 (17-oct, ~11:58, READY `dpl_89b1jFb8nRAS1zLrqRKdm2Z4u51K`, commits adaf229 da6d7a2 bac2dba fb7d2b3 4492caa 6cf8fda fb3f7e9; vuelta atrás: promover `dpl_86uHod2eQLEWYLj8Y1ogQuEWQ68W` (el código
   de v10.84.149) o `git revert fb3f7e9 6cf8fda 4492caa fb7d2b3 bac2dba da6d7a2 adaf229`; la base no cambió; candado 2440 de 2440 (33 nuevas), de a 4, 15.9 min, a la primera y sin inestables). Las respuestas de Marcelo del 17-oct («escojo tus
   recomendaciones», «si hazlo»), una versión cada una: 150 «Ya pidió factura · Asignar folio» de Karla abre «Asignar folio y entregar» (`seFoliaConAsignar`,
   `etiquetaYaPidio`; las cinco puertas por la misma acción; `unsnoozeOrder` devuelve la orden y no reactiva dos veces); 151 «Auditoría» con las series de hoy

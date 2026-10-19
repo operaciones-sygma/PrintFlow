@@ -58,6 +58,10 @@ del tablero que fallan con el de antes son las que afirmaban el diseño viejo y 
 legible y no rellena: ahora en el «⋯») y el ayudante de tab-139 a 141 (Lupita cancela lo no facturado: ahora la opción del «⋯»). Compartido: `OCard` y
 `StageFlowButtons` (el detalle no cambia: su variante conserva sus botones); lo prueban ficha, tablero, todas, espera, dashboard y detalle (el candado).
 
+**En producción:** 19-oct, ~02:55; commit 9077e8d; READY `dpl_4GdDem6DrVQ9zhq7aRrbMGc2t2XS` (produccion.sygma.mx); vuelta atrás: promover
+`dpl_CEVvzzpAatkAQuyQNCoxPFsRjwSr` (el código de v10.84.156) o `git revert 9077e8d`; la base no cambió. Candado: 2476 de 2476 (36 nuevas), de a 4, 15.9
+min, a la primera y sin inestables. Revisado en producción sin escribir: `npm run recorrido` contra produccion.sygma.mx, 8 roles y 99 pasos, nada truena.
+
 ## v10.84.156 — El Inventario Cuadra dice lo que se llevó cada cliente del apartado — 17-oct-2026
 
 **Qué pasaba.** Una pregunta de la critique del Inventario Cuadra (v10.84.130) que no tenía recomendación; Marcelo, 17-oct, a la recomendación: «si hazlo».
