@@ -197,7 +197,12 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.158 (19-oct, ~04:34, READY `dpl_Fo7YxapPHp1Tqm2QfQhhpiYFNCCC`, commit `fb06eb5`; vuelta atrás: promover
+- **LIVE:** v10.84.159 (19-oct, ~06:20, READY `dpl_HyxtZvrEahzZyS25bdTcBXPMbVNS`, commit `d9c9f74`; vuelta atrás: promover
+  `dpl_A1PD9SGfcJLNhqvNvK2KpCfbq8Un` (el código de v10.84.158) o `git revert d9c9f74`; la base no cambió; candado 2492 de 2492 (7 nuevas), de a 4, 16.1 min,
+  a la primera y sin inestables; recorrido de producción: nada truena). **«Mis Pendientes» de Producción** (su critique, 27/40): 🔑 el reloj de la
+  máquina dice DESDE CUÁNDO en toda pantalla (`LiveTimer` con `desde` también en la ficha, el detalle y la «Activa» del CTP: decían «66h 50m» y «308h 38m»
+  de lo que el tablero ya decía «desde el vie 10:49»); a Producción el precio se le marca sólo cuando falta («Sin precio»). Caso `lunes` del banco del tablero.
+  v10.84.158 (19-oct, ~04:34, READY `dpl_Fo7YxapPHp1Tqm2QfQhhpiYFNCCC`, commit `fb06eb5`; vuelta atrás: promover
   `dpl_5vMaLpj4k9GXpEthgA6khZsDfnqE` (el código de v10.84.157) o `git revert fb06eb5`; la base no cambió; candado 2485 de 2485 (9 nuevas), de a 4, 15.9 min,
   a la primera y sin inestables; recorrido de producción: nada truena). **El marco** (la barra de arriba y el menú, su critique 25/40): Inventario Cuadra,
   Apartado Corona y Exportar CSV teñidos como la campana (ya no llenos de color) y, desde 1200 px, con su palabra; «Ir a…» con su atajo; el sol «17 hoy»;

@@ -38,6 +38,10 @@ el monto lo sigue viendo): 2 de 2. La tanda `ficha` completa, 37 de 37. Comparti
 **Para Marcelo.** «Así va la planta» pinta en ámbar todo lo que empezó antes de hoy: el lunes, todas las máquinas (lo del viernes). ¿Lo del día hábil
 anterior es alarma, o sólo lo de más atrás? Y la barra «Progreso 8/13» repite la etapa en cada ficha de Producción: se quedó (es de todas las vistas).
 
+**En producción:** 19-oct, ~06:20; commit d9c9f74; READY `dpl_HyxtZvrEahzZyS25bdTcBXPMbVNS` (produccion.sygma.mx); vuelta atrás: promover
+`dpl_A1PD9SGfcJLNhqvNvK2KpCfbq8Un` (el código de v10.84.158) o `git revert d9c9f74`; la base no cambió. Candado: 2492 de 2492 (7 nuevas), de a 4, 16.1
+min, a la primera y sin inestables. Revisado en producción sin escribir: `npm run recorrido` contra produccion.sygma.mx, 8 roles y 99 pasos, nada truena.
+
 ## v10.84.158 — El marco: las herramientas de arriba teñidas y con su palabra, «Ir a…» y «17 hoy» — 19-oct-2026
 
 **Qué pasaba** (`/impeccable critique` del marco —la barra de arriba y el menú—, la madrugada del 19-oct: **25/40**; snapshot
