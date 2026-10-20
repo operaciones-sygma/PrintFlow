@@ -12,6 +12,33 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.163 — La prueba del candado ya no hereda las variables de git: subir desde un worktree ya no toca el repo — 20-oct-2026
+
+**Qué pasaba.** El 20-oct, en Almacén, un `git push` lanzado desde un `git worktree` hizo que la prueba de su candado escribiera en el repo de verdad
+(`main` quedó en un commit de prueba y el repo, marcado bare; GitHub y producción no se tocaron). Dentro de un gancho git exporta `GIT_DIR`, y desde un
+worktree es la ruta ABSOLUTA de su carpeta de git; desde la copia principal es `.git`, relativa, y por eso nunca había pasado. **`tests/romper/candado.mjs`
+tenía el mismo hueco** (lo vio marcelo-d5 leyendo): su `git(…)` y el gancho que corre (`correrGancho`) heredaban el ambiente. Probado de punta a punta (un
+push desde un worktree de un repo temporal, con un pre-push que corre la prueba): la de antes decía **«10 pasan, 0 fallan»** mientras dejaba ese repo
+inservible («this operation must be run in a work tree»). Aquí el candado ni siquiera habría frenado: el repo local habría quedado roto en silencio.
+
+**Qué se cambió** (sólo la prueba; ni la app ni la base):
+- `SIN_GIT`, el ambiente sin las variables `GIT_*`, en el `git(…)` de la prueba y en el gancho que corre: todo cae en su repo temporal, se suba de donde
+  se suba. El mismo arreglo que Almacén (`fd6a513`) y CobranzaFlow (v3.7.1031).
+- 🔑 **can-g11**: la prueba se corre a sí misma con el `GIT_DIR` (y `GIT_COMMON_DIR`, `GIT_INDEX_FILE`, `GIT_WORK_TREE`) de un repo señuelo en el
+  ambiente (`CANDADO_SENUELO`: la vuelta de adentro corre sólo lo de git, can-g01 a can-g07) y revisa que pase igual y que el señuelo quede idéntico (su
+  HEAD, sus ramas, su configuración y su carpeta).
+- Igual se sigue subiendo desde la copia principal.
+
+**Cómo se probó.** **Vuelta 1**, can-g11 escrita antes del arreglo y corrida contra la prueba de antes: **falla** (la vuelta de adentro cae en can-g00 y el
+señuelo cambió). Con el arreglo, la tanda `candado` **11 de 11**; la de antes, 10 de 10 (sin regresiones). **Vuelta 2**, de punta a punta con git de
+verdad: un push desde un worktree de un repo temporal, con un pre-push que corre la prueba. Git le exporta al gancho `GIT_DIR` (absoluto), `GIT_EXEC_PATH` y
+`GIT_PREFIX` (can-g11 pone más: es más estricta que el caso real); con el arreglo, 11 de 11 dentro del gancho y el repo temporal igual; con la de antes,
+«10 pasan» y el repo roto. **4 sabotajes, los 4 caen**: el `git(…)` que hereda el ambiente, el gancho que lo hereda, quitar sólo `GIT_DIR` y quitar todo
+menos `GIT_DIR` (lo que exporta git). El último caía con el nombre equivocado («el repo señuelo se pudo armar»): la vuelta de adentro deja el señuelo bare
+y leerlo truena (en CobranzaFlow la prueba reventaba sin su renglón); ahora un señuelo que ya no se puede leer cuenta como «cambió» y lo dice. Las demás llamadas a git de `scripts/` son sobre el repo de verdad (ahí heredar `GIT_DIR` es lo correcto), y
+`probar-reintento.mjs` corre `inestables.mjs` con `PROBAR_INESTABLES`, que no llama a git. El renglón «X [ERROR] The build was canceled» que sale al correr
+la tanda ya salía antes (vite, al cerrar el banco de desarrollo de can-g09, que pasa).
+
 ## v10.84.162 — La contraseña de sitio, como CobranzaFlow: la misma para todas las apps de SYGMA — 19-oct-2026
 
 **Qué pasaba.** Marcelo, 19-oct (puliendo SYGMA Central): *«quiero que el acceso a todas las apps sea igual como en cobranzaflow»*; eligió **la

@@ -19,13 +19,17 @@ const SH = (() => {
   return "sh";
 })();
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "candado-carpeta-"));
-const git = (...a) => execFileSync("git", a, { cwd: tmp, encoding: "utf8" }).trim();
+// v10.84.163 — sin las variables GIT_* de quien la corre (can-g11): dentro de un gancho, git pasa GIT_DIR, y desde un worktree es la ruta
+//   absoluta de su carpeta de git (con GIT_COMMON_DIR, GIT_INDEX_FILE y GIT_WORK_TREE). Heredadas, el `git init`, los `config` y los commits de
+//   esta prueba, y el gancho que corre, irían al repo de verdad (en Almacén pasó el 20-oct). Así, todo cae en el repo temporal.
+const SIN_GIT = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^GIT_/i.test(k)));
+const git = (...a) => execFileSync("git", a, { cwd: tmp, encoding: "utf8", env: SIN_GIT }).trim();
 const escribir = (rel, txt) => { fs.mkdirSync(path.dirname(path.join(tmp, rel)), { recursive: true }); fs.writeFileSync(path.join(tmp, rel), txt); };
 const res = [];
 const ok = (n, c, x = "") => { if (process.env.SOLO && !new RegExp(process.env.SOLO).test(n)) return; res.push((c ? "PASA  " : "FALLA ") + n + (x ? "  · " + x.replace(/\s+/g, " ").slice(0, 220) : "")); };
 // el gancho, con lo que git le da por la entrada estándar: «<ref local> <sha local> <ref remota> <sha remota>»
 const correrGancho = (local, remoto) => {
-  const r = spawnSync(SH, [".githooks/pre-push", "origin", "https://example.invalid/repo.git"], { cwd: tmp, encoding: "utf8",
+  const r = spawnSync(SH, [".githooks/pre-push", "origin", "https://example.invalid/repo.git"], { cwd: tmp, encoding: "utf8", env: SIN_GIT,
     input: `refs/heads/main ${local} refs/heads/main ${remoto}\n` });
   return { codigo: r.status, salida: `${r.stdout || ""}${r.stderr || ""}${r.error ? " (error: " + r.error.message + ")" : ""}` };
 };
@@ -87,6 +91,13 @@ try {
   ok("can-g00 la prueba armó su repo temporal", false, e?.message || String(e));
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true });
+}
+// v10.84.163 — la vuelta de adentro de can-g11 (con el GIT_DIR de un repo señuelo en el ambiente) sólo corre lo de git: can-g01 a can-g07.
+if (process.env.CANDADO_SENUELO) {
+  for (const x of res) console.log(x);
+  const f = res.filter(x => x.startsWith("FALLA")).length;
+  console.log(`\ncandado: ${res.length - f} pasan, ${f} fallan`);
+  process.exit(f ? 1 : 0);
 }
 // v10.84.117 — lo que decide si un error de consola es de la app (tests/consola.mjs): el canal de recarga en caliente de Vite, no (frenó el
 //   candado de v10.84.117 por can-13, que sí pasó); un recurso de fuera, no; lo que no carga de la app o del banco, un error de la app, sí; y un
@@ -162,6 +173,38 @@ try {
   ok("can-g10 ningún puerto de banco se repite y ningún servidor propio de una tanda usa el de un banco", bancos.length >= 15 && !repetidos.length && !chocan.length,
     `${bancos.length} bancos; repetidos: ${repetidos.map(b => b.tanda + " " + b.puerto).join(", ") || "ninguno"}; servidores propios en puerto de banco: ${chocan.map(c => c.archivo + " " + c.puerto).join(", ") || "ninguno"} (de ${propios.length} propios)`);
 } catch (e) { ok("can-g10 los puertos se pudieron revisar", false, e?.message || String(e)); }
+// v10.84.163 — can-g11: con el GIT_DIR (y compañía) de OTRO repo en el ambiente —como dentro de un gancho lanzado desde un git worktree, que pasa la ruta
+//   ABSOLUTA de su carpeta de git con GIT_COMMON_DIR, GIT_INDEX_FILE y GIT_WORK_TREE—, lo de git de esta prueba tiene que pasar igual y no tocar ese
+//   repo. En Almacén, la prueba de su candado heredó esas variables al subir desde un worktree y sus commits de prueba cayeron en el repo de verdad
+//   (main en un commit de prueba, el repo marcado bare). Aquí se corre a sí misma con las de un repo señuelo (CANDADO_SENUELO: sólo can-g01 a g07).
+{
+  const senuelo = fs.mkdtempSync(path.join(os.tmpdir(), "candado-senuelo-"));
+  try {
+    const gs = (...a) => execFileSync("git", a, { cwd: senuelo, encoding: "utf8", env: SIN_GIT, stdio: "pipe" }).trim();
+    gs("init", "-q");
+    gs("config", "user.email", "senuelo@example.invalid"); gs("config", "user.name", "Señuelo"); gs("config", "core.autocrlf", "false");
+    fs.writeFileSync(path.join(senuelo, "a.txt"), "el señuelo\n");
+    gs("add", "-A"); gs("commit", "-q", "-m", "señuelo");
+    const foto = () => [gs("rev-parse", "HEAD"), gs("for-each-ref", "--format=%(refname) %(objectname)"), gs("config", "--list", "--local"),
+      gs("status", "--porcelain")].join(" | ");
+    const antes = foto();
+    const g = path.join(senuelo, ".git");
+    const r = spawnSync(process.execPath, [fileURLToPath(import.meta.url)], { encoding: "utf8",
+      env: { ...SIN_GIT, CANDADO_SENUELO: "1", SOLO: "", GIT_DIR: g, GIT_COMMON_DIR: g, GIT_INDEX_FILE: path.join(g, "index"), GIT_WORK_TREE: senuelo } });
+    // (si la vuelta de adentro lo rompió —con sólo GIT_DIR heredado, `git init` lo deja bare—, leerlo truena: eso también es que cambió, y se dice
+    //  así en vez de caer en «el repo señuelo se pudo armar»)
+    let despues;
+    try { despues = foto(); } catch (e) { despues = "ya no se puede leer: " + String(e.stderr || e.message).trim().split("\n")[0]; }
+    const fallas = (r.stdout || "").split("\n").filter(l => l.startsWith("FALLA")).map(l => l.slice(6, 60));
+    ok("can-g11 con el GIT_DIR (y compañía) de otro repo en el ambiente, como un gancho desde un worktree, lo de git pasa igual y no lo toca",
+      r.status === 0 && despues === antes,
+      `salió con ${r.status}${fallas.length ? " (" + fallas.join(" / ") + ")" : ""}; ${despues === antes ? "el señuelo quedó igual" : "el señuelo cambió: «" + antes.slice(0, 90) + "» → «" + despues.slice(0, 90) + "»"}`);
+  } catch (e) {
+    ok("can-g11 el repo señuelo se pudo armar", false, e?.message || String(e));
+  } finally {
+    fs.rmSync(senuelo, { recursive: true, force: true });
+  }
+}
 
 for (const x of res) console.log(x);
 const fallan = res.filter(x => x.startsWith("FALLA")).length;
