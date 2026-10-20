@@ -30,7 +30,11 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
   módulo DIFERIDO** (desde v10.84.119, `src/plano/`: «Planta», `React.lazy` con su guarda de carga `CargaDelPlano` en App; su geometría en
   `src/lib/plano.js`; `hooks.mjs` y `probar-alcance.sh` también revisan `src/plano/`). Lo fijo de la planta (`src/plano/plantaBaja.js`) lo
   generan `scripts/plano/*.py` desde el PDF del levantamiento: no se edita a mano.
-- **Hosting:** Vercel auto-deploy desde `main` → `print-flow-eosin.vercel.app`.
+- **Hosting:** Vercel auto-deploy desde `main` → `print-flow-eosin.vercel.app` y `produccion.sygma.mx` (proyecto `print-flow`). 🔑 **Desde v10.84.162
+  pide la contraseña de sitio** (`middleware.js`, Basic Auth, como CobranzaFlow, Almacén, Contabilidad, Central y el Cotizador; Marcelo, 19-oct: la
+  misma en todas, variables `BASIC_AUTH_USER`/`BASIC_AUTH_PASSWORD` en Vercel). Sin ellas la puerta se queda cerrada (503): **una variable nueva sólo
+  entra con un despliegue nuevo**, y regresar a un despliegue de antes de ponerla trae la de antes. Los recorridos contra la app publicada la mandan
+  (`tests/recorrido/sitio.mjs`, credencial en `claude-navegador\credencial-sitio.json`); la tanda `middleware` lo vigila.
 - **Auth:** Supabase Auth (identidades **separadas** de CobranzaFlow; `public.users.user_id` = uid de
   Auth, `public.users.id` NO). Rol en `public.users.role`; en base `pf_uid_role()`,
   `verify_actor_role(p_actor, roles[])` (JWT-first: la identidad la da `auth.uid()`, `p_actor` es
@@ -139,7 +143,8 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
     revisar** (`node scripts/inestables.mjs`; se marca con `revisada <id> "qué era"`). Más de 3 a la vez frenan; sin segunda
     oportunidad las tandas de dinero (`folio`, `oc`, `partes`) y lo de doble acción; la misma otra vez en 14 días frena.
     🔎 **Y `npm run recorrido`** (v10.84.36) después de un cambio grande y después de subir: abre TODA la app como cada rol con
-    la cuenta de pruebas `visor` y las escrituras cortadas en el navegador (~4 min, cero agentes; `tests/LEEME.md`).
+    la cuenta de pruebas `visor` y las escrituras cortadas en el navegador (~4 min, cero agentes; `tests/LEEME.md`). Contra la app publicada
+    también manda la contraseña de sitio (desde v10.84.162; sin `credencial-sitio.json` se detiene diciendo qué falta).
 22. **Un cambio de base se ensaya contra producción con rollback** (`DO $$ … RAISE EXCEPTION 'ENSAYO'
     $$`, sesión simulada con `set_config('request.jwt.claims', …)`) **antes** de tocar el front.
 23. **Push a `main` de PrintFlow está autorizado de forma permanente** (Marcelo, sep-2026).

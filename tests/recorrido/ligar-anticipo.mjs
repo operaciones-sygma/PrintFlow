@@ -21,6 +21,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
+import { contextoDeSitio } from "./sitio.mjs";   // v10.84.162: la contraseña de sitio de produccion.sygma.mx (sólo contra la app publicada)
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const OUT = path.join(RAIZ, "tests/salida/ligar-anticipo"); fs.mkdirSync(OUT, { recursive: true });
 const CRED = JSON.parse(fs.readFileSync(process.env.PF_CREDENCIAL || "C:/Users/padil/claude-navegador/credencial-printflow.json", "utf8"));
@@ -45,7 +46,7 @@ const cand = (doc_number, amount, monto_cuadra, dias) => ({ doc_number, doc_type
 //   o una función de la vuelta (1, 2…) para lo que cambia mientras se captura. `candado`: la del mismo importe que la base conoce al
 //   foliar (por omisión, la que cuadra de `candidatas`).
 async function entrar(candidatas, { candado } = {}) {
-  const ctx = await nav.newContext({ viewport: { width: 1366, height: 768 }, acceptDownloads: false });
+  const ctx = await nav.newContext({ viewport: { width: 1366, height: 768 }, acceptDownloads: false, ...contextoDeSitio(base) });
   await ctx.addInitScript(() => { window.print = () => {}; window.open = () => null; });
   const escritas = []; let orden = null, lecturas = 0;
   const mismo = candado || (Array.isArray(candidatas) ? candidatas.find(c => c.monto_cuadra) : null);

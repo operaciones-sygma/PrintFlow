@@ -20,6 +20,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
+import { contextoDeSitio } from "./sitio.mjs";   // v10.84.162: la contraseña de sitio de produccion.sygma.mx (sólo contra la app publicada)
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const OUT = path.join(RAIZ, "tests/salida/corregir-foliada"); fs.mkdirSync(OUT, { recursive: true });
 const CRED = JSON.parse(fs.readFileSync(process.env.PF_CREDENCIAL || "C:/Users/padil/claude-navegador/credencial-printflow.json", "utf8"));
@@ -57,7 +58,7 @@ const revisar = (ordenes, args) => { const o = ordenes.find(x => x.id === args.p
     nuevo: p == null ? null : { precio: p, importe: Math.round(p * 116) / 100, diferencia: Math.round((p - o.price) * 116) / 100 }, avisos: [], sin_orden_del_cliente: [] }; };
 // una sesión de Karla. estado.rechazo: corregir_precio_orden contesta lo que la base rechaza
 async function entrar(estado = {}) {
-  const ctx = await nav.newContext({ viewport: { width: 1366, height: 768 }, acceptDownloads: false });
+  const ctx = await nav.newContext({ viewport: { width: 1366, height: 768 }, acceptDownloads: false, ...contextoDeSitio(base) });
   await ctx.addInitScript(() => { window.print = () => {}; window.open = () => null; });
   const escritas = [], puertas = []; let ordenes = null;
   await ctx.route("**/*", async route => { try {

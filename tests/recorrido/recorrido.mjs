@@ -21,6 +21,7 @@ import { preview } from "vite";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { contextoDeSitio } from "./sitio.mjs";   // v10.84.162: la contraseña de sitio de produccion.sygma.mx (sólo contra la app publicada)
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const URL_ARG = process.argv[2];
@@ -91,7 +92,7 @@ function candado(ctx, rol, reg) {
 }
 
 async function recorrerRol(navegador, base, rol) {
-  const ctx = await navegador.newContext({ viewport: { width: 1366, height: 768 }, acceptDownloads: false });
+  const ctx = await navegador.newContext({ viewport: { width: 1366, height: 768 }, acceptDownloads: false, ...contextoDeSitio(base) });
   await ctx.addInitScript(() => { window.print = () => {}; });           // imprimir no abre nada
   const filas = [];
   let actual = null;

@@ -28,6 +28,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
+import { contextoDeSitio } from "./sitio.mjs";   // v10.84.162: la contraseña de sitio de produccion.sygma.mx (sólo contra la app publicada)
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const OUT = path.join(RAIZ, "tests/salida/karla-planta"); fs.mkdirSync(OUT, { recursive: true });
 const CRED = JSON.parse(fs.readFileSync(process.env.PF_CREDENCIAL || "C:/Users/padil/claude-navegador/credencial-printflow.json", "utf8"));
@@ -64,7 +65,7 @@ function fixtures(plantilla) {
 }
 // una sesión de Karla. `estado.falla`: la base rechaza el cambio de etapa de las órdenes de prueba
 async function entrar(estado = {}) {
-  const ctx = await nav.newContext({ viewport: { width: 1366, height: 768 }, acceptDownloads: false });
+  const ctx = await nav.newContext({ viewport: { width: 1366, height: 768 }, acceptDownloads: false, ...contextoDeSitio(base) });
   await ctx.addInitScript(() => { window.print = () => {}; window.open = () => null; });
   const escritas = []; let ordenes = null;
   // (todo el manejador en try: si el escenario cierra su contexto con una lectura en camino, route.fetch truena y tumbaba la corrida)

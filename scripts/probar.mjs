@@ -56,6 +56,9 @@ const TANDAS = [
   { nombre: "reintento", romper: "scripts/probar-reintento.mjs" },
   // sin banco: el candado prueba lo que se sube, no la carpeta (15-oct, como CobranzaFlow v3.7.1009): el gancho de verdad en un repo temporal
   { nombre: "candado", romper: "tests/romper/candado.mjs" },
+  // sin banco ni navegador: la contraseña de sitio (middleware.js, v10.84.162: Marcelo, 19-oct, «el acceso igual que en CobranzaFlow», la misma
+  //   en todas las apps) y que los recorridos de producción la manden (tests/recorrido/sitio.mjs)
+  { nombre: "middleware", romper: "tests/romper/middleware.mjs" },
   // sin banco: qué factura por adelantado se pregunta antes de asignar folio (v10.84.68: Karla, F-135 de Castores; las funciones vivas)
   { nombre: "anticipos", romper: "tests/romper/anticipos.mjs" },
   // sin banco: lo ATRASADO (v10.84.140): la orden lista que espera a que el cliente pida su factura no está vencida, y en los reportes cuenta el día que

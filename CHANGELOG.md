@@ -12,6 +12,35 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.162 — La contraseña de sitio, como CobranzaFlow: la misma para todas las apps de SYGMA — 19-oct-2026
+
+**Qué pasaba.** Marcelo, 19-oct (puliendo SYGMA Central): *«quiero que el acceso a todas las apps sea igual como en cobranzaflow»*; eligió **la
+contraseña de sitio** (la del navegador, antes de la pantalla de entrar) y **la misma en todas**. CobranzaFlow, Almacén, Contabilidad y Central ya la
+pedían (`middleware.js` con las variables de Vercel `BASIC_AUTH_USER` y `BASIC_AUTH_PASSWORD`); **PrintFlow y el Cotizador no**: produccion.sygma.mx
+abría directo en su pantalla de entrar, sin más capa que el usuario del área.
+
+**Qué se cambió** (sin tocar la app ni la base):
+- 🔑 **`middleware.js`** (Vercel Edge Middleware), el mismo de Almacén, Contabilidad y Central con su nombre («SYGMA PrintFlow»): pide la contraseña
+  de sitio para la página y TODO el JS (la app entera va en el bundle); deja fuera sólo los íconos, el logo de las hojas impresas (lo cargan desde
+  una ventana en blanco), el CSS y la letra. Sin las variables, la puerta se queda cerrada (503), no abierta. Lee las mismas variables que las demás:
+  la misma contraseña puesta en cada proyecto de Vercel las abre todas.
+- **Los recorridos de producción la mandan** (`tests/recorrido/sitio.mjs`, `contextoDeSitio(base)` en los 9): con `httpCredentials` de Playwright, sólo
+  a la app publicada y limitada a su dominio; contra la copia local no hace falta. La credencial vive sólo en
+  `C:\Users\padil\claude-navegador\credencial-sitio.json` y nunca se imprime; sin ella, el recorrido de producción se detiene diciendo qué falta (si
+  no, cada pantalla daría un 401 confuso). Lo avisó la sesión de PrintFlow (marcelo-7f) antes de escribir nada.
+
+**Cómo se probó.** Tanda nueva **`middleware`** (`tests/romper/middleware.mjs`, 9, sin navegador: importa el middleware y le da peticiones de
+mentira). **Vuelta 1**, escrita antes y corrida sin el archivo: **0 de 9** (no había contraseña y los 9 recorridos no la mandaban). **Vuelta 2**: 9 de 9.
+Por donde no se diseñó: credenciales malas, vacías, sin «:», que no son base64, de 5,000 letras, con otro esquema, «basic» en minúsculas, una contraseña
+que trae «:», la buena con algo más, sin las variables o con sólo una, y que la credencial del recorrido no se escriba en el aviso. **12 sabotajes, todos
+caen** (el matcher que deja fuera el JS, la puerta abierta sin variables, otro nombre, el 401 en caché, comparar sólo la contraseña, partir en el último
+«:», Buffer, otras variables, un recorrido sin la contraseña, la credencial sin limitarse al dominio, el aviso que la escribe y mandarla a la copia
+local; el último reventaba la prueba en vez de reportarla: se endureció).
+
+**Para subir: primero la contraseña en Vercel.** Sin `BASIC_AUTH_USER` y `BASIC_AUTH_PASSWORD` en el proyecto `print-flow`, la puerta se queda cerrada
+(503) para todos. Marcelo las pone (las mismas de CobranzaFlow) y luego se sube; quien recargue PrintFlow la tendrá que escribir una vez por sesión del
+navegador.
+
 ## v10.84.161 — El detalle de la orden, hoja de trabajo para el piso: lo que se corre primero y sin repetir el encabezado — 19-oct-2026
 
 **Qué pasaba** (`/impeccable critique` del detalle como Producción, la mañana del 19-oct: **27/40**; snapshot

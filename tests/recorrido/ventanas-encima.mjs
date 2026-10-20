@@ -13,6 +13,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
+import { contextoDeSitio } from "./sitio.mjs";   // v10.84.162: la contraseña de sitio de produccion.sygma.mx (sólo contra la app publicada)
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const OUT = path.join(RAIZ, "tests/salida/ventanas"); fs.mkdirSync(OUT, { recursive: true });
 const CRED = JSON.parse(fs.readFileSync(process.env.PF_CREDENCIAL || "C:/Users/padil/claude-navegador/credencial-printflow.json", "utf8"));
@@ -37,7 +38,7 @@ const malos = [], cortes = [];
 try {
   for (let i = 0; i < ACCIONES.length; i++) {
     const c = ACCIONES[i], [rol, pn] = ORDENES[i] || [];
-    const ctx = await nav.newContext({ viewport: { width: 1366, height: 768 }, acceptDownloads: false });
+    const ctx = await nav.newContext({ viewport: { width: 1366, height: 768 }, acceptDownloads: false, ...contextoDeSitio(base) });
     await ctx.addInitScript(() => { window.print = () => {}; window.open = () => null; });
     await ctx.route("**/*", async route => {
       const req = route.request(), url = req.url(), m = req.method();
