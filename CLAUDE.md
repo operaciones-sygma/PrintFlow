@@ -202,7 +202,13 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.161 (19-oct, ~09:38, READY `dpl_2JrJMx4AMmXPwkphT72mbCejf4fJ`, commit `9ae9d86`; vuelta atrás: promover
+- **LIVE:** v10.84.162 (19-oct, ~20:00, READY `dpl_23H5jdkJPWqRYk2VwZmDBANhdfVP`, commits `ea9bb4b` y `fad8848`; vuelta atrás: promover
+  `dpl_9bybosuq38YZogmjoYLE6vGerc9o` (el código de v10.84.161 con las variables ya puestas) o `git revert fad8848 ea9bb4b`; la base no cambió; candado 2524
+  de 2524 (10 nuevas), de a 4, 980 s, a la primera y sin inestables; recorrido de producción con la contraseña de sitio: nada truena). 🔑 **La contraseña de
+  sitio, como CobranzaFlow** (Marcelo, 19-oct: el acceso igual en todas las apps, la misma contraseña en todas): `middleware.js`, los recorridos la mandan
+  (`credencial-sitio.json`) y el candado prueba un cambio en `middleware.js`. 🔑 **El fin de semana del 24-25 oct, una sola cuenta `nombre@sygma.mx`** en
+  todas (Marcelo): PrintFlow buscará el perfil por la cuenta, no por el nombre (`get_user_session`); se prepara entre semana sin cambiar nada para nadie.
+  v10.84.161 (19-oct, ~09:38, READY `dpl_2JrJMx4AMmXPwkphT72mbCejf4fJ`, commit `9ae9d86`; vuelta atrás: promover
   `dpl_5qRH2qo93YKcqYjeroUu1DNQoYap` (el código de v10.84.160) o `git revert 9ae9d86`; la base no cambió; candado 2514 de 2514 (11 nuevas), de a 4, 16 min,
   a la primera y sin inestables). **El detalle de la orden, hoja de trabajo para el piso** (su critique como Producción, 27/40): 🔑 a quien corre el
   trabajo (`hp`: Producción, Pre-prensa, Germán) las especificaciones y las notas primero; la oficina y Dirección conservan su orden; el cuerpo no repite

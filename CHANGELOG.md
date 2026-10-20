@@ -41,9 +41,12 @@ caen** (el matcher que deja fuera el JS, la puerta abierta sin variables, otro n
 «:», Buffer, otras variables, un recorrido sin la contraseña, la credencial sin limitarse al dominio, el aviso que la escribe y mandarla a la copia
 local; el último reventaba la prueba en vez de reportarla: se endureció).
 
-**Para subir: primero la contraseña en Vercel.** Sin `BASIC_AUTH_USER` y `BASIC_AUTH_PASSWORD` en el proyecto `print-flow`, la puerta se queda cerrada
-(503) para todos. Marcelo las pone (las mismas de CobranzaFlow) y luego se sube; quien recargue PrintFlow la tendrá que escribir una vez por sesión del
-navegador.
+**En producción** (19-oct, ~20:00, READY `dpl_23H5jdkJPWqRYk2VwZmDBANhdfVP`, commits `ea9bb4b` y `fad8848`; vuelta atrás: promover
+`dpl_9bybosuq38YZogmjoYLE6vGerc9o`, el código de v10.84.161 ya con las variables, o `git revert fad8848 ea9bb4b`). Antes de subir, Marcelo puso
+`BASIC_AUTH_USER` y `BASIC_AUTH_PASSWORD` en el proyecto `print-flow` (sin ellas, 503 para todos). Candado **2524 de 2524** (10 nuevas), de a 4, 980 s,
+a la primera y sin inestables. Revisado en producción sin escribir, en `produccion.sygma.mx` y en `print-flow-eosin.vercel.app`: 7 de 7 (sin contraseña
+pide la de «SYGMA PrintFlow», el logo abre, el JS la pide, con la credencial entra y con una mala no). El recorrido de producción, ya con la contraseña de
+sitio: 8 roles, 99 pasos, nada truena. Quien recargue PrintFlow la escribe una vez por sesión del navegador.
 
 ## v10.84.161 — El detalle de la orden, hoja de trabajo para el piso: lo que se corre primero y sin repetir el encabezado — 19-oct-2026
 
