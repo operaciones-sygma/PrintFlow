@@ -15,8 +15,10 @@ while read local_ref local_sha remote_ref remote_sha; do
   cambios="$cambios $(git diff --name-only "$remote_sha" "$local_sha" 2>/dev/null || echo src/)"
 done
 
+# v10.84.162: también middleware.js (la contraseña de sitio, en la raíz), public/ (el logo de las hojas) y vercel.json: cambiados a solas
+# pasaban como «sólo documentos» y se subían sin probar (tests/romper/middleware.mjs, mw-10).
 case "$cambios" in
-  *src/*|*tests/*|*scripts/*|*index.html*|*package.json*|*package-lock.json*|*vite.config*) ;;
+  *src/*|*tests/*|*scripts/*|*index.html*|*middleware.js*|*public/*|*vercel.json*|*package.json*|*package-lock.json*|*vite.config*) ;;
   *) echo "candado: sólo documentos; no hace falta correr las pruebas"; exit 0 ;;
 esac
 

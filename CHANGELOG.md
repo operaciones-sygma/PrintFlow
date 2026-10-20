@@ -29,8 +29,12 @@ abría directo en su pantalla de entrar, sin más capa que el usuario del área.
   `C:\Users\padil\claude-navegador\credencial-sitio.json` y nunca se imprime; sin ella, el recorrido de producción se detiene diciendo qué falta (si
   no, cada pantalla daría un 401 confuso). Lo avisó la sesión de PrintFlow (marcelo-7f) antes de escribir nada.
 
-**Cómo se probó.** Tanda nueva **`middleware`** (`tests/romper/middleware.mjs`, 9, sin navegador: importa el middleware y le da peticiones de
-mentira). **Vuelta 1**, escrita antes y corrida sin el archivo: **0 de 9** (no había contraseña y los 9 recorridos no la mandaban). **Vuelta 2**: 9 de 9.
+- **El candado prueba un cambio en `middleware.js`** (y en `public/` o `vercel.json`): antes sólo miraba `src/`, `tests/`, `scripts/` y los de
+  compilar, y un cambio a la contraseña de sitio pasaba como «sólo documentos» (mw-10; el Cotizador tenía el mismo hueco).
+
+**Cómo se probó.** Tanda nueva **`middleware`** (`tests/romper/middleware.mjs`, 10, sin navegador: importa el middleware y le da peticiones de
+mentira). **Vuelta 1**, escrita antes y corrida sin el archivo: **0 de 9** (no había contraseña y los 9 recorridos no la mandaban). **Vuelta 2**: 9 de 9;
+la mw-10, del candado, se escribió después y falló con el gancho de antes; con el arreglo, 10 de 10 y la tanda `candado` 10 de 10.
 Por donde no se diseñó: credenciales malas, vacías, sin «:», que no son base64, de 5,000 letras, con otro esquema, «basic» en minúsculas, una contraseña
 que trae «:», la buena con algo más, sin las variables o con sólo una, y que la credencial del recorrido no se escriba en el aviso. **12 sabotajes, todos
 caen** (el matcher que deja fuera el JS, la puerta abierta sin variables, otro nombre, el 401 en caché, comparar sólo la contraseña, partir en el último

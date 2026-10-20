@@ -188,6 +188,14 @@ const estado = (r) => (r === undefined ? "nada (dejó pasar)" : r?.status);
   }
   ok("mw-09-el-recorrido-manda-la-contrasena-solo-a-produccion", fallas.length === 0, fallas.join("; "));
 }
+{
+  // El candado (.githooks/pre-push) corre las pruebas sólo si lo que se sube toca código: middleware.js (en la raíz) también lo es. Sin él
+  // en la lista, un cambio a la contraseña de sitio pasaba como «sólo documentos» y se subía sin probar (el Cotizador tenía el mismo hueco).
+  const gancho = fs.readFileSync(path.join(RAIZ, ".githooks", "pre-push"), "utf8");
+  const caso = (gancho.match(/case "\$cambios" in\s*\n\s*([^\n]+)\)/) || [])[1] || "";
+  const falta = ["*middleware.js*", "*public/*"].filter(p => !caso.split("|").includes(p));
+  ok("mw-10-el-candado-prueba-un-cambio-en-middleware", falta.length === 0, `el candado no corre las pruebas si sólo cambia: ${falta.join(", ")} (lista: ${caso || "no se encontró"})`);
+}
 
 for (const r of res) console.log(r);
 const fallan = res.filter(r => r.startsWith("FALLA")).length;
