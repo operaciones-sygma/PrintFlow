@@ -124,7 +124,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2514 pruebas, ~15 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2525 pruebas, ~15 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Las tandas con banco van de a 7 a la vez (`PROBAR_PARALELO`; con 11 juntas,
@@ -202,7 +202,12 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.162 (19-oct, ~20:00, READY `dpl_23H5jdkJPWqRYk2VwZmDBANhdfVP`, commits `ea9bb4b` y `fad8848`; vuelta atrás: promover
+- **LIVE:** v10.84.163 (20-oct, ~16:30, READY `dpl_GsFbomennBNUJqEQ3Nw5hNHvRDop`, commit `13d639a`; vuelta atrás: promover
+  `dpl_137ufB5opoaRXMgYcGnPyaTTE1GM` (la app de v10.84.162) o `git revert 13d639a`; la app y la base no cambiaron; candado 2525 de 2525 (1 nueva), de a 4,
+  978 s, a la primera y sin inestables; revisado en producción sin escribir: 4 de 4). 🔑 **La prueba del candado ya no hereda las variables de git**
+  (can-g11): subir desde un worktree le pasaba el `GIT_DIR` del repo de verdad, y la de antes decía «10 pasan» mientras lo dejaba inservible (en Almacén
+  pasó el 20-oct; el mismo arreglo en CobranzaFlow v3.7.1031). Igual se sube desde la copia principal.
+  v10.84.162 (19-oct, ~20:00, READY `dpl_23H5jdkJPWqRYk2VwZmDBANhdfVP`, commits `ea9bb4b` y `fad8848`; vuelta atrás: promover
   `dpl_9bybosuq38YZogmjoYLE6vGerc9o` (el código de v10.84.161 con las variables ya puestas) o `git revert fad8848 ea9bb4b`; la base no cambió; candado 2524
   de 2524 (10 nuevas), de a 4, 980 s, a la primera y sin inestables; recorrido de producción con la contraseña de sitio: nada truena). 🔑 **La contraseña de
   sitio, como CobranzaFlow** (Marcelo, 19-oct: el acceso igual en todas las apps, la misma contraseña en todas): `middleware.js`, los recorridos la mandan

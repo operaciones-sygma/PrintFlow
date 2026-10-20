@@ -39,6 +39,11 @@ y leerlo truena (en CobranzaFlow la prueba reventaba sin su renglón); ahora un 
 `probar-reintento.mjs` corre `inestables.mjs` con `PROBAR_INESTABLES`, que no llama a git. El renglón «X [ERROR] The build was canceled» que sale al correr
 la tanda ya salía antes (vite, al cerrar el banco de desarrollo de can-g09, que pasa).
 
+**En producción** (20-oct, ~16:30, READY `dpl_GsFbomennBNUJqEQ3Nw5hNHvRDop`, commit `13d639a`; vuelta atrás: promover `dpl_137ufB5opoaRXMgYcGnPyaTTE1GM`,
+la app de v10.84.162, o `git revert 13d639a`). Candado **2525 de 2525** (1 nueva), de a 4, 978 s, a la primera y sin inestables, subido desde la copia
+principal. La app no cambia; revisado en producción sin escribir, en `produccion.sygma.mx` y en `print-flow-eosin.vercel.app`: 4 de 4 en cada uno (sin la
+contraseña de sitio, la página y el JS la piden; con ella, abren).
+
 ## v10.84.162 — La contraseña de sitio, como CobranzaFlow: la misma para todas las apps de SYGMA — 19-oct-2026
 
 **Qué pasaba.** Marcelo, 19-oct (puliendo SYGMA Central): *«quiero que el acceso a todas las apps sea igual como en cobranzaflow»*; eligió **la
