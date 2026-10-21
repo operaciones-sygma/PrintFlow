@@ -153,8 +153,9 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 24. **Scans/workflows de agentes: decir agentes + orden de magnitud en tokens y esperar OK**; tope
     duro en el script. Dos scans de 170 agentes agotaron la semana de Marcelo en agosto; el 10-sep un
     «25-40» fueron 187.
-25. Las 15 skills de diseño (`/impeccable`…) son **manuales**: sólo si Marcelo las escribe. La UI es
-    de otra sesión.
+25. Los skills de diseño (`impeccable` y los de Taste) corren con el sí de Marcelo: Claude los propone con su costo. Entran
+    solos los técnicos (`mobile-native`, `animation-performance`, `diagnosing-bugs`, `flujo-sygma`…). La UI es de otra sesión.
+    Las pasadas de impeccable siguen paradas desde el 19-oct ~09:22 hasta que Marcelo las pida.
 
 ---
 
