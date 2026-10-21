@@ -1494,7 +1494,9 @@ await caso("ses-54-recordar-desde-espera-a-otro", async ({ p, s }) => {
 
 // ════════════════════════ «Planta» (v10.84.119) ════════════════════════
 // Con la app entera (el banco del plano copia el montaje, aquí va el de verdad): el menú la da sólo a Producción y a Dirección, el módulo
-// diferido se baja y pinta las 14 máquinas, lee sus versiones, y salir con cambios sin guardar pregunta (el navClick de App). Vuelta 1.
+// diferido se baja y pinta las máquinas del plano original, lee sus versiones, y salir con cambios sin guardar pregunta (el navClick de App). Vuelta 1.
+// (v10.84.164) cambió por diseño: las del plano original, no un 14 escrito (con las dos manuales son 16; el candado de la 164 frenó aquí)
+const PIEZAS_DEL_PLANO = (await import(new URL("../../src/plano/plantaBaja.js", import.meta.url))).MAQUINAS.length;
 await caso("ses-91-gerardo-abre-la-planta", async ({ p, s }) => {
   await abrirYEntrar(p, s, "gerardo");
   const hay = await esperarMenu(p, /^Planta$/); await despertar(p);
@@ -1509,7 +1511,7 @@ await caso("ses-91-gerardo-abre-la-planta", async ({ p, s }) => {
   const pregunta = await p.getByRole("dialog").innerText().catch(() => "");
   await p.getByRole("button", { name: "Seguir aquí" }).click().catch(() => {}); await p.waitForTimeout(300);
   const sigue = await p.locator("[data-plano-lienzo]").count();
-  ok("ses-91-gerardo-abre-la-planta", hay && pinto && n === 14 && leyo && /sin guardar/i.test(estado) && /cambios sin guardar/i.test(pregunta) && sigue === 1,
+  ok("ses-91-gerardo-abre-la-planta", hay && pinto && n === PIEZAS_DEL_PLANO && leyo && /sin guardar/i.test(estado) && /cambios sin guardar/i.test(pregunta) && sigue === 1,
     `Gerardo: «Planta» en el menú ${hay ? "sí" : "NO"}; el plano ${pinto ? "pintó " + n + " piezas" : "NO PINTÓ"}; leyó sus versiones ${leyo ? "sí" : "NO"}; tras girar «${estado}»; salir ${pregunta ? "pregunta" : "NO PREGUNTA"} y «Seguir aquí» ${sigue ? "se queda" : "SALIÓ"}`);
 });
 for (const [quien, debe] of [["marcelo", true], ["karla", false], ["lupita", false], ["german", false], ["noemi", false], ["genaro", false]]) {
