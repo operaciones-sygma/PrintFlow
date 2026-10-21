@@ -12,6 +12,43 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.166 — «Nueva Orden de Compra» propone el vendedor de la ficha del cliente — 21-oct-2026
+
+**Qué pasaba.** Marcelo, 21-oct: a Pepe Chuy le faltaban dos clientas en sus comisiones, MONICA CUADRA BECERRA e ISABEL DE LOS ANGELES QUIROZ, y
+*«que en PrintFlow esos clientes tengan la ficha de Pepe Chuy encendida por default»*. La comisión se paga por el vendedor de cada factura, que sale de
+la orden; y lo que se agrega a una OC toma el vendedor de la OC (`addProductToOC`: `agent: oc.vendedor`). La forma de la orden, el carrito de stock,
+«mover a OC nueva» y duplicar ya proponían el vendedor de la ficha (`get_client_seller_label`, v10.74.2-.6), pero **«Nueva Orden de Compra»
+(`CreateOCModal`) arrancaba en «— Sin asignar —»** aunque la ficha dijera otro: OC-0911 de ISABEL salió con Manuel y su F-142 a nombre de Manuel. (Las
+de MONICA, P-0494 a P-0584, se capturaron con «Manuel» en la forma de la orden, que sí lo proponía; desde el 20-oct ya salen con Pepe Chuy.) Los datos
+se corrigieron en CobranzaFlow (v3.7.1031b: las seis facturas a Pepe Chuy, $2,526.57 de comisión, y la ficha de ISABEL); esto es para que no vuelva a
+pasar.
+
+**Qué se cambió** (sólo `CreateOCModal`, con las reglas de la forma de la orden):
+- Al **elegir el cliente** del buscador (con el ratón o el teclado, o en la pregunta de «¿ya existe?») «Nuestro vendedor» se pone en el de su ficha, y
+  debajo dice **«Sugerido: el vendedor de MONICA CUADRA BECERRA. Cámbialo si el trabajo lo lleva otro.»** (ligado al campo para un lector de pantalla;
+  la etiqueta, ligada al `select`).
+- **Lo elegido a mano manda**, antes o después del cliente, también «— Sin asignar —». **Cambiar de cliente** reemplaza el sugerido, y escribir otro
+  nombre o borrarlo lo quita y lo dice («se quitaron el RFC, el contacto y el vendedor que venían de…», como la forma de la orden). **Una respuesta que
+  llega tarde** (ya es otro cliente, o ya se eligió) no se pone.
+- **La base que no contesta** no frena: dice «No se pudo leer el vendedor de la ficha de …. Elígelo aquí.» (la regla 12: no es «sin vendedor»).
+- **Al crear**, si nadie eligió y quedó «— Sin asignar —» (el nombre se escribió sin elegirlo del buscador, o la sugerencia no llegó), la OC lleva el
+  vendedor de la ficha; si la base no contesta, sale sin vendedor, como antes.
+
+**Cómo se probó.** Tanda nueva **`nueva-oc`** (banco `gen-nueva-oc.mjs` con `extraer.mjs`: la ventana real, su buscador y «¿ya existe?»; ocho
+clientes con su vendedor de ficha, la base lenta o caída por URL), **35 de 35**. **Vuelta 1**, escrita antes del arreglo y corrida contra el código de
+la 165: **14 de 25 fallaban**; 13 eran esto (no proponía nada, ni al escribir el nombre exacto ni al elegir en «¿ya existe?», ni había sugerencia que
+quitar al cambiar de cliente), y una (noc-19, Esc) era un supuesto de la prueba: con el cursor en un campo de texto el Esc es de su lista de sugerencias,
+a propósito desde v10.84.106; la prueba sale primero del campo. La primera corrida se cayó entera por la prueba (buscaba el cliente por «combobox», y el
+agente de compras y el vendedor también lo son). **Vuelta 2** (10 casos: el teclado, crear mientras la respuesta viene, regresar a «— Sin asignar —»,
+el RFC que choca, un vendedor de ficha que no está en la lista, escribir otro nombre mientras llega la respuesta, doble clic mientras busca el de la
+ficha, la etiqueta ligada): sin fallas. **8 sabotajes, los 8 caen** cada uno en su prueba y ninguna de más: el código de antes (las 20 que dependen
+del arreglo), sin la guarda de la respuesta tarde (noc-10, noc-33), la respuesta tarde que pisa lo elegido (noc-09), sin el vendedor de la ficha al
+crear (noc-14, noc-29, noc-34), sin quitar el sugerido al cambiar de cliente (noc-07, noc-28), lo elegido a mano sin marcarse (noc-05, 09, 15, 25,
+30), sin el aviso de la base que no contesta (noc-27) y sin la etiqueta ligada (noc-35). Contra producción, sin escribir: a Karla y a Lupita la base
+les contesta «Pepe Chuy» para las dos clientas (a Genaro, vendedor, nada, como debe).
+`CreateOCModal` sólo se monta en `OrdenesCompraView` (la tanda `oc-lista` la extrae completa); `agentLabelFor` y `get_client_seller_label` no
+cambiaron. 1366 y 1920, acentos y un nombre larguísimo sin ensanchar la ventana.
+
 ## v10.84.165 — El emisor de folios se pregunta con sesión, en cuanto se entra — 20-oct-2026
 
 **Qué pasaba.** En el candado de v10.84.164, ses-07 (la sesión que se cierra a media entrada) salió **inestable**: «peticiones como anónima 1», sin decir

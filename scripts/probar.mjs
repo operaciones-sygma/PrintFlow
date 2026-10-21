@@ -135,6 +135,9 @@ const TANDAS = [
   // v10.84.157 — la ficha de la orden (OCard), en el banco del tablero (vista=fichas): la de quien no actúa en un renglón al pie, lo raro de producción
   //   en «⋯» como en el tablero, sin la guía repetida, «Historial» en la fila, 10 px y botones con nombre
   { nombre: "ficha", gen: "tests/banco/gen-tablero.mjs", romper: "tests/romper/ficha.mjs", puerto: 5490 },
+  // v10.84.166 — «Nueva Orden de Compra» propone el vendedor de la ficha del cliente (Marcelo, 21-oct: Mónica Cuadra e Isabel Quiroz, de Pepe
+  //   Chuy, salían con Manuel); lo elegido a mano manda, la respuesta tarde no pisa y el nombre escrito exacto también lo lleva
+  { nombre: "nueva-oc", gen: "tests/banco/gen-nueva-oc.mjs", romper: "tests/romper/nueva-oc.mjs", puerto: 5491 },
 ];
 // 🔑 LA SEGUNDA OPORTUNIDAD (8-oct-2026, Marcelo: «sí es una mejora, aplica la misma metodología para todos los proyectos»; la misma de
 // CobranzaFlow desde el 7-oct, con sus candados: scripts/reintento.mjs). Lo que falla se repite UNA vez, y sólo eso: lo que vuelve a fallar

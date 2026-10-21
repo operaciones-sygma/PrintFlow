@@ -20307,6 +20307,15 @@ function CreateOCModal({onCreate, onClose, showToast}){
   const [ocAviso,setOcAviso]=useState("");   // v10.84.80 — lo que se dice del cliente (se quitaron los datos del anterior, se puso el elegido)
   const [rfcDelCliente,setRfcDelCliente]=useState("");   // v10.84.81 — el RFC del cliente elegido es el suyo (como en la forma de la orden)
   const rfcRef=useRef(null); // v10.72.10 — para enfocar/traer a la vista el campo RFC cuando el gate dispara
+  // v10.84.166 — EL VENDEDOR DE LA FICHA, PROPUESTO COMO EN LA FORMA DE LA ORDEN. Marcelo, 21-oct: a Pepe Chuy le faltaban MONICA CUADRA
+  //   BECERRA e ISABEL DE LOS ANGELES QUIROZ en sus comisiones, y «que en PrintFlow esos clientes tengan la ficha de Pepe Chuy encendida por
+  //   default». Esta ventana arrancaba en «— Sin asignar —» aunque la ficha dijera otro, y lo que se agrega a una OC toma su vendedor (F-142 de
+  //   Isabel salió a nombre de Manuel por OC-0911). La forma de la orden, el carrito de stock, «mover a OC nueva» y duplicar ya lo proponían.
+  //   Mientras nadie lo elija a mano (vendTocado), lo que diga el campo lo pusimos nosotros: al cambiar de cliente se reemplaza, o se quita y se
+  //   dice; una respuesta que llega tarde (ya es otro cliente, o ya se eligió a mano) no se pone (clienteRef).
+  const vendTocado=useRef(false);
+  const clienteRef=useRef(null);
+  const [sugeridoDe,setSugeridoDe]=useState(null);   // {cliente, vendedor}: lo propuesto y de quién · {cliente, error:true}: la base no contestó
   // v10.59.2 — catálogo de AGENTES (contactos del cliente, ej. Eva/Jorge) de la razón social
   const [clientAgents,setClientAgents]=useState([]);
   // v10.84.103 — con algo capturado, Esc, el clic fuera y «Cancelar» preguntan (antes cerraban y se perdía; la critique del 13-oct)
@@ -20329,6 +20338,15 @@ function CreateOCModal({onCreate, onClose, showToast}){
   const selC = async c => {
     setOcAviso("");setRfcDelCliente(c.rfc||"");
     setF(p => ({...p, client_id:c.id, client:c.name, client_email:c.email||"", client_phone:c.whatsapp||"", client_rfc:c.rfc||""}));
+    // v10.84.166 — el vendedor de su ficha (get_client_seller_label, la misma regla de la forma de la orden), si nadie eligió uno a mano
+    clienteRef.current=c.id;
+    if(!vendTocado.current){
+      let lbl=null,fallo=false;
+      try{const {data:sd,error:eS}=await supabase.rpc("get_client_seller_label",{p_client_id:c.id});if(eS)throw eS;lbl=agentLabelFor(Array.isArray(sd)?sd[0]:sd)}
+      catch(e){fallo=true;console.warn("get_client_seller_label falló (no bloqueante):",e)}
+      // guarda de carrera: si mientras llegaba se cambió de cliente o se eligió a mano, esta respuesta ya no es de nadie
+      if(clienteRef.current===c.id&&!vendTocado.current){s("vendedor",lbl||"");setSugeridoDe(lbl?{cliente:c.name,vendedor:lbl}:fallo?{cliente:c.name,error:true}:null)}
+    }
     if (!c.email || !c.whatsapp || !c.rfc) {
       try {
         const {data} = await supabase.rpc("get_last_contact_for_client", {p_client_id: c.id});
@@ -20367,6 +20385,13 @@ function CreateOCModal({onCreate, onClose, showToast}){
           setSaving(false);return;
         }
       }
+      // v10.84.166 — nadie eligió vendedor y quedó «— Sin asignar —» (el nombre se escribió sin elegirlo del buscador, o la sugerencia no
+      //   llegó): va el de la ficha del cliente, como si se hubiera elegido del buscador. Si la base no contesta, sale sin vendedor, como antes.
+      let vendedorFinal=f.vendedor||null;
+      if(!vendedorFinal&&!vendTocado.current&&resolvedClientId){
+        try{const {data:sd,error:eS}=await supabase.rpc("get_client_seller_label",{p_client_id:resolvedClientId});if(!eS)vendedorFinal=agentLabelFor(Array.isArray(sd)?sd[0]:sd)||null}
+        catch(e){console.warn("get_client_seller_label falló al crear la OC (no bloqueante):",e)}
+      }
       await onCreate({
         client: nombreFinal || nm,
         client_id: resolvedClientId,
@@ -20374,7 +20399,7 @@ function CreateOCModal({onCreate, onClose, showToast}){
         client_phone: f.client_phone.trim() || null,
         client_rfc: rfcFinal || null,
         client_agent: f.client_agent.trim() || null, // v10.59.2 B2 — el 1er producto de la OC lo hereda
-        vendedor: f.vendedor || null,
+        vendedor: vendedorFinal,   // v10.84.166 — el elegido, el sugerido o el de la ficha
         deliveryDate: f.delivery_date || null,
         notes: f.notes.trim() || null
       });
@@ -20382,6 +20407,8 @@ function CreateOCModal({onCreate, onClose, showToast}){
       setSaving(false);
     }
   };
+  // v10.84.166 — bajo «Nuestro vendedor»: de quién es la sugerencia (mientras siga siendo la sugerencia), o que la base no contestó
+  const avisoVendedor=sugeridoDe&&!vendTocado.current?(sugeridoDe.error?(!f.vendedor?"No se pudo leer el vendedor de la ficha de "+sugeridoDe.cliente+". Elígelo aquí.":null):f.vendedor===sugeridoDe.vendedor?"Sugerido: el vendedor de "+sugeridoDe.cliente+". Cámbialo si el trabajo lo lleva otro.":null):null;
   return <div onClick={pedirCerrar} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
     <div role="dialog" aria-modal="true" aria-labelledby="createoc-modal-title" onKeyDown={e=>{if(!preguntaCerrar)atraparTab(e)}} onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:14,padding:24,maxWidth:500,width:"100%",maxHeight:"90vh",overflow:"auto",boxShadow:C.sh3}}>
       <h2 id="createoc-modal-title" style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",color:C.ac,display:"flex",alignItems:"center",gap:8}}><ShoppingCartIcon size={18} weight="bold"/>Nueva Orden de Compra</h2>
@@ -20391,7 +20418,7 @@ function CreateOCModal({onCreate, onClose, showToast}){
           <label style={{fontSize:11,fontWeight:600,color:C.t2,display:"block",marginBottom:4}}>Cliente *</label>
           <ClientInput value={f.client} onChange={v=>{s("client",v);if(f.client_id&&(v||"").trim()!==(f.client||"").trim()){s("client_id",null);s("billing_mode","normal");if(!f.stock_loaded){s("stock_role",null);s("client_product_id",null)}
             // v10.84.80 — (como la forma de la orden) lo que trajo el cliente anterior se va con él, y se dice
-            const quitados=[];if((f.client_rfc||"").trim()){s("client_rfc","");quitados.push("el RFC")}if((f.client_email||"").trim()||(f.client_phone||"").trim()){s("client_email","");s("client_phone","");quitados.push("el contacto")}if(f.client_agent&&clientAgents.some(a=>a.name===f.client_agent)){s("client_agent","");quitados.push("su agente de compras")}
+            const quitados=[];if((f.client_rfc||"").trim()){s("client_rfc","");quitados.push("el RFC")}if((f.client_email||"").trim()||(f.client_phone||"").trim()){s("client_email","");s("client_phone","");quitados.push("el contacto")}if(f.client_agent&&clientAgents.some(a=>a.name===f.client_agent)){s("client_agent","");quitados.push("su agente de compras")}if(!vendTocado.current&&f.vendedor){s("vendedor","");quitados.push("el vendedor")}clienteRef.current=null;setSugeridoDe(null);   /* v10.84.166 — el vendedor sugerido se va con su cliente */
             if(quitados.length)setOcAviso("Cambiaste de cliente: se quitaron "+(quitados.length<2?quitados[0]:quitados.slice(0,-1).join(", ")+" y "+quitados[quitados.length-1])+" que venían de "+f.client+".")}}} onSelect={selC} clients={[]}/>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
@@ -20416,11 +20443,12 @@ function CreateOCModal({onCreate, onClose, showToast}){
           <datalist id="oc-client-agents">{clientAgents.map(a=><option key={a.id} value={a.name}/>)}</datalist>
         </div>
         <div>
-          <label style={{fontSize:11,fontWeight:600,color:C.t2,display:"block",marginBottom:4}}>Nuestro vendedor</label>
-          <select value={f.vendedor} onChange={e=>s("vendedor",e.target.value)} style={inp}>
+          <label htmlFor="oc-nuevo-vendedor" style={{fontSize:11,fontWeight:600,color:C.t2,display:"block",marginBottom:4}}>Nuestro vendedor</label>
+          <select id="oc-nuevo-vendedor" value={f.vendedor} onChange={e=>{vendTocado.current=true;s("vendedor",e.target.value)}} aria-describedby={avisoVendedor?"oc-nuevo-vendedor-ayuda":undefined} style={inp}>
             <option value="">— Sin asignar —</option>
             {AGENTS.map(a => <option key={a} value={a}>{a}</option>)}
           </select>
+          {avisoVendedor&&<div id="oc-nuevo-vendedor-ayuda" style={{fontSize:11,color:C.t2,marginTop:4,lineHeight:1.4,overflowWrap:"anywhere"}}>{avisoVendedor}</div>}
         </div>
         <div>
           <label style={{fontSize:11,fontWeight:600,color:C.t2,display:"block",marginBottom:4}}>Fecha de entrega (opcional)</label>
