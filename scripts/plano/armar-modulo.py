@@ -47,6 +47,17 @@ for m in sorted(P["maquinas"], key=lambda m: (int(m["numero"] or 0), m["x"])):
     ancho = (max(b for _, b in forma) - min(b for _, b in forma)) if forma else round(m["ancho"])
     maquinas.append({"id": ident, "nombre": m["nombre"], "numero": n, "x": round(m["x"] - OX), "y": round(m["y"] - OY),
                      "largo": largo, "ancho": ancho, "giro": m["giro"], "forma": forma})
+# v10.84.164 — lo que está en la planta y NO viene en el PDF del levantamiento (Marcelo, 20-oct-2026: «faltan las manuales, tienen un área de
+#   1.15 x 1.15 metros y están colocados al lado derecho de la máquina foil»): las dos prensas manuales (Chandler & Price), en fila a la derecha
+#   de la Foil con 30 cm entre una y otra, «Manual 1» y «Manual 2» con el número 14 (como las dos de Aspas comparten el 11). Se ponen desde la
+#   Foil: si la Foil se mueve en el PDF, la siguen. Sin la Foil no se adivina: truena.
+MANUAL, HUECO = 115, 30
+foil = next((m for m in maquinas if m["nombre"] == "Foil"), None)
+if foil is None: sys.exit("no encontré la Foil en el plano: las manuales se ponen junto a ella")
+borde = foil["x"] + foil["largo"] / 2
+for k, nombre in enumerate(["Manual 1", "Manual 2"]):
+    maquinas.append({"id": "m-14" + "ab"[k], "nombre": nombre, "numero": "14", "x": math.floor(borde + HUECO + MANUAL / 2 + k * (MANUAL + HUECO)),
+                     "y": foil["y"], "largo": MANUAL, "ancho": MANUAL, "giro": 0, "forma": None})
 J = lambda v: json.dumps(v, ensure_ascii=False, separators=(",", ":"))
 with open(SALE, "w", encoding="utf-8", newline="\n") as f:
     f.write("// v10.84.119 — La planta baja de la imprenta, del levantamiento de AutoCAD («zigma imprenta-Layout con maquinaria.pdf», 1:100), en\n")
@@ -55,6 +66,7 @@ with open(SALE, "w", encoding="utf-8", newline="\n") as f:
     f.write("//   y las máquinas como estaban en ese plano. Lo genera scripts/plano/armar-modulo.py: no se edita\n")
     f.write("//   a mano (un cambio del local se hace en el PDF y se vuelve a generar). Las versiones guardadas guardan sus piezas completas, así que\n")
     f.write("//   regenerar esto no mueve lo que ya se guardó.\n")
+    f.write("// v10.84.164 — más lo que no viene en el PDF: las dos manuales, en fila a la derecha de la Foil (las pone el generador).\n")
     f.write("export const CAJA = " + J({"ancho": ANCHO, "alto": ALTO}) + ";\n")
     for g in GRUPOS: f.write("export const " + g.upper() + " = " + J(fijo[g]) + ";\n")
     f.write("export const AREAS = " + J(areas) + ";\n")

@@ -169,11 +169,14 @@ export default function PlanoPlanta({ supabase, usuario = "", nombre = "", tema,
   //   letrero se quitan las medidas y después se achica el nombre, hasta 8.5 px (vuelta 1: en las dos Aspas se pisaban; vuelta 4, en producción:
   //   achicar todo nombre más ancho que su pieza dejaba ilegible la vista completa a 1366). Las cajas, en px de la pantalla.
   const sLetreros = vista?.s || 0.2;
+  // v10.84.164 — y si a 8.5 px todavía chocan, el nombre con espacio se parte en dos renglones (G.partirNombre, la misma regla de la hoja): las
+  //   dos manuales, a 30 cm una de otra, se pisaban a 1366 aun achicadas (pln-82, pln-107).
   const letreros = useMemo(() => {
     const L = visibles.map(p => { const [lx, ly] = G.puntoDelNombre(p), med = medidas(p);
-      return { id: p.id, lx, ly, med, n: p.nombre.length, f: 12, conMedidas: G.cajaDe(p).alto * sLetreros >= 30 }; });
+      return { id: p.id, lx, ly, med, nombre: p.nombre, n: p.nombre.length, f: 12, conMedidas: G.cajaDe(p).alto * sLetreros >= 30, partes: null }; });
     const caja = l => {
       const x = l.lx * sLetreros, y = l.ly * sLetreros, w = Math.max(l.n * 0.64 * l.f, l.conMedidas ? l.med.length * 0.58 * 10.5 : 0) / 2 + 2;
+      if (l.partes) return [x - w, y - 1.05 * l.f, x + w, y + 1.2 * l.f];   // (dos renglones: `n` ya es el del más largo)
       return l.conMedidas ? [x - w, y - 2 - 0.9 * l.f, x + w, y + 15] : [x - w, y - 0.6 * l.f, x + w, y + 0.65 * l.f];
     };
     for (let vuelta = 0; vuelta < 12; vuelta++) {
@@ -182,7 +185,13 @@ export default function PlanoPlanta({ supabase, usuario = "", nombre = "", tema,
       for (let i = 0; i < L.length; i++) for (let j = i + 1; j < L.length; j++) {
         const a = cajas[i], b = cajas[j];
         if (!(a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3])) continue;
-        for (const l of [L[i], L[j]]) { if (l.conMedidas) { l.conMedidas = false; cambio = true; } else if (l.f > 8.5) { l.f = Math.max(8.5, l.f - 1.5); cambio = true; } }
+        for (const l of [L[i], L[j]]) {
+          if (l.conMedidas) { l.conMedidas = false; cambio = true; }
+          else if (l.f > 8.5) { l.f = Math.max(8.5, l.f - 1.5); cambio = true; }
+          else if (!l.partes) { const partes = G.partirNombre(l.nombre); if (partes) { l.partes = partes; l.n = Math.max(...partes.map(t => t.length)); cambio = true; } }
+          // (partido y todavía choca: hasta 7.5 px, sólo de lejos; al acercar, todo vuelve a 12 px en un renglón)
+          else if (l.f > 7.5) { l.f = Math.max(7.5, l.f - 0.5); cambio = true; }
+        }
       }
       if (!cambio) break;
     }
@@ -723,7 +732,8 @@ export default function PlanoPlanta({ supabase, usuario = "", nombre = "", tema,
             <g pointerEvents="none" fontFamily="'Geist',sans-serif" textAnchor="middle">{visibles.map(p => {
               const l = letreros[p.id], f = l.f;
               return <g key={p.id}>
-                <text x={l.lx} y={l.ly + (l.conMedidas ? -2 : f * 0.35) / s} fontSize={f / s} fontWeight={700} fill="#1a1a1f" stroke="#fbfcfd" strokeWidth={3 / s} paintOrder="stroke">{p.nombre}</text>
+                <text x={l.lx} y={l.ly + (l.conMedidas ? -2 : f * 0.35) / s} fontSize={f / s} fontWeight={700} fill="#1a1a1f" stroke="#fbfcfd" strokeWidth={3 / s} paintOrder="stroke">
+                  {l.partes ? l.partes.map((t, k) => <tspan key={k} x={l.lx} dy={k ? "1.1em" : "-0.55em"}>{t}</tspan>) : p.nombre}</text>
                 {l.conMedidas && <text x={l.lx} y={l.ly + 12 / s} fontSize={10.5 / s} fill="#4b5563" stroke="#fbfcfd" strokeWidth={3 / s} paintOrder="stroke">{l.med}</text>}
               </g>;
             })}</g>

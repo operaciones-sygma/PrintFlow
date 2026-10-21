@@ -28,8 +28,25 @@ function geo(nombre, fn) { if (!toca(nombre)) return; try { fn(); } catch (e) { 
 
 geo("pln-01-el-levantamiento-sin-falsos-choques", () => {
   const pr = G.problemas(ORIG, OBST);
-  ok("pln-01-el-levantamiento-sin-falsos-choques", ORIG.length === 14 && Object.keys(pr).length === 0,
+  // (v10.84.164) cambió por diseño: 16, con las dos manuales que no vienen en el PDF (pln-106)
+  ok("pln-01-el-levantamiento-sin-falsos-choques", ORIG.length === 16 && Object.keys(pr).length === 0,
     `las ${ORIG.length} máquinas como están en el plano no se enciman ni chocan con nada: ${JSON.stringify(pr)}`);
+});
+// v10.84.164 — las dos manuales (Marcelo, 20-oct-2026: «faltan las manuales, tienen un área de 1.15 × 1.15 metros y están al lado derecho de la
+//   máquina foil»; eligió en fila, con 30 cm entre una y otra, «Manual 1» y «Manual 2» con el número 14, como las dos de Aspas el 11). No vienen
+//   en el PDF del levantamiento: el generador (scripts/plano/armar-modulo.py) las agrega aparte. Vuelta 1: escrita antes del cambio.
+geo("pln-106-las-dos-manuales-junto-a-la-foil", () => {
+  const foil = de("m-10"), m1 = de("m-14a"), m2 = de("m-14b");
+  if (!m1 || !m2) { ok("pln-106-las-dos-manuales-junto-a-la-foil", false, `en el plano original ${m1 ? "está" : "falta"} la Manual 1 y ${m2 ? "está" : "falta"} la Manual 2`); return; }
+  const cf = G.cajaDe(foil), c1 = G.cajaDe(m1), c2 = G.cajaDe(m2);
+  const pr = G.problemas(ORIG, OBST);
+  const bien = m1.nombre === "Manual 1" && m2.nombre === "Manual 2" && m1.numero === "14" && m2.numero === "14"
+    && [m1, m2].every(m => m.largo === 115 && m.ancho === 115 && !m.giro && !m.forma)
+    && m1.y === foil.y && m2.y === foil.y                                                  // en fila, a la altura de la Foil
+    && c1.x0 >= cf.x1 && c1.x0 - cf.x1 <= 35 && c2.x0 >= c1.x1 && c2.x0 - c1.x1 <= 35      // a su derecha, con ~30 cm entre una y otra
+    && !pr["m-14a"] && !pr["m-14b"];
+  ok("pln-106-las-dos-manuales-junto-a-la-foil", bien,
+    `la Foil llega a x=${cf.x1}; Manual 1 ${JSON.stringify(c1)}; Manual 2 ${JSON.stringify(c2)}; problemas: ${JSON.stringify(pr)}`);
 });
 geo("pln-02-encimadas-y-tocarse", () => {
   const a = caja(0, 0, 100, 100, 0, "a");
@@ -141,8 +158,8 @@ await caso("pln-10-al-abrir-el-levantamiento", "", async p => {
   const nombres = await p.$$eval("[data-plano-lienzo] text", ts => ts.map(t => t.textContent));
   const ver = await p.$eval("[data-plano-version]", s => s.options[s.selectedIndex].text);
   const e = await estado(p);
-  ok("pln-10-al-abrir-el-levantamiento", ps.length === 14 && !ps.some(x => x.mal) && ["PM-74", "Tren", "Dobladora", "Duplo", "CTP", "Guillotina 115"].every(n => nombres.includes(n)) && /levantamiento/i.test(ver) && /Sin cambios/.test(e),
-    `${ps.length} piezas (14), rojas: ${ps.filter(x => x.mal).length}; nombres a la vista: ${["PM-74", "Tren", "Dobladora", "Duplo"].filter(n => nombres.includes(n)).join(",")}; versión «${ver}»; estado «${e}»`);
+  ok("pln-10-al-abrir-el-levantamiento", ps.length === ORIG.length && !ps.some(x => x.mal) && ["PM-74", "Tren", "Dobladora", "Duplo", "CTP", "Guillotina 115"].every(n => nombres.includes(n)) && /levantamiento/i.test(ver) && /Sin cambios/.test(e),
+    `${ps.length} piezas (${ORIG.length}), rojas: ${ps.filter(x => x.mal).length}; nombres a la vista: ${["PM-74", "Tren", "Dobladora", "Duplo"].filter(n => nombres.includes(n)).join(",")}; versión «${ver}»; estado «${e}»`);
 });
 for (const [vp, nombre] of [[V1366, "pln-11-cabe-a-1366"], [V1920, "pln-11b-cabe-a-1920"]]) {
   await caso(nombre, "", async p => {
@@ -205,7 +222,7 @@ await caso("pln-16-agregar-un-objeto", "", async p => {
   const v = await vista(p), r = await p.$eval("[data-plano-lienzo]", e => ({ w: e.clientWidth, h: e.clientHeight }));
   const centro = { x: (r.w / 2 - v.dx) / v.s, y: (r.h / 2 - v.dy) / v.s };
   const pan = (await elegida(p)) + " · " + await panel(p), e = await estado(p);
-  ok("pln-16-agregar-un-objeto", ps.length === 15 && !!nueva && Math.abs(nueva.w - 240) < 0.5 && Math.abs(nueva.h - 120) < 0.5 && Math.hypot(nueva.cx - centro.x, nueva.cy - centro.y) < 10 && /Mesa de empaque/.test(pan) && /Agregado/.test(pan) && /sin guardar/i.test(e),
+  ok("pln-16-agregar-un-objeto", ps.length === ORIG.length + 1 && !!nueva && Math.abs(nueva.w - 240) < 0.5 && Math.abs(nueva.h - 120) < 0.5 && Math.hypot(nueva.cx - centro.x, nueva.cy - centro.y) < 10 && /Mesa de empaque/.test(pan) && /Agregado/.test(pan) && /sin guardar/i.test(e),
     `${ps.length} piezas; la nueva ${nueva ? nueva.w.toFixed(0) + "×" + nueva.h.toFixed(0) + " a " + Math.hypot(nueva.cx - centro.x, nueva.cy - centro.y).toFixed(0) + " cm del centro de lo que se ve" : "NO SALIÓ"}; panel «${pan.slice(0, 70)}»; «${e}»`);
 });
 await caso("pln-17-agregar-con-medidas-malas", "", async p => {
@@ -213,7 +230,7 @@ await caso("pln-17-agregar-con-medidas-malas", "", async p => {
   const prueba = async (nombre, largo, ancho) => { await p.fill("input[name=agregar-nombre]", nombre); await p.fill("input[name=agregar-largo]", largo); await p.fill("input[name=agregar-ancho]", ancho); await p.click("[data-plano-agregar-ok]"); await espera(p, 150); return { n: (await piezas(p)).length, err: (await p.locator("[data-plano-forma-agregar] [role=alert]").allInnerTexts()).join(" / ") }; };
   const r = [await prueba("", "100", "100"), await prueba("Tarima", "0", "100"), await prueba("Tarima", "-5", "abc"), await prueba("Tarima", "6000", "100"), await prueba("Tarima", "120,5", "80")];
   const ultima = (await piezas(p)).find(x => !/^m-/.test(x.id));
-  ok("pln-17-agregar-con-medidas-malas", r.slice(0, 4).every(x => x.n === 14 && x.err) && r[4].n === 15 && ultima && Math.abs(ultima.w - 120.5) < 0.1,
+  ok("pln-17-agregar-con-medidas-malas", r.slice(0, 4).every(x => x.n === ORIG.length && x.err) && r[4].n === ORIG.length + 1 && ultima && Math.abs(ultima.w - 120.5) < 0.1,
     r.map((x, i) => `${i + 1}: ${x.n} piezas «${x.err}»`).join(" | ").slice(0, 400) + ` · con «120,5»: ${ultima ? ultima.w.toFixed(1) : "no"}`);
 });
 await caso("pln-18-cambiar-medidas-en-el-panel", "", async p => {
@@ -237,7 +254,7 @@ await caso("pln-19-duplicar-quitar-y-su-deshacer", "", async p => {
   const n2 = (await piezas(p)).length;
   await deshacerDelAviso(p).click(); await espera(p);
   const n3 = (await piezas(p)).length;
-  ok("pln-19-duplicar-quitar-y-su-deshacer", ps.length === 15 && copia && Math.abs(copia.cx - orig.cx - 50) < 0.1 && Math.abs(copia.cy - orig.cy - 50) < 0.1 && /Guillotina 115/.test(pan) && n2 === 14 && n3 === 15,
+  ok("pln-19-duplicar-quitar-y-su-deshacer", ps.length === ORIG.length + 1 && copia && Math.abs(copia.cx - orig.cx - 50) < 0.1 && Math.abs(copia.cy - orig.cy - 50) < 0.1 && /Guillotina 115/.test(pan) && n2 === ORIG.length && n3 === ORIG.length + 1,
     `Ctrl+D: ${ps.length} piezas, la copia a ${copia ? (copia.cx - orig.cx).toFixed(0) + "," + (copia.cy - orig.cy).toFixed(0) : "—"} cm y elegida (${/Guillotina 115/.test(pan)}); Supr: ${n2}; «Deshacer» del aviso: ${n3}`);
 });
 await caso("pln-20-encimadas-en-rojo", "", async p => {
@@ -364,7 +381,7 @@ await caso("pln-32-abrir-otra-con-cambios-pregunta", "versiones=2", async p => {
 await caso("pln-33-abrir-otra-sin-cambios", "versiones=2", async p => {
   await p.selectOption("[data-plano-version]", "v-2"); await espera(p, 500);
   const ps = await piezas(p), mesa = ps.find(x => x.id === "o-mesa");
-  ok("pln-33-abrir-otra-sin-cambios", (await dialogo(p).count()) === 0 && ps.length === 15 && mesa && mesa.fill !== "#e3e9ef" && /Sin cambios/.test(await estado(p)),
+  ok("pln-33-abrir-otra-sin-cambios", (await dialogo(p).count()) === 0 && ps.length === ORIG.length + 1 && mesa && mesa.fill !== "#e3e9ef" && /Sin cambios/.test(await estado(p)),
     `sin preguntar: ${ps.length} piezas, la mesa ${mesa ? "con color de agregado (" + mesa.fill + ")" : "NO ESTÁ"}; «${await estado(p)}»`);
 });
 await caso("pln-34-salir-con-cambios-pregunta", "", async p => {
@@ -415,7 +432,7 @@ await caso("pln-37-imprimir-doble-carta", "versiones=2&ultima=v-1", async p => {
   const pr = await lineas(p, "print"), hoja = await p.evaluate(() => window.__hoja || "");
   const ancho = Number((/<svg class="plano"[^>]*width="([\d.]+)mm"/.exec(hoja) || [])[1]);
   const filas = (hoja.match(/<tr/g) || []).length - 1;
-  ok("pln-37-imprimir-doble-carta", /Doble carta escala 1:100/.test(menu) && pr.length === 1 && /431\.8mm 279\.4mm/.test(pr[0]) && /Escala 1:100/.test(hoja) && Math.abs(ancho - 358) < 1 && filas === 14 && /Acomodo A/.test(hoja) && /Guardada por Gerardo/.test(hoja) && /PM-74/.test(hoja) && /250 × 570/.test(hoja) && !/sin guardar/i.test(hoja),
+  ok("pln-37-imprimir-doble-carta", /Doble carta escala 1:100/.test(menu) && pr.length === 1 && /431\.8mm 279\.4mm/.test(pr[0]) && /Escala 1:100/.test(hoja) && Math.abs(ancho - 358) < 1 && filas === ORIG.length && /Acomodo A/.test(hoja) && /Guardada por Gerardo/.test(hoja) && /PM-74/.test(hoja) && /250 × 570/.test(hoja) && !/sin guardar/i.test(hoja),
     `menú «${menu.slice(0, 70)}»; ${pr.join(" | ")}; el plano mide ${ancho} mm (3580 cm a 1:100 = 358); ${filas} renglones; título ${/Acomodo A/.test(hoja) ? "sí" : "NO"}; quién ${/Guardada por Gerardo/.test(hoja) ? "sí" : "NO"}`);
 });
 await caso("pln-38-imprimir-carta-con-cambios", "", async p => {
@@ -482,7 +499,7 @@ await caso("pln-45-teclas-en-un-campo-no-mueven", "", async p => {
   await p.click("input[name=pieza-nombre]");
   await p.keyboard.press("End"); await p.keyboard.type(" r"); await p.keyboard.press("ArrowLeft"); await p.keyboard.press("Delete"); await p.keyboard.press("Backspace");
   const b = await pieza(p, "m-2"), n = (await piezas(p)).length;
-  ok("pln-45-teclas-en-un-campo-no-mueven", b && b.cx === a.cx && b.w === a.w && n === 14, `escribir «r», flechas, Supr y Retroceso en el nombre: la pieza ${b ? (b.cx === a.cx && b.w === a.w ? "quieta" : "SE MOVIÓ O GIRÓ") : "SE BORRÓ"}; ${n} piezas`);
+  ok("pln-45-teclas-en-un-campo-no-mueven", b && b.cx === a.cx && b.w === a.w && n === ORIG.length, `escribir «r», flechas, Supr y Retroceso en el nombre: la pieza ${b ? (b.cx === a.cx && b.w === a.w ? "quieta" : "SE MOVIÓ O GIRÓ") : "SE BORRÓ"}; ${n} piezas`);
 });
 await caso("pln-46-zoom-y-ver-todo", "", async p => {
   const a = await vista(p), z0 = await p.textContent("[data-plano-zoom]");
@@ -555,7 +572,7 @@ await caso("pln-61-lo-agregado-sobrevive-guardar-y-abrir", "", async p => {
   await p.selectOption("[data-plano-version]", id); await espera(p, 500);
   const ps = await piezas(p), mesa = ps.find(x => !/^m-/.test(x.id));
   const nombres = await p.$$eval("[data-plano-lienzo] text", ts => ts.map(t => t.textContent));
-  ok("pln-61-lo-agregado-sobrevive-guardar-y-abrir", sinMesa === 14 && ps.length === 15 && mesa && Math.abs(mesa.w - 120) < 0.5 && Math.abs(mesa.h - 240) < 0.5 && nombres.includes("Mesa de corte"),
+  ok("pln-61-lo-agregado-sobrevive-guardar-y-abrir", sinMesa === ORIG.length && ps.length === ORIG.length + 1 && mesa && Math.abs(mesa.w - 120) < 0.5 && Math.abs(mesa.h - 240) < 0.5 && nombres.includes("Mesa de corte"),
     `el levantamiento: ${sinMesa} piezas; «Con mesa» otra vez: ${ps.length}, la mesa ${mesa ? mesa.w.toFixed(0) + "×" + mesa.h.toFixed(0) + " (girada: 120×240)" : "NO ESTÁ"}, su nombre ${nombres.includes("Mesa de corte") ? "sí" : "NO"}`);
 });
 await caso("pln-62-giro-fino-en-el-panel", "", async p => {
@@ -622,7 +639,7 @@ await caso("pln-68-agregar-con-datos-y-esc", "", async p => {
   const sigue = await p.locator("[data-plano-forma-agregar]").count(), nombre = sigue ? await p.inputValue("input[name=agregar-nombre]") : "";
   await p.getByRole("button", { name: "Cancelar" }).click(); await espera(p);
   const cerrada = await p.locator("[data-plano-forma-agregar]").count();
-  ok("pln-68-agregar-con-datos-y-esc", sigue === 1 && nombre === "Anaquel" && cerrada === 0 && (await piezas(p)).length === 14, `Esc con datos: la forma ${sigue ? "sigue («" + nombre + "»)" : "SE CERRÓ"}; «Cancelar» ${cerrada ? "NO cierra" : "cierra"}`);
+  ok("pln-68-agregar-con-datos-y-esc", sigue === 1 && nombre === "Anaquel" && cerrada === 0 && (await piezas(p)).length === ORIG.length, `Esc con datos: la forma ${sigue ? "sigue («" + nombre + "»)" : "SE CERRÓ"}; «Cancelar» ${cerrada ? "NO cierra" : "cierra"}`);
 });
 await caso("pln-69-sin-tabla-recargar-conserva", "modo=sintabla", async p => {
   await arrastrar(p, "m-2", 300, 0); await espera(p, 600);
@@ -668,8 +685,9 @@ await caso("pln-73-muchas-piezas", "", async p => {
   const resumen = await p.textContent("[data-plano-problemas]").catch(() => "");
   await p.click("[data-plano-imprimir]"); await p.click("[data-plano-hoja=doble]"); await espera(p, 900);
   const hoja = await p.evaluate(() => window.__hoja || "");
-  ok("pln-73-muchas-piezas", n === 54 && /y \d+ más/.test(resumen) && /<tr/.test(hoja) && /y 10 piezas más/.test(hoja) && ms < 4000,
-    `40 × Ctrl+D: ${n} piezas (54); el resumen «${resumen.slice(0, 80)}…»; la hoja dice ${(/y (\d+) piezas más/.exec(hoja) || [])[0] || "NADA de las que no caben"}; arrastrar tardó ${ms} ms`);
+  // (v10.84.164) por las piezas del plano original, no un número escrito: la hoja enseña 44 renglones y dice cuántas no caben
+  ok("pln-73-muchas-piezas", n === ORIG.length + 40 && /y \d+ más/.test(resumen) && /<tr/.test(hoja) && new RegExp(`y ${ORIG.length + 40 - 44} piezas más`).test(hoja) && ms < 4000,
+    `40 × Ctrl+D: ${n} piezas (${ORIG.length + 40}); el resumen «${resumen.slice(0, 80)}…»; la hoja dice ${(/y (\d+) piezas más/.exec(hoja) || [])[0] || "NADA de las que no caben"}; arrastrar tardó ${ms} ms`);
 });
 await caso("pln-74-clic-derecho-no-arrastra", "", async p => {
   const a = await pieza(p, "m-2"), s = await enPantalla(p, a.cx, a.cy), v = await vista(p);
@@ -747,6 +765,38 @@ for (const [vp, nombre] of [[V1366, "pln-82-los-letreros-no-se-pisan-1366"], [V1
     }
     ok(nombre, cajas.length >= 14 && pisan.length === 0, `${cajas.length} letreros; se pisan: ${pisan.join(" · ") || "ninguno"}`);
   }, { viewport: vp });
+}
+// v10.84.164 — las dos manuales, a 30 cm una de otra: a 1366 sus nombres no caben ni achicados a 8.5 px (pln-82 los vio pisarse). Lo que DEBE
+//   pasar: los dos se leen, cada uno sobre su máquina y sin pisarse. Vuelta 1: escrita antes del arreglo.
+await caso("pln-107-los-nombres-de-las-manuales-1366", "", async p => {
+  const r = await p.evaluate(() => {
+    const caja = e => { const b = e.getBoundingClientRect(); return { x0: b.left, y0: b.top, x1: b.right, y1: b.bottom }; };
+    const ts = [...document.querySelectorAll("[data-plano-lienzo] svg g[pointer-events=none] > g > text")].filter(t => /^Manual ?[12]$/.test(t.textContent.trim()));
+    const pz = id => { const e = document.querySelector(`[data-pieza="${id}"]`); return e ? caja(e) : null; };
+    return { textos: ts.map(t => ({ t: t.textContent.trim(), ...caja(t) })), m1: pz("m-14a"), m2: pz("m-14b") };
+  });
+  const [a, b] = r.textos;
+  const pisan = !!(a && b && a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1);
+  const sobre = (t, m) => !!(t && m && (t.x0 + t.x1) / 2 > m.x0 && (t.x0 + t.x1) / 2 < m.x1 && (t.y0 + t.y1) / 2 > m.y0 && (t.y0 + t.y1) / 2 < m.y1);
+  ok("pln-107-los-nombres-de-las-manuales-1366", r.textos.length === 2 && !pisan && sobre(a, r.m1) && sobre(b, r.m2),
+    `${r.textos.length} nombres de manuales a la vista (${r.textos.map(t => `«${t.t}» x ${Math.round(t.x0)}-${Math.round(t.x1)}`).join(", ")}); ${pisan ? "SE PISAN" : "no se pisan"}; cada uno sobre su máquina: ${sobre(a, r.m1) && sobre(b, r.m2)}`);
+});
+// v10.84.164 — y en la HOJA impresa: en Carta (1:200) las manuales quedan a 7 mm una de otra y cada nombre mide ~10 mm. Se mide en un navegador
+//   con la hoja de verdad (lo que manda imprimir la pantalla), no con la cuenta de la hoja. Vuelta 1: escrita antes del arreglo.
+for (const [hoja, nombre] of [["carta", "pln-108-la-hoja-carta-sin-nombres-pisados"], ["doble", "pln-108b-la-hoja-doble-sin-nombres-pisados"]]) {
+  await caso(nombre, "", async p => {
+    await p.click("[data-plano-imprimir]"); await p.click(`[data-plano-hoja=${hoja}]`); await espera(p, 900);
+    const html = await p.evaluate(() => window.__hoja || "");
+    const q = await browser.newPage();   // (la página de la prueba nace con browser.newPage(): su contexto no deja abrir otra)
+    await q.setContent(html); await q.waitForTimeout(300);
+    const r = await q.evaluate(() => [...document.querySelectorAll("svg text")].filter(t => /^Manual ?[12]$/.test(t.textContent.trim()))
+      .map(t => { const b = t.getBoundingClientRect(); return { t: t.textContent.trim(), x0: b.left, y0: b.top, x1: b.right, y1: b.bottom }; }));
+    await q.close();
+    const [a, b] = r;
+    const pisan = !!(a && b && a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1);
+    ok(nombre, html.length > 0 && r.length === 2 && !pisan,
+      `${r.length} nombres de manuales en la hoja ${hoja}; ${pisan ? "SE PISAN" : "no se pisan"} (${r.map(t => `«${t.t}» x ${t.x0.toFixed(1)}-${t.x1.toFixed(1)}`).join(", ")})`);
+  });
 }
 await caso("pln-83-medidas-enteras-del-levantamiento", "", async p => {
   const lista = (await p.locator("[data-plano-lista]").innerText()).replace(/\s+/g, " ");

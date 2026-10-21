@@ -1,7 +1,7 @@
 // v10.84.119 — La hoja impresa del plano (y el PDF: «Guardar como PDF» en la ventana de imprimir del navegador): el acomodo A ESCALA (1:100
 //   en doble carta, 1:200 en carta; la más grande que quepa), con su escala gráfica, qué versión es, quién y cuándo, lo que se encima y la
 //   lista de máquinas con sus medidas. Es un HTML completo para un marco oculto, el mismo camino que el vale de caja de App.
-import { esquinas, puntoDelNombre, cajaDe, juntarCajas, escalaParaHoja, areasLibres, HOJAS, LADO_DE_LA_HOJA, MARGEN_DE_LA_HOJA, HUECO_DE_LA_HOJA, redondear } from "../lib/plano.js";
+import { esquinas, puntoDelNombre, cajaDe, juntarCajas, escalaParaHoja, areasLibres, partirNombre, HOJAS, LADO_DE_LA_HOJA, MARGEN_DE_LA_HOJA, HUECO_DE_LA_HOJA, redondear } from "../lib/plano.js";
 import { CAJA, MUROS, VIDRIOS, PUERTAS, FIJOS, ESCALERAS, PUNTEADO, PROYECCION, DIVISIONES, AREAS } from "./plantaBaja.js";
 
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -35,9 +35,32 @@ export function hojaParaImprimir({ piezas, problemas = {}, version = null, sinGu
     const pts = esquinas(p).map(([x, y]) => redondear(x, 1) + "," + redondear(y, 1)).join(" ");
     return `<polygon points="${pts}" fill="${mal ? "#fde2e2" : p.numero ? "#e8edf2" : "#fdf3e1"}" stroke="${mal ? "#b91c1c" : "#1f2933"}" stroke-width="${delDibujo(mal ? 0.45 : 0.3)}"/>`;
   };
+  // v10.84.164 — los letreros que se pisan van sin medidas y con el nombre en dos renglones (la regla de la pantalla): las dos manuales, a 30 cm
+  //   una de otra, se encimaban en Carta 1:200 (pln-108). Sólo los que chocan: los demás se quedan como estaban.
+  const L = delDibujo(letra), Lc = delDibujo(letraChica);
+  const cajaLetrero = (p, partes) => {
+    const [lx, ly] = puntoDelNombre(p);
+    if (partes) { const w = Math.max(...partes.map(t => t.length)) * 0.6 * L / 2; return [lx - w, ly - 1.05 * L, lx + w, ly + 1.15 * L]; }
+    const w = Math.max(p.nombre.length * 0.6 * L, medidas(p).length * 0.55 * Lc) / 2;
+    return [lx - w, ly - 1.2 * L, lx + w, ly + 1.4 * Lc];
+  };
+  const partidos = {};
+  for (let vuelta = 0; vuelta < 3; vuelta++) {
+    const cajas = piezas.map(p => cajaLetrero(p, partidos[p.id]));
+    let cambio = false;
+    for (let i = 0; i < piezas.length; i++) for (let j = i + 1; j < piezas.length; j++) {
+      const a = cajas[i], b = cajas[j];
+      if (!(a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3])) continue;
+      for (const p of [piezas[i], piezas[j]]) if (!partidos[p.id]) { const t = partirNombre(p.nombre); if (t) { partidos[p.id] = t; cambio = true; } }
+    }
+    if (!cambio) break;
+  }
   // (v10.84.121) los letreros van después de TODAS las piezas: dentro de cada una, el de la pieza de abajo lo tapaba la de arriba
   const letreroSvg = p => {
     const [lx, ly] = puntoDelNombre(p);
+    const partes = partidos[p.id];
+    if (partes) return `<text x="${redondear(lx, 1)}" y="${redondear(ly - L * 0.25, 1)}" font-size="${redondear(L, 1)}" font-weight="700" text-anchor="middle" fill="#111">`
+      + partes.map((t, k) => `<tspan x="${redondear(lx, 1)}" dy="${k ? "1.1em" : "0"}">${esc(t)}</tspan>`).join("") + `</text>`;
     return `<text x="${redondear(lx, 1)}" y="${redondear(ly - delDibujo(letraChica) * 0.35, 1)}" font-size="${redondear(delDibujo(letra), 1)}" font-weight="700" text-anchor="middle" fill="#111">${esc(p.nombre)}</text>`
       + `<text x="${redondear(lx, 1)}" y="${redondear(ly + delDibujo(letraChica) * 1.05, 1)}" font-size="${redondear(delDibujo(letraChica), 1)}" text-anchor="middle" fill="#333">${esc(medidas(p))}</text>`;
   };

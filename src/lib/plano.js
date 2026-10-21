@@ -82,6 +82,16 @@ export function puntoDelNombre(p) {
   const cg = Math.cos(rad(p.giro || 0)), sg = Math.sin(rad(p.giro || 0));
   return [p.x + mejor[0] * cg - mejor[1] * sg, p.y + mejor[0] * sg + mejor[1] * cg];
 }
+// v10.84.164 — un nombre en dos renglones, por el espacio que deja más corto el renglón más largo («Manual 1» → «Manual» / «1»; sin espacio, null):
+//   para los letreros que, ya en lo más chico, todavía chocan con otro. Lo usan la pantalla y la hoja impresa (las dos manuales, a 30 cm).
+export function partirNombre(nombre) {
+  let mejor = null;
+  for (let i = nombre.indexOf(" "); i > 0; i = nombre.indexOf(" ", i + 1)) {
+    const partes = [nombre.slice(0, i).trim(), nombre.slice(i + 1).trim()];
+    if (partes.every(Boolean) && (!mejor || Math.max(...partes.map(t => t.length)) < Math.max(...mejor.map(t => t.length)))) mejor = partes;
+  }
+  return mejor;
+}
 
 // Los nombres de las áreas que NO tapa una pieza (vuelta 4: el que quedaba debajo de una máquina se asomaba a medias, «Duplo e» de «Diseño»).
 //   `alto`: el de la letra, en cm del dibujo (en la pantalla cambia con el zoom; en la hoja, con la escala). `letreros`: las cajas [x0, y0, x1, y1]

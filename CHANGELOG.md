@@ -12,6 +12,28 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.164 — «Planta»: las dos manuales, junto a la Foil — 20-oct-2026
+
+**Qué pasaba.** Marcelo, 20-oct: *«en la ventana de planta falta agregar las manuales, éstas tienen un área de 1.15 x 1.15 metros y están colocados al
+lado derecho de la máquina foil»*. El plano original sale del PDF del levantamiento del arquitecto, y ahí no vienen. Eligió: en fila, con 30 cm entre una
+y otra; «Manual 1» (la verde, junto a la Foil) y «Manual 2» (la gris), con el número 14, como las dos de Aspas comparten el 11.
+
+**Qué se cambió:**
+- `scripts/plano/armar-modulo.py` agrega lo que no viene en el PDF: las dos manuales, puestas desde la Foil (si la Foil se mueve en el PDF, la siguen; sin
+  la Foil, truena en vez de adivinar). `src/plano/plantaBaja.js` se regeneró con toda la cadena desde el PDF: antes del cambio salía idéntico al del repo, y
+  después sólo gana las dos piezas y su nota. El plano original pasa de 14 a 16 máquinas.
+- 🔑 Los letreros que siguen chocando ya achicados a 8.5 px se parten en dos renglones («Manual» / «1»), y si aún chocan bajan hasta 7.5 px; sólo de lejos:
+  al acercar, todo vuelve a 12 px en un renglón. En la hoja impresa, la misma regla: en Carta 1:200 los nombres de las manuales se encimaban, y ahí van
+  sin medidas y en dos renglones. Las demás máquinas no cambian (en Doble carta no se parte ninguna). `partirNombre`, en `src/lib/plano.js`, para las dos.
+- La versión «Con nueva torre» (la de Gerardo) y las fichas de la Cilíndrica, las dos Aspas y las dos Manuales (lo de sus placas, 20-oct) van en la base,
+  por un archivo para el editor: las versiones guardan sus piezas completas y no les llegan solas las nuevas del plano original.
+
+**Cómo se probó.** Tanda `plano`, 103 de 103 (4 nuevas). Vuelta 1, escritas antes del cambio: pln-106 (las manuales en el plano: nombre, número, medida, en
+fila a la derecha de la Foil, sin encimarse ni chocar) y pln-01 con 16 fallaban; pln-82 y pln-107 vieron los nombres pisados a 1366 («Manual 1» de x 780 a
+816 y «Manual 2» de 808 a 847), y pln-108, en la hoja Carta (de 465 a 499 y de 492 a 527). La hoja se mide en un navegador, con lo que manda imprimir la
+pantalla. Partidos en dos renglones a 8.5 px todavía se tocaban por 1 px: por eso los 7.5. Seis pruebas contaban 14 o 15 piezas escritas a mano: ahora
+cuentan contra el plano original. Por donde no se diseñó: la hoja Carta, que no tenía acomodo de letreros, y que ningún otro nombre se parta.
+
 ## v10.84.163 — La prueba del candado ya no hereda las variables de git: subir desde un worktree ya no toca el repo — 20-oct-2026
 
 **Qué pasaba.** El 20-oct, en Almacén, un `git push` lanzado desde un `git worktree` hizo que la prueba de su candado escribiera en el repo de verdad
