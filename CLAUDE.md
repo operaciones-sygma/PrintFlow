@@ -124,7 +124,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2529 pruebas, ~15 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2534 pruebas, ~15 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Las tandas con banco van de a 7 a la vez (`PROBAR_PARALELO`; con 11 juntas,
@@ -202,7 +202,13 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.164 (20-oct, ~19:46, READY `dpl_BWVZ4t8tLPiyiCxAHaLbjMowQXmL`, commits `f25a6f0` y `5621595`; vuelta atrás: promover
+- **LIVE:** v10.84.165 (20-oct, ~20:37, READY `dpl_AwFndMj37i8xoDQ7QgB9zLfRMc8S`, commit `abba08b`; vuelta atrás: promover
+  `dpl_BWVZ4t8tLPiyiCxAHaLbjMowQXmL` (la app de v10.84.164) o `git revert abba08b`; la base no cambió; candado 2534 de 2534 (5 nuevas), de a 4, 978 s,
+  con una inestable de la red de Windows (esp-14, revisada); revisado en producción sin escribir: 4 de 4 y el recorrido de sesión de A a E). 🔑 **El emisor
+  de folios se pregunta con sesión, en cuanto se entra** (lo destapó ses-07, inestable en el candado de la 164): App lo leía al montar, en la pantalla de
+  entrar, como anónima; la base se lo niega (401) y quien entraba desde cero se quedaba sin «Folio de Alpha» ni «Aplicar folio» hasta 5 min. Una relectura
+  que falla ya no lo apaga (regla 12). La pantalla de entrar no le pide nada a la base (ses-115; el recorrido de sesión, caso E, lo mide con la de verdad).
+  v10.84.164 (20-oct, ~19:46, READY `dpl_BWVZ4t8tLPiyiCxAHaLbjMowQXmL`, commits `f25a6f0` y `5621595`; vuelta atrás: promover
   `dpl_GgWvkeQFZaHrAyhmRPkEd6FiY9Sr` (la app de v10.84.163) o `git revert 5621595 f25a6f0`; la base no cambió con el código (la versión «Con nueva torre» y
   las fichas fueron por el editor); candado 2529 de 2529 (4 nuevas), de a 4, 983 s, al segundo intento (el primero frenó por ses-91, un 14 escrito a mano, y
   dos `ERR_NO_BUFFER_SPACE`), con una inestable (ses-07, revisada: v10.84.165); revisado en producción sin escribir: 6 de 6). 🔑 **«Planta» con las dos

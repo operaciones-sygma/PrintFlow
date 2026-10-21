@@ -41,6 +41,13 @@ entrar no se volvió a preguntar). Lo que se tocó lo leen el detalle («Folio d
 y la sugerencia de folio de los ocho modales (con el emisor prendido no sugiere): los bancos traen su propio emisor, la tanda `sesion` es la app real. Sin
 pantallas nuevas: 1366 y 1920 no cambian.
 
+**En producción** (20-oct, ~20:37, READY `dpl_AwFndMj37i8xoDQ7QgB9zLfRMc8S`, commit `abba08b`, con los docs de la 164 en `d6b8b10`; vuelta atrás: promover
+`dpl_BWVZ4t8tLPiyiCxAHaLbjMowQXmL`, la app de v10.84.164, o `git revert abba08b`; la base no cambió). Candado **2534 de 2534** (5 nuevas), de a 4, 978 s,
+a la primera, con una **inestable**: esp-14 (tanda `espera`), un `net::ERR_NO_BUFFER_SPACE` de Windows en la consola al cargar el banco (lo que mide pasó;
+sola, 3 de 3; revisada: ni la prueba ni la app). Revisado en producción sin escribir: la contraseña de sitio, 4 de 4 en `produccion.sygma.mx` y en
+`print-flow-eosin.vercel.app`, y el **recorrido de sesión contra la base de verdad, de A a E bien**: la pantalla de entrar ya no le pide nada a la base y,
+al entrar, el emisor se pregunta con la sesión (200, «true», a los 549 ms del clic).
+
 ## v10.84.164 — «Planta»: las dos manuales, junto a la Foil — 20-oct-2026
 
 **Qué pasaba.** Marcelo, 20-oct: *«en la ventana de planta falta agregar las manuales, éstas tienen un área de 1.15 x 1.15 metros y están colocados al
