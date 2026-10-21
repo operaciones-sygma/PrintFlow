@@ -7,6 +7,9 @@
 //     salida; sin el corte, «Reintentar» abre sin contraseña;
 //  C. Auth ya no renueva la sesión (la renovación se rechaza sólo aquí): lleva a entrar con «Tu sesión se cerró…», sin salidas globales;
 //  D. «Salir»: sale sólo de aquí (scope=local) y la pantalla de entrar no dice que la sesión se cerró sola.
+//  E. (v10.84.165) la pantalla de entrar no le pide nada a la base, y en cuanto se entra la app pregunta el emisor de folios CON la sesión y la
+//     base le contesta (antes lo preguntaba al montar, como anónima: la base de verdad se lo niega, y quien entraba desde cero se quedaba con el
+//     emisor «apagado» hasta 5 min).
 // Uso:  npm run build && node tests/recorrido/sesion.mjs             (sirve dist/ en 127.0.0.1:4278)
 //       node tests/recorrido/sesion.mjs https://produccion.sygma.mx  (la app publicada)
 import fs from "node:fs";
@@ -111,6 +114,30 @@ try {
     const t = await texto(p);
     ok("D · «Salir» sale sólo de aquí y no dice que la sesión se cerró sola", login && e.salidas.length >= 1 && e.salidas.every(x => x === "local") && !/sesión se cerró/i.test(t),
       `a entrar ${login} · salidas ${e.salidas.join(" ") || "ninguna"}`);
+    await ctx.close(); }
+
+  // E: la pantalla de entrar no pide nada; al entrar, el emisor se pregunta con la sesión (quién pregunta, por el rol de su JWT)
+  { const e = estado(); const { ctx, p } = await contexto(e);
+    const pedidas = [], emisor = [];
+    const rolDe = h => { try { return JSON.parse(Buffer.from(String(h || "").replace(/^Bearer\s+/i, "").split(".")[1], "base64url").toString()).role || "?"; } catch { return "?"; } };
+    p.on("request", r => { if (/\.supabase\.co\/rest\/v1\//.test(r.url())) pedidas.push({ t: Date.now(), ruta: r.url().replace(/^https:\/\/[^/]+\/rest\/v1\//, "").replace(/\?.*$/, ""), rol: rolDe(r.headers()["authorization"]) }); });
+    p.on("response", async r => { if (/\/rest\/v1\/rpc\/get_folio_emitter_enabled/.test(r.url())) emisor.push({ status: r.status(), rol: rolDe(r.request().headers()["authorization"]), cuerpo: (await r.text().catch(() => "")).slice(0, 40) }); });
+    await p.goto(base, { timeout: 60000 });
+    if (!(await esperar(p, enLogin, 30))) throw new Error("no salió la pantalla de entrar");
+    await p.waitForTimeout(3000);   // lo que la pantalla de entrar pida, ya lo pidió
+    const enLaEntrada = pedidas.map(x => x.ruta + " (" + x.rol + ")");
+    const emisorAntes = emisor.map(x => x.status + " " + x.rol).join(", ");
+    const t0 = Date.now();
+    await p.getByPlaceholder(/gerardo/).fill(CRED.username);
+    await p.locator('input[type="password"]').fill(CRED.password);
+    await p.getByRole("button", { name: "Entrar" }).click();
+    const abre = await esperar(p, enApp, 40);
+    for (let k = 0; k < 25 && !emisor.some(x => x.rol === "authenticated"); k++) await p.waitForTimeout(200);
+    const conSesion = emisor.find(x => x.rol === "authenticated");
+    const tarda = conSesion ? pedidas.find(x => x.ruta === "rpc/get_folio_emitter_enabled" && x.rol === "authenticated") : null;
+    ok("E · la pantalla de entrar no le pide nada a la base; al entrar, el emisor se pregunta con la sesión y la base contesta",
+      enLaEntrada.length === 0 && abre && !!conSesion && conSesion.status === 200 && /^(true|false)$/.test(conSesion.cuerpo.trim()),
+      `en la pantalla de entrar: ${enLaEntrada.length ? enLaEntrada.join(", ") + (emisorAntes ? " → " + emisorAntes : "") : "nada"} · al entrar: ${conSesion ? conSesion.status + " «" + conSesion.cuerpo.trim() + "»" + (tarda ? " a los " + (tarda.t - t0) + " ms del clic" : "") : "NO lo preguntó con la sesión (en 5 s)"}`);
     await ctx.close(); }
 } catch (err) { ok("el recorrido se cayó", false, String(err.message).split("\n")[0]); }
 

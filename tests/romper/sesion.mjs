@@ -253,6 +253,9 @@ const AVISO_CERRADA = /tu sesión se cerró/i;
 const RUIDO = /No se pudo leer de la base|permission denied|No tienes permiso|42501/i;
 const soloLocales = s => s.salidas.every(x => x === "local");
 const anonimasDesde = (s, t0) => s.peticiones.filter(x => x.t >= t0 && x.quien === "anon" && x.ruta !== "/rest/v1/rpc/get_user_session").length;
+// v10.84.165 — cuáles fueron (ses-07 salió inestable el 20-oct con «como anónima 1» y no decía cuál): el método, la ruta y cuándo, desde t0
+const cualesAnonimas = (s, t0) => s.peticiones.filter(x => x.t >= t0 && x.quien === "anon" && x.ruta !== "/rest/v1/rpc/get_user_session")
+  .map(x => x.m + " " + x.ruta.replace("/rest/v1/", "") + " +" + (x.t - t0) + "ms").join(", ");
 
 async function caso(nombre, fn, { viewport = { width: 1366, height: 768 } } = {}) {
   if (process.env.SOLO && !new RegExp(process.env.SOLO).test(nombre)) return;
@@ -311,7 +314,7 @@ await caso("ses-02-renovacion-rechazada", async ({ p, s }) => {
   const t = await texto(p);
   const anon = anonimasDesde(s, t0);
   ok("ses-02-renovacion-rechazada", login && AVISO_CERRADA.test(t) && anon === 0 && !RUIDO.test(t),
-    `si Auth ya no renueva la sesión, la app lleva a entrar (${login}) diciendo que la sesión se cerró (${AVISO_CERRADA.test(t)}), deja de pedir como anónima (${anon}) y sin errores de las pantallas: «${t.slice(0, 140)}»`);
+    `si Auth ya no renueva la sesión, la app lleva a entrar (${login}) diciendo que la sesión se cerró (${AVISO_CERRADA.test(t)}), deja de pedir como anónima (${anon}${anon ? ": " + cualesAnonimas(s, t0) : ""}) y sin errores de las pantallas: «${t.slice(0, 140)}»`);
 });
 
 await caso("ses-03-otra-pestana-sale", async ({ p, s, nueva }) => {
@@ -347,7 +350,7 @@ await caso("ses-07-se-cierra-a-media-entrada", async ({ p, s }) => {
   await esperarQuieto(() => s.peticiones.length, 2500, 10000);
   const t = await texto(p), anon = anonimasDesde(s, t0), fin_ = await estado(p);
   ok("ses-07-se-cierra-a-media-entrada", e === "login" && fin_ === "login" && AVISO_CERRADA.test(t) && anon === 0 && !RUIDO.test(t),
-    `si la sesión se cierra mientras se entra, la app no abre a medias: ${e}/${fin_}, aviso ${AVISO_CERRADA.test(t)}, peticiones como anónima ${anon}: «${t.slice(0, 140)}»`);
+    `si la sesión se cierra mientras se entra, la app no abre a medias: ${e}/${fin_}, aviso ${AVISO_CERRADA.test(t)}, peticiones como anónima ${anon}${anon ? " (" + cualesAnonimas(s, t0) + ")" : ""}: «${t.slice(0, 140)}»`);
 });
 
 await caso("ses-08-se-cierra-al-abrir", async ({ p, s }) => {
@@ -359,7 +362,7 @@ await caso("ses-08-se-cierra-al-abrir", async ({ p, s }) => {
   await esperarQuieto(() => s.peticiones.length, 2500, 10000);
   const t = await texto(p), anon = anonimasDesde(s, t0), fin_ = await estado(p);
   ok("ses-08-se-cierra-al-abrir", e === "login" && fin_ === "login" && AVISO_CERRADA.test(t) && anon === 0 && !RUIDO.test(t),
-    `si la sesión se cierra mientras la app la recupera al abrir, no abre a medias: ${e}/${fin_}, aviso ${AVISO_CERRADA.test(t)}, como anónima ${anon}: «${t.slice(0, 140)}»`);
+    `si la sesión se cierra mientras la app la recupera al abrir, no abre a medias: ${e}/${fin_}, aviso ${AVISO_CERRADA.test(t)}, como anónima ${anon}${anon ? " (" + cualesAnonimas(s, t0) + ")" : ""}: «${t.slice(0, 140)}»`);
 });
 
 await caso("ses-10-volver-a-entrar-quita-el-aviso", async ({ p, s }) => {
@@ -1760,6 +1763,81 @@ await caso("ses-114-la-barra-de-direccion-cabe-a-1366", async ({ p, s }) => {
   });
   ok("ses-114-la-barra-de-direccion-cabe-a-1366", !r.sale && r.salir && (r.buscar ?? 0) >= 90,
     `Dirección a 1366: la página ${r.sale ? "SE SALE" : "no se sale"}; «Salir» ${r.salir ? "a la vista" : "FUERA de la pantalla"}; el buscador mide ${r.buscar} px (se piden 90 o más)`);
+});
+
+// ════════════════════════ el emisor de folios se pregunta CON SESIÓN, en cuanto se entra (v10.84.165) ════════════════════════
+// ses-07 salió inestable el 20-oct («como anónima 1»): era la lectura del emisor (`get_folio_emitter_enabled`) que App hacía AL MONTAR, todavía en
+// la pantalla de entrar. La base se la niega a anon (siempre, también en producción), así que quien entraba desde cero se quedaba con el emisor
+// «apagado» hasta 5 min o hasta cambiar de ventana: sin «Folio de Alpha» (registrar el folio que Alpha ya emitió; sin esa puerta se le acuña uno
+// propio y salen dos CFDI de la misma venta, v10.80.8). Lo que DEBE vivir Karla: entra y la puerta está; y una relectura que falla no se la quita.
+// Vuelta 1: escritas antes del cambio.
+const ORDEN_EN_SALIDAS = () => ({ orders: [ordenK("P-0951", { stage: "salidas", client: "TRANSPORTES CASTORES DE BAJA" })] });
+const EMISOR = "/rest/v1/rpc/get_folio_emitter_enabled";
+const preguntasAlEmisor = s => s.peticiones.filter(x => x.ruta === EMISOR).length;
+// el «Más» del detalle de una orden (por «Todas»; la ficha se abre con Enter): lo que ofrece, en texto
+const masDeLaOrden = async (p, pn) => {
+  await p.locator('button[title="Todas"]').first().click(); await p.waitForTimeout(800);
+  await p.locator(`[role="button"][aria-label^="Orden ${pn}"]`).first().focus(); await p.keyboard.press("Enter"); await p.waitForTimeout(800);
+  // (dentro del detalle: la ficha de atrás también tiene su «Más acciones», tapado por la ventana)
+  const dlg = p.getByRole("dialog").last();
+  await dlg.getByRole("button", { name: "Más acciones", exact: true }).click(); await p.waitForTimeout(300);
+  return (await dlg.getByRole("menu", { name: "Más acciones" }).getByRole("menuitem").allInnerTexts().catch(() => [])).map(x => x.replace(/\s+/g, " ").trim());
+};
+const cerrarTodo = async p => { for (let k = 0; k < 3; k++) { await p.keyboard.press("Escape"); await p.waitForTimeout(250); } };
+const conFolioDeAlpha = menu => menu.some(x => /Folio de Alpha/.test(x));
+// la persona regresa a la pestaña (el aviso que la app escucha en `document`; el de la librería de Auth es otro, en `window`)
+const regresaALaPestana = p => p.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+
+await caso("ses-115-la-pantalla-de-entrar-no-pide-nada", async ({ p, s }) => {
+  const e0 = await abrir(p);
+  await esperarQuieto(() => s.peticiones.length, 2500, 10000);
+  const pedidas = s.peticiones.map(x => x.m + " " + x.ruta.replace("/rest/v1/", "") + " (" + x.quien + ")");
+  ok("ses-115-la-pantalla-de-entrar-no-pide-nada", e0 === "login" && pedidas.length === 0,
+    `sin nadie adentro, la pantalla de entrar (${e0}) no le pide nada a la base (a lo anónimo la base le contesta «sin permiso»): ${pedidas.length ? pedidas.join(", ") : "nada"}`);
+});
+await caso("ses-116-karla-entra-y-ya-tiene-folio-de-alpha", async ({ p, s }) => {
+  s.filas = ORDEN_EN_SALIDAS(); s.rpcRespuestas = { get_folio_emitter_enabled: true };
+  await abrirYEntrar(p, s, "karla");
+  await esperarMenu(p, /^Pendientes/); await despertar(p);
+  const menu = await masDeLaOrden(p, "P-0951");
+  const conSesion = s.peticiones.filter(x => x.ruta === EMISOR && x.quien === "usuario").length;
+  ok("ses-116-karla-entra-y-ya-tiene-folio-de-alpha", conFolioDeAlpha(menu),
+    `con el sistema emitiendo, Karla entra desde cero y en «Más» de P-0951 (en Salidas, sin folio) «Folio de Alpha» ${conFolioDeAlpha(menu) ? "está" : "NO está"} sin esperar 5 min ni cambiar de ventana; el menú: ${JSON.stringify(menu).slice(0, 200)}; preguntas al emisor con su sesión: ${conSesion}`);
+});
+await caso("ses-117-una-relectura-que-falla-no-quita-folio-de-alpha", async ({ p, s }) => {
+  s.filas = ORDEN_EN_SALIDAS(); s.rpcRespuestas = { get_folio_emitter_enabled: true };
+  await abrirYEntrar(p, s, "karla");
+  await esperarMenu(p, /^Pendientes/); await despertar(p);
+  const antes = await masDeLaOrden(p, "P-0951"); await cerrarTodo(p);
+  s.rpcFalla = "get_folio_emitter_enabled";   // la base deja de contestar esa lectura (un 500)
+  const n0 = preguntasAlEmisor(s);
+  await regresaALaPestana(p);
+  const pregunto = await esperarQue(() => preguntasAlEmisor(s) > n0, 5000); await p.waitForTimeout(500);
+  const despues = await masDeLaOrden(p, "P-0951");
+  ok("ses-117-una-relectura-que-falla-no-quita-folio-de-alpha", conFolioDeAlpha(antes) && pregunto && conFolioDeAlpha(despues),
+    `«Folio de Alpha» al entrar: ${conFolioDeAlpha(antes) ? "sí" : "NO"}; al regresar a la pestaña la app ${pregunto ? "volvió a preguntar" : "NO volvió a preguntar"} y la base falló; después: ${conFolioDeAlpha(despues) ? "sigue" : "SE FUE (un error de lectura no es «apagado»)"}`);
+});
+// por donde no se diseñó: el emisor APAGADO (antes del corte) no ofrece la puerta, y la primera lectura que falla se arregla al volver
+await caso("ses-118-emisor-apagado-sin-folio-de-alpha", async ({ p, s }) => {
+  s.filas = ORDEN_EN_SALIDAS(); s.rpcRespuestas = { get_folio_emitter_enabled: false };
+  await abrirYEntrar(p, s, "karla");
+  await esperarMenu(p, /^Pendientes/); await despertar(p);
+  const menu = await masDeLaOrden(p, "P-0951");
+  ok("ses-118-emisor-apagado-sin-folio-de-alpha", menu.length > 0 && !conFolioDeAlpha(menu),
+    `con el emisor apagado (Alpha folia todo), «Más» de P-0951 ${conFolioDeAlpha(menu) ? "OFRECE «Folio de Alpha»" : "no ofrece «Folio de Alpha»"}; el menú: ${JSON.stringify(menu).slice(0, 200)}`);
+});
+await caso("ses-119-si-la-primera-lectura-falla-se-arregla-al-volver", async ({ p, s }) => {
+  s.filas = ORDEN_EN_SALIDAS(); s.rpcRespuestas = { get_folio_emitter_enabled: true }; s.rpcFalla = "get_folio_emitter_enabled";
+  await abrirYEntrar(p, s, "karla");
+  await esperarMenu(p, /^Pendientes/); await despertar(p);
+  const antes = await masDeLaOrden(p, "P-0951"); await cerrarTodo(p);
+  s.rpcFalla = null;   // la base vuelve
+  const n0 = preguntasAlEmisor(s);
+  await regresaALaPestana(p);
+  const pregunto = await esperarQue(() => preguntasAlEmisor(s) > n0, 5000); await p.waitForTimeout(500);
+  const despues = await masDeLaOrden(p, "P-0951");
+  ok("ses-119-si-la-primera-lectura-falla-se-arregla-al-volver", !conFolioDeAlpha(antes) && pregunto && conFolioDeAlpha(despues),
+    `con la lectura del emisor fallando al entrar, «Folio de Alpha» ${conFolioDeAlpha(antes) ? "SALE (sin saber si el sistema emite)" : "no sale"}; al regresar a la pestaña con la base de vuelta ${pregunto ? "pregunta" : "NO pregunta"} y ${conFolioDeAlpha(despues) ? "ya sale" : "SIGUE SIN SALIR"}`);
 });
 
 await browser.close();

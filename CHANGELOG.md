@@ -12,6 +12,35 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.165 — El emisor de folios se pregunta con sesión, en cuanto se entra — 20-oct-2026
+
+**Qué pasaba.** En el candado de v10.84.164, ses-07 (la sesión que se cierra a media entrada) salió **inestable**: «peticiones como anónima 1», sin decir
+cuál. Era la lectura del emisor de folios (`get_folio_emitter_enabled`), que App hacía AL MONTAR, todavía en la pantalla de entrar: medida en 6 vueltas,
+salía unos 95 ms antes del arranque de la prueba, y con 4 tandas a la vez cayó después. Y no era sólo cosa de la prueba: **la base le niega esa lectura a lo
+anónimo**, siempre (contra producción, la 164: 401), así que quien entraba desde cero se quedaba con el emisor «apagado» hasta que pasaran 5 minutos o
+cambiara de ventana. Con el sistema emitiendo (desde el 1-sep), eso escondía «Folio de Alpha» en el detalle y «Aplicar folio» en la ficha de Karla: la
+puerta para registrar el folio que Alpha ya emitió (sin ella se le acuña uno propio y salen dos CFDI de la misma venta, v10.80.8). Con la sesión guardada
+no pasaba: al abrir, esa lectura ya salía con la sesión.
+
+**Qué se cambió:**
+- El emisor se lee **con sesión**: en cuanto se entra, al volver a la pestaña y cada 5 minutos, como antes. La pantalla de entrar ya no le pide nada a la base.
+- 🔑 Una relectura que falla ya **no lo apaga**: se queda lo último que dijo la base (la regla 12). Antes, un tropiezo de la red al volver a la pestaña
+  escondía «Folio de Alpha» hasta la siguiente lectura buena.
+- ses-02, ses-07 y ses-08 dicen ahora CUÁLES fueron las peticiones anónimas (método, ruta y a cuántos ms del arranque), no sólo cuántas.
+
+**Cómo se probó.** Tanda `sesion`, **126 de 126** (5 nuevas). **Vuelta 1**, escritas antes del cambio y corridas contra el código de la 164: **3 de 5
+fallaban**: ses-115 (la pantalla de entrar pidió `get_folio_emitter_enabled` como anónima), ses-116 (Karla entra desde cero y en «Más» de una orden en
+Salidas no está «Folio de Alpha»: cero preguntas al emisor con su sesión) y ses-117 (una relectura que falla tampoco debe quitarla). ses-118 (con el emisor
+apagado no se ofrece) y ses-119 (si la primera lectura falla, al regresar a la pestaña con la base de vuelta ya sale) pasaban: se quedan de guarda. La
+primera corrida de la vuelta 1 se cayó en las cuatro de Karla por la prueba, no por la app: buscaba «Más acciones» en toda la página y le tocaba el de la
+ficha de atrás, tapado por el detalle; ahora lo busca dentro del detalle. **Vuelta 2**, con el cambio: la tanda entera, 126 de 126. **3 sabotajes, los 3
+caen**, cada uno en su prueba: la relectura que vuelve a apagar el emisor (ses-117), quitar la guarda de la sesión (ses-115) y la guarda sin volver a correr
+al entrar (ses-116, 117 y 119). El **recorrido de sesión** contra la base de verdad gana su caso E (la pantalla de entrar no pide nada; al entrar, el
+emisor se pregunta con la sesión, por el rol de su JWT, y la base contesta): contra la 164 en producción, **falla** como se esperaba (anónima, 401, y al
+entrar no se volvió a preguntar). Lo que se tocó lo leen el detalle («Folio de Alpha», probado), la ficha de Karla («Aplicar folio», la misma condición)
+y la sugerencia de folio de los ocho modales (con el emisor prendido no sugiere): los bancos traen su propio emisor, la tanda `sesion` es la app real. Sin
+pantallas nuevas: 1366 y 1920 no cambian.
+
 ## v10.84.164 — «Planta»: las dos manuales, junto a la Foil — 20-oct-2026
 
 **Qué pasaba.** Marcelo, 20-oct: *«en la ventana de planta falta agregar las manuales, éstas tienen un área de 1.15 x 1.15 metros y están colocados al

@@ -20733,16 +20733,22 @@ export default function PrintFlow() {
   // quedaba a medio corte: sin dónde teclear el folio de Alpha y sin el botón que lleva a registrarlo,
   // así que a esas órdenes se les acuñaba un folio PROPIO y salía un segundo CFDI de la misma venta.
   // Al volver a la pestaña y cada 5 min: barato, y cierra la ventana a minutos en vez de a la sesión.
+  // v10.84.165 — CON SESIÓN, y en cuanto se entra. Se leía al montar, todavía en la pantalla de entrar: una consulta anónima que la base
+  //   SIEMPRE rechaza (get_folio_emitter_enabled no es para anon), y quien entraba desde cero se quedaba con el emisor «apagado» hasta 5 min o
+  //   hasta cambiar de ventana: sin «Folio de Alpha» ni «Aplicar folio» (tanda sesion, ses-115 a 117: fallaban antes). Lo destapó ses-07, que
+  //   salió inestable el 20-oct porque esa consulta a veces caía después de su arranque. Y una relectura que falla ya no lo apaga: se queda lo
+  //   último que dijo la base (la regla 12: un error de lectura no es «apagado»).
   useEffect(()=>{
+    if(!user)return;
     let vivo=true;
-    const leer=()=>{db.getFolioEmitterEnabled().then(v=>{if(!vivo)return;EMISOR_ON=!!v;setEmisorOn(!!v)}).catch(()=>{})};
+    const leer=()=>{db.getFolioEmitterEnabled().then(v=>{if(!vivo||v===null)return;EMISOR_ON=v;setEmisorOn(v)}).catch(()=>{})};
     leer();
     const id=setInterval(leer,5*60*1000);
     const alVolver=()=>{if(document.visibilityState==="visible")leer()};
     document.addEventListener("visibilitychange",alVolver);
     window.addEventListener("focus",leer);
     return()=>{vivo=false;clearInterval(id);document.removeEventListener("visibilitychange",alVolver);window.removeEventListener("focus",leer)};
-  },[]);
+  },[user]);
   const [snoozeTarget,setSnoozeTarget]=useState(null); // v10.73.18 — orden a poner "En espera" (abre SnoozeModal)
   const [preInvoiceModal,setPreInvoiceModal]=useState(null); // 🆕 v10.9.0 — Modal Karla asigna folio anticipado
   const [priceCaptureModal,setPriceCaptureModal]=useState(null); // v10.49.0 — pop-up al Entregar si no hay precio
