@@ -203,7 +203,14 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.165 (20-oct, ~20:37, READY `dpl_AwFndMj37i8xoDQ7QgB9zLfRMc8S`, commit `abba08b`; vuelta atrás: promover
+- **LIVE:** v10.84.166 (21-oct, ~14:25, READY `dpl_DSxPrzJV14CNXr2MMumSjo9wTj3C`, commit `527c183`; vuelta atrás: promover
+  `dpl_5JmJDTacqkRnnnC2mdmF1k7xuFrW` (la app de v10.84.165) o `git revert 527c183`; la base no cambió; candado 2569 de 2569 (35 nuevas), de a 4, 1004 s,
+  a la primera y sin inestables; revisado en producción sin escribir: los dos dominios con la contraseña de sitio sirven la ventana nueva, y a Karla y a
+  Lupita la base les contesta «Pepe Chuy» para MONICA e ISABEL). 🔑 **«Nueva Orden de Compra» propone el vendedor de la ficha del cliente** (Marcelo,
+  21-oct: «que en PrintFlow esos clientes tengan la ficha de Pepe Chuy encendida por default»; con CobranzaFlow v3.7.1031b, que pasó sus seis facturas a
+  Pepe Chuy): arrancaba en «— Sin asignar —» y lo que se agrega a una OC toma su vendedor. Con las reglas de la forma de la orden: lo elegido a mano
+  manda, cambiar de cliente lo quita y lo dice, la respuesta tarde no pisa, y al crear sin elegir va el de la ficha (tanda `nueva-oc`).
+  v10.84.165 (20-oct, ~20:37, READY `dpl_AwFndMj37i8xoDQ7QgB9zLfRMc8S`, commit `abba08b`; vuelta atrás: promover
   `dpl_BWVZ4t8tLPiyiCxAHaLbjMowQXmL` (la app de v10.84.164) o `git revert abba08b`; la base no cambió; candado 2534 de 2534 (5 nuevas), de a 4, 978 s,
   con una inestable de la red de Windows (esp-14, revisada); revisado en producción sin escribir: 4 de 4 y el recorrido de sesión de A a E). 🔑 **El emisor
   de folios se pregunta con sesión, en cuanto se entra** (lo destapó ses-07, inestable en el candado de la 164): App lo leía al montar, en la pantalla de

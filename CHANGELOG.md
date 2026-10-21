@@ -49,6 +49,12 @@ les contesta «Pepe Chuy» para las dos clientas (a Genaro, vendedor, nada, como
 `CreateOCModal` sólo se monta en `OrdenesCompraView` (la tanda `oc-lista` la extrae completa); `agentLabelFor` y `get_client_seller_label` no
 cambiaron. 1366 y 1920, acentos y un nombre larguísimo sin ensanchar la ventana.
 
+**En producción** (21-oct, ~14:25, READY `dpl_DSxPrzJV14CNXr2MMumSjo9wTj3C`, commit `527c183`; vuelta atrás: promover `dpl_5JmJDTacqkRnnnC2mdmF1k7xuFrW`,
+la app de v10.84.165, o `git revert 527c183`; la base no cambió). Candado **2569 de 2569** (35 nuevas), de a 4, 1004 s, a la primera y sin inestables
+(el de Almacén de otra sesión había terminado a las 13:53; se avisó a las otras sesiones antes y después). Revisado en producción sin escribir:
+`produccion.sygma.mx` y `print-flow-eosin.vercel.app` piden la contraseña de sitio (401 sin ella) y con ella sirven la ventana nueva (el campo, «Sugerido:
+el vendedor de…» y el aviso de la base que no contesta).
+
 ## v10.84.165 — El emisor de folios se pregunta con sesión, en cuanto se entra — 20-oct-2026
 
 **Qué pasaba.** En el candado de v10.84.164, ses-07 (la sesión que se cierra a media entrada) salió **inestable**: «peticiones como anónima 1», sin decir
