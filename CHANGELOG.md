@@ -34,6 +34,15 @@ fila a la derecha de la Foil, sin encimarse ni chocar) y pln-01 con 16 fallaban;
 pantalla. Partidos en dos renglones a 8.5 px todavía se tocaban por 1 px: por eso los 7.5. Seis pruebas contaban 14 o 15 piezas escritas a mano: ahora
 cuentan contra el plano original. Por donde no se diseñó: la hoja Carta, que no tenía acomodo de letreros, y que ningún otro nombre se parta.
 
+**En producción** (20-oct, ~19:46, READY `dpl_BWVZ4t8tLPiyiCxAHaLbjMowQXmL`, commits `f25a6f0` y `5621595`; vuelta atrás: promover
+`dpl_GgWvkeQFZaHrAyhmRPkEd6FiY9Sr`, la app de v10.84.163, o `git revert 5621595 f25a6f0`; lo de la base, la versión «Con nueva torre» y las fichas, se
+queda). El primer candado (el de `f25a6f0`) **frenó**: ses-91, de la tanda `sesion` (la app real), tenía escrito un 14 y el plano ya pinta 16 (una de las
+cuentas a mano que se me pasó; ahora compara con `MAQUINAS` del plano original, `5621595`), y pl-62 y ord-66 cayeron al abrir la página con
+`net::ERR_NO_BUFFER_SPACE` (la red de Windows, no la app). El segundo, ya con menos de 100 conexiones en TIME_WAIT: **2529 de 2529** (4 nuevas), de a 4,
+983 s, con una **inestable**, ses-07, que se revisó y destapó algo de la app: v10.84.165. Revisado en producción sin escribir, en `produccion.sygma.mx` y en
+`print-flow-eosin.vercel.app`: 6 de 6 en cada uno (la contraseña de sitio, y el módulo de «Planta» que se sirve trae «Manual 1» en (2530, 1807) y «Manual
+2» en (2675, 1807), de 115 × 115).
+
 ## v10.84.163 — La prueba del candado ya no hereda las variables de git: subir desde un worktree ya no toca el repo — 20-oct-2026
 
 **Qué pasaba.** El 20-oct, en Almacén, un `git push` lanzado desde un `git worktree` hizo que la prueba de su candado escribiera en el repo de verdad
