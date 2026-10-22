@@ -1,5 +1,7 @@
 -- v10.84.167 — LOS DATOS (Marcelo, 22-oct-2026: «¿no puedes sacar toda esa info de las facturas, y así ver sus precios y hacer los arreglos?…
--- y corrijamos el historial, y sigo tus recomendaciones»). Va DESPUÉS de v10.84.167_precio_por_renglon.sql. Una sola transacción:
+-- y corrijamos el historial, y sigo tus recomendaciones»). No depende de v10.84.167_precio_por_renglon.sql. APLICADA el 22-oct ~12:36 con el OK escrito de
+-- Marcelo («si aplica porfavor»), antes de las funciones (que van al subir la pantalla nueva), como `v10_84_167_datos`: 9 productos, 176 órdenes, 0
+-- marcadas, 0 discrepancias, ninguna OC cambió de total; invariantes 87 de 87. Una sola transacción:
 --   1. El precio de lista y el «nombre en la factura» de los 9 productos del apartado de Cuadra, de sus CFDI timbrados de septiembre y octubre (el
 --      último de cada cliente): sólo donde todavía no hay (si Karla ya puso uno, se queda el suyo).
 --   2. El precio de cada orden de las ventas de inventario de 2026 con 2 o más productos: 176 órdenes en 41 OC (13 F- con el importe de su renglón
