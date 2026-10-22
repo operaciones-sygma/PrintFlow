@@ -60,6 +60,22 @@ como la factura ($10,500), pero el inventario se descontó del cordón. **D-6015
 **Para CobranzaFlow** (avisado a su sesión): la siembra del CFDI pone el papel de china en hojas (40,000 a $0.50) y Karla lo factura en kilos (500 a
 $40); el importe ya es el correcto. **Observación**: China blanco dice 39,718,500 hojas en existencia.
 
+**En producción** (22-oct, ~13:12, READY `dpl_3X47vLKZ3uS4VBaCapJpepSayHgV`, commits `b723f67`, `093748b` y `d179f6c`). Candado **2631 de 2631** (62
+nuevas), de a 4, 1091 s, con una inestable: pln-66 («Planta»), `net::ERR_NO_BUFFER_SPACE` de Windows en la consola al cargar un recurso del banco (lo
+que la prueba mide pasó; v10.84.167 no toca «Planta»; sola pasa 3 de 3: revisada como carga). Se le cedió el turno a Almacén para su corrida doble y
+se le avisó antes y después, también a CobranzaFlow. **La base, con el OK escrito de Marcelo** (22-oct ~12:34, «si aplica porfavor»): los datos primero, ~12:36
+(`v10_84_167_datos`: 9 productos, 176 órdenes, 0 marcadas «editada después de facturar», 0 discrepancias, ninguna OC cambió de total; no dependen de las
+funciones), y las funciones en cuanto la pantalla quedó READY, ~13:13 (`v10_84_167_precio_por_renglon` y `v10_84_167_precio_por_renglon_definiciones_vivas`,
+la regla 7): así ninguna pantalla vieja se quedó sin poder vender. Invariantes **87 de 87** después de cada una. **Revisado en producción sin escribir**:
+`produccion.sygma.mx` y `print-flow-eosin.vercel.app` piden la contraseña de sitio (401 sin ella) y con ella sirven la pantalla nueva («Precio y
+nombre», el carrito con nombre, «Salir sin vender»); `auto_description` da a cada cliente su nombre (F-77 «PAPEL KRAFT PARA RELLENAR 25»; F-87 de
+FABRICA «PAPEL KRAFT BLANCO PARA RELLENO» y «ETIQUETA COLGANTE CUADRA 25 C/HILO»; F-192 de TIENDAS «ETIQUETA COLGANTE CUADRA 25») y la de una orden
+normal no cambió; `anon` sigue sin poder llamar la venta; y el recorrido (`tests/recorrido/recorrido.mjs`, Dirección, Karla, Lupita y Gerardo, 62
+pasos) no encontró nada que truene: el Inventario Cuadra de producción ya dice «$40.00 el kg · En la factura: PAPEL KRAFT PARA RELLENAR 25 · otro para
+FABRICA DE ALTA CALIDAD» y «Precio y nombre». **Vuelta atrás**: PRIMERO `v10.84.167_precio_por_renglon_vuelta_atras.sql` (con la base nueva,
+la pantalla de antes no puede vender) y luego promover `dpl_4jyCrywYxZymjNrUstiEgRatzugv` (la app de v10.84.166); los datos, con
+`v10.84.167_datos_vuelta_atras.sql` (lee lo de antes de `cobranza.audit_log`).
+
 ## v10.84.166 — «Nueva Orden de Compra» propone el vendedor de la ficha del cliente — 21-oct-2026
 
 **Qué pasaba.** Marcelo, 21-oct: a Pepe Chuy le faltaban dos clientas en sus comisiones, MONICA CUADRA BECERRA e ISABEL DE LOS ANGELES QUIROZ, y

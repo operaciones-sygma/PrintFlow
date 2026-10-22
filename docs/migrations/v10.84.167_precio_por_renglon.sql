@@ -1,6 +1,8 @@
 -- v10.84.167 — EL PRECIO DE CADA PRODUCTO EN LA VENTA DE INVENTARIO (Marcelo, 22-oct-2026: «me llamó la atención que PrintFlow infle el precio
 -- entonces por dividirlos, podemos asustar al cliente ya que si ve las facturas puede pensar que estamos sobrecobrando… Nosotros lo conocemos como
--- china, pero el cliente a veces lo pide con nombre en la factura»; «sigo tus recomendaciones»).
+-- china, pero el cliente a veces lo pide con nombre en la factura»; «sigo tus recomendaciones»). APLICADA el 22-oct ~13:13 con el OK escrito de Marcelo
+-- («si aplica porfavor»), en cuanto quedó READY la pantalla nueva (dpl_3X47vLKZ3uS4VBaCapJpepSayHgV), como `v10_84_167_precio_por_renglon`; las
+-- definiciones vivas, como `v10_84_167_precio_por_renglon_definiciones_vivas`. Ensayada antes con rollback: 9 de 9; la vuelta atrás, md5 idéntico.
 --   1. public.bulk_sell_from_stock (misma firma): cada renglón de p_items trae su importe sin IVA (amount: kilos o piezas × su precio, lo calcula el
 --      carrito de PrintFlow) y la orden lleva ESE importe. Antes: el total entre 1.16, repartido por piezas (todos los productos al mismo precio por
 --      pieza: en F-77 el papel de china salía a $49,200 y era $20,000). El total que llega se revisa contra los renglones, con el IVA de cada renglón

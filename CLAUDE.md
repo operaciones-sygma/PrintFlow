@@ -124,7 +124,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2534 pruebas, ~15 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2631 pruebas, ~18 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Las tandas con banco van de a 7 a la vez (`PROBAR_PARALELO`; con 11 juntas,
@@ -203,7 +203,18 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.166 (21-oct, ~14:25, READY `dpl_DSxPrzJV14CNXr2MMumSjo9wTj3C`, commit `527c183`; vuelta atrás: promover
+- **LIVE:** v10.84.167 (22-oct, ~13:12, READY `dpl_3X47vLKZ3uS4VBaCapJpepSayHgV`, commits `b723f67`, `093748b` y `d179f6c`; vuelta atrás: PRIMERO
+  `docs/migrations/v10.84.167_precio_por_renglon_vuelta_atras.sql` y luego promover `dpl_4jyCrywYxZymjNrUstiEgRatzugv` (la app de v10.84.166): con la base
+  nueva la pantalla de antes no puede vender (pide actualizar); los datos tienen la suya, `v10.84.167_datos_vuelta_atras.sql`; candado 2631 de 2631 (62
+  nuevas), de a 4, 1091 s, con una inestable de la red de Windows (pln-66, revisada); la base, con el OK escrito de Marcelo: `v10_84_167_datos` ~12:36 y
+  `v10_84_167_precio_por_renglon` (+ `_definiciones_vivas`) ~13:13, invariantes 87 de 87; revisado en producción sin escribir). 🔑 **La venta de inventario
+  lleva el precio de cada producto** (Marcelo, 22-oct: «me llamó la atención que PrintFlow infle el precio por dividirlos… podemos asustar al cliente»): el
+  carrito (`BulkSellModal`) manda el importe de cada renglón (`p_items[].amount`, kilos o piezas × su precio de lista editable) y `bulk_sell_from_stock`
+  ya no reparte el total por piezas (revisa el total contra los renglones, con el IVA de cada renglón como el CFDI; sin importe, no vende). El catálogo
+  guarda el precio de lista y el **nombre en la factura** (general y por cliente, `client_products.specs.nombre_factura[_cliente]`; «Precio y nombre»,
+  Dirección y Karla) y `auto_description` lo da en las ventas de inventario: CobranzaFlow siembra el CFDI con ese nombre y ese precio. El historial de
+  2026 se corrigió (176 órdenes de 41 OC, de sus CFDI o de los de lista; la suma de cada OC igual). Tanda `venta-inventario`.
+  v10.84.166 (21-oct, ~14:25, READY `dpl_DSxPrzJV14CNXr2MMumSjo9wTj3C`, commit `527c183`; vuelta atrás: promover
   `dpl_5JmJDTacqkRnnnC2mdmF1k7xuFrW` (la app de v10.84.165) o `git revert 527c183`; la base no cambió; candado 2569 de 2569 (35 nuevas), de a 4, 1004 s,
   a la primera y sin inestables; revisado en producción sin escribir: los dos dominios con la contraseña de sitio sirven la ventana nueva, y a Karla y a
   Lupita la base les contesta «Pepe Chuy» para MONICA e ISABEL). 🔑 **«Nueva Orden de Compra» propone el vendedor de la ficha del cliente** (Marcelo,
