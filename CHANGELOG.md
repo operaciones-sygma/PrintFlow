@@ -12,6 +12,54 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.167 — La venta de inventario lleva el precio de cada producto (y el nombre que pide el cliente) — 22-oct-2026
+
+**Qué pasaba.** Marcelo, 22-oct, al revisar las ventas de papel de china de Cuadra: *«me llamó la atención que PrintFlow infle el precio entonces por
+dividirlos, podemos asustar al cliente ya que si ve las facturas puede pensar que estamos sobrecobrando… Nosotros lo conocemos como china, pero el
+cliente a veces lo pide con nombre en la factura»*; y *«¿no puedes sacar toda esa info de las facturas, y así ver sus precios y hacer los arreglos?…
+corrijamos el historial, y sigo tus recomendaciones»*. El carrito de «Inventario Cuadra» (`BulkSellModal`) pedía **un total** y
+`bulk_sell_from_stock` lo **repartía por piezas**: todos los productos al mismo precio por pieza. En F-77 el papel de china salía a $49,200 (era 500 kg
+× $40 = $20,000) y las etiquetas y soportes, de menos. El cliente no lo vio (CobranzaFlow avisa del reparto al sembrar el CFDI y Karla corrigió a mano los
+57 renglones de 14 CFDI), pero cada factura nacía repartida y dependía de ella, y adentro el precio por producto estaba mal (el papel de china de Cuadra
+salía $748,075 de junio al 21-oct y fue $542,580 sin agosto).
+
+**Qué se cambió.**
+- **El carrito, renglón por renglón**: kilos o piezas, su **precio** (el de lista del producto, por kilo o por pieza, que se puede cambiar en la venta)
+  y su **importe**; el **total se calcula** (subtotal, IVA de cada renglón redondeado como lo suma el CFDI, total) y ya no se teclea (se fue «El importe
+  que tecleo es», que existía por la F-101 nacida corta). En centavos enteros (`centavosDeRenglon`, en BigInt para cantidades y precios grandes): «5.»
+  vale 5, «2,50» no se toma como 250, más de 4 decimales no; dice qué falta («Falta el precio de…») y qué está mal escrito («Revisa el precio de…»), y si
+  la venta suma $0. «Pagada» llena el total exacto (`MultiPaymentPicker` recibe `totalConIva`: con el IVA por renglón, subtotal × 1.16 podía quedar un
+  centavo distinto). Esc, el clic afuera y la × con algo en el carrito preguntan («¿Salir sin vender?»; antes se perdía todo); un diálogo con nombre,
+  el Tab adentro, AA y nada de menos de 10 px.
+- **El catálogo**: cada producto dice su precio de lista y cómo sale en la factura; **«Precio y nombre»** (Dirección y Karla) guarda el precio de lista,
+  el **nombre en la factura** y, en el apartado compartido, el nombre de cada cliente (`client_products.specs.nombre_factura` y
+  `nombre_factura_cliente`; los kilos se conservan; sólo si nadie lo cambió desde que se abrió). El alta de producto pide también precio y nombre.
+- **La base** (`docs/migrations/v10.84.167_precio_por_renglon.sql`, parche con anclas contadas): `bulk_sell_from_stock` usa el importe de cada renglón
+  (`p_items[].amount`) y revisa el total contra los renglones; sin importe (una pantalla de antes) no vende y pide actualizar. `auto_description` da el
+  nombre en la factura de la venta de inventario (el de su cliente o el general): con eso CobranzaFlow siembra el CFDI con ese nombre y ese precio.
+- **Los datos** (`v10.84.167_datos.sql`): el precio de lista y el nombre en la factura de los 9 productos, de sus CFDI timbrados de sep-oct (el último
+  de cada cliente: FABRICA DE ALTA CALIDAD pide «PAPEL KRAFT BLANCO PARA RELLENO» y «ETIQUETA COLGANTE CUADRA 25 C/HILO»; TIENDAS, «ETIQUETA COLGANTE
+  CUADRA 25»), y el precio de 176 órdenes de 41 OC de 2026 (13 F- con su renglón del CFDI; 28 D- de Alpha con los de lista, que cuadran al centavo; la
+  tarjeta de billetera a $1.75 hasta julio y $2.30 después). La suma de cada OC no cambia ($1,547,231.50 en esas 176; F-101 ya estaba bien); lo de antes
+  queda en `cobranza.audit_log` («v10.84.167_precios_del_historial»).
+
+**Cómo se probó.** Tanda nueva **`venta-inventario`** (banco `gen-venta-inventario.mjs`), **62 de 62**, tanda de dinero. **Vuelta 1** (22, escritas
+antes del arreglo) contra el código de la 166: **19 de 22 fallaban** (no había precio por renglón, se mandaba un total, Esc y la × tiraban el carrito,
+el catálogo sin precio ni nombre); dos supuestos de la prueba se corrigieron y se dicen en ella (buscaba el carrito por un texto que también tiene el
+inventario, y el «Agregar» podía ser el de otro producto) y uno más (Esc dentro de un campo es de su lista, a propósito). **Vuelta 2** (31 casos por
+donde no se diseñó): **3 fallas**, arregladas: «5.» no dejaba vender, decía «Falta el precio» de uno escrito mal, y con todo en $0 no decía por qué.
+**Vuelta 3** (9, sobre esos arreglos y lo que faltaba): sin fallas. Lo compartido: `MultiPaymentPicker` (Asignar folio, folio por OC) e
+`InventoryModal`: `folio`, `oc` e `inventario`, 366 de 366. **La base, ensayada contra producción con rollback** (la regla 22): tres ventas de verdad
+como Karla (factura de dos productos: 20,000 «PAPEL KRAFT PARA RELLENAR 25» + 2,100, OC 22,100, factura 25,636; remisión a FABRICA con su nombre; el
+IVA por renglón, 2.38) y seis que deben rechazarse (2.39, sin importe, total que no cuadra, 3 decimales, todo en cero, negativo): 9 de 9; la vuelta
+atrás deja las dos funciones idénticas (md5); los datos: 9 productos, 176 órdenes, 0 marcadas «editada después de facturar», 0 discrepancias, ninguna
+OC cambia de total, 176 en la bitácora de cambios a nombre de Marcelo.
+
+**Para Karla** (no se tocaron): **F-1** (OC-0680), su factura dice «ETIQUETA CUADRA COLGANTE» 5,000 y la orden «Cordón para Etiqueta» 5,000: el precio va
+como la factura ($10,500), pero el inventario se descontó del cordón. **D-6015** no cuadra con los de lista por $120 y se queda repartida.
+**Para CobranzaFlow** (avisado a su sesión): la siembra del CFDI pone el papel de china en hojas (40,000 a $0.50) y Karla lo factura en kilos (500 a
+$40); el importe ya es el correcto. **Observación**: China blanco dice 39,718,500 hojas en existencia.
+
 ## v10.84.166 — «Nueva Orden de Compra» propone el vendedor de la ficha del cliente — 21-oct-2026
 
 **Qué pasaba.** Marcelo, 21-oct: a Pepe Chuy le faltaban dos clientas en sus comisiones, MONICA CUADRA BECERRA e ISABEL DE LOS ANGELES QUIROZ, y

@@ -1005,6 +1005,23 @@ const finWithout=(s,base)=>finList(s).filter(x=>!(x.toLowerCase()===base.toLower
 // v10.73.4 — equivalencia en kg para productos vendidos por kilo (client_products.specs.sell_unit='kg').
 // Convierte un conteo de UNIDADES a kg (units/units_per_kg). Devuelve null si el producto NO es 'kg' (default seguro).
 const kgEquiv=(units,specs)=>{const upk=Number(specs&&specs.units_per_kg);if(!specs||specs.sell_unit!=="kg"||!(upk>0))return null;return (Math.abs(Number(units)||0)/upk).toLocaleString(undefined,{maximumFractionDigits:1})+" kg";};
+// v10.84.167 — EL PRECIO DE CADA PRODUCTO EN LA VENTA DE INVENTARIO (Marcelo, 22-oct-2026: «me llamó la atención que PrintFlow infle el precio por
+//   dividirlos… podemos asustar al cliente»). El carrito pedía UN total y bulk_sell_from_stock lo repartía por PIEZAS: todos los productos al mismo precio
+//   por pieza (F-77: la etiqueta, los soportes, la tarjeta y el papel de china a $1.23). Ahora cada renglón lleva su precio, el de lista del producto
+//   (client_products.unit_price: por kilo si se vende por kilo, si no por pieza), que se puede cambiar en la venta; el importe es kilos o piezas × precio y
+//   el IVA va renglón por renglón, como lo suma el CFDI (la base lo revisa igual). Todo en centavos enteros: un precio como 0.615 no se redondea distinto
+//   que en la base por el punto flotante.
+const porUnidadDeVenta=specs=>specs&&specs.sell_unit==="kg"?"kg":"pieza";
+const textoPrecioDeLista=p=>{if(!p||p.unit_price==null||p.unit_price==="")return null;const v=Number(p.unit_price);if(!Number.isFinite(v))return null;return "$"+v.toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:4})+(porUnidadDeVenta(p.specs)==="kg"?" el kg":" la pieza");};
+// el precio que se teclea: número, sin signo, hasta 4 decimales; null si no sirve (vacío también es null: «falta»). «5.» vale 5 (así queda «5.50» a medio
+// teclear; la vuelta 2 lo encontró: no dejaba vender)
+const precioValido=v=>{const s=String(v==null?"":v).trim();if(!/^\d+(\.\d{0,4})?$/.test(s)&&!/^\.\d{1,4}$/.test(s))return null;const n=Number(s);return Number.isFinite(n)&&n>=0?n:null;};
+// cantidad (hasta 3 decimales: los kilos) × precio (hasta 4) en centavos, redondeando la mitad hacia arriba como ROUND() de la base; en BigInt para que una
+// cantidad grande por un precio grande no pierda centavos (pasa de 2^53 con 900 millones de pesos); null si no se puede
+const centavosDeRenglon=(cantidad,precio)=>{const c=Number(cantidad),pr=Number(precio);if(!Number.isFinite(c)||!Number.isFinite(pr)||c<=0||pr<0)return null;const q=BigInt(Math.round(c*1000)),k=BigInt(Math.round(pr*10000));const r=(q*k+BigInt(50000))/BigInt(100000);return r>BigInt(Number.MAX_SAFE_INTEGER)?null:Number(r);};
+const ivaDeRenglon=cents=>Math.round(cents*0.16);   // round2(importe × 0.16), en centavos: el IVA de UN renglón (sin empates: cents × 4/25 nunca termina en .5)
+// el nombre con el que el cliente pide el producto en su factura (el de ese cliente, o el del producto); null si no tiene (sale el nombre del producto)
+const nombreEnFactura=(p,clienteId)=>{const s=(p&&p.specs)||{};const deCliente=clienteId&&s.nombre_factura_cliente?String(s.nombre_factura_cliente[clienteId]||"").trim():"";return deCliente||String(s.nombre_factura||"").trim()||null;};
 const INT_FLOW=[{id:"draft",l:"📝 Validar",lt:"Validar",Icon:NotePencilIcon,c:"#aeaeb2",who:"both"},{id:"design",l:"🎨 Diseño",lt:"Diseño",Icon:PaletteIcon,c:"#b3567f",who:"preprensa"},{id:"proof_printing",l:"🖨️ Prueba",lt:"Prueba",Icon:PrinterIcon,c:"#6f6cc0",who:"german"},{id:"proof_client",l:"👤 Aprobación",lt:"Aprobación",Icon:UserIcon,c:"#b8902f",who:"preprensa"},{id:"ctp",l:"💿 CTP",lt:"CTP",Icon:DiscIcon,c:"#2c8395",who:"german"},{id:"placas_listas",l:"📋 Placas Listas",lt:"Placas Listas",Icon:ClipboardTextIcon,c:"#2f9aad",who:"produccion"},{id:"ready",l:"✅ Lista para imprimir",lt:"Lista p/ imprimir",Icon:CheckCircleIcon,c:"#3a9e6a",who:"produccion"},{id:"in_production",l:"⚙️ Máquina",lt:"Máquina",Icon:GearIcon,c:"#c07d2e",who:"produccion"},{id:"maquila_out",l:"🚚 Enviada a Maquila (parcial)",lt:"Enviada a Maquila (parcial)",Icon:TruckIcon,c:"#b06a34",who:"produccion"},{id:"maquila_in",l:"📥 Recibida de Maquila (parcial)",lt:"Recibida de Maquila (parcial)",Icon:DownloadSimpleIcon,c:"#4187b5",who:"produccion"},{id:"packaging",l:"📦 Empaque",lt:"Empaque",Icon:PackageIcon,c:"#9c5fb8",who:"produccion"},{id:"salidas",l:"📤 Salidas",lt:"Salidas",Icon:ExportIcon,c:"#2f9a5c",who:"karla"},{id:"delivered",l:"✅ Entregada",lt:"Entregada",Icon:CheckCircleIcon,c:"#3a9e6a",who:null}];
 // v10.73.36 — nombres de las etapas de maquila auto-descriptivos ("... a/en/de Maquila") para distinguir el proceso EN CUALQUIER contexto (badge fuera del flujo, Torre, En espera, listas). Los IDs de stage NO cambian (datos intactos); solo l/lt.
 const MAQ_FLOW=[{id:"maq_created",l:"📋 Creada (Maquila)",lt:"Creada (Maquila)",Icon:ClipboardTextIcon,c:"#aeaeb2",who:"secretaria"},{id:"maq_sent",l:"🚚 Enviada a Maquila",lt:"Enviada a Maquila",Icon:TruckIcon,c:"#b06a34",who:"secretaria"},{id:"maq_in_progress",l:"⚙️ Proceso en Maquila",lt:"Proceso en Maquila",Icon:GearIcon,c:"#c07d2e",who:"secretaria"},{id:"maq_received",l:"📥 Recibida de Maquila",lt:"Recibida de Maquila",Icon:DownloadSimpleIcon,c:"#4187b5",who:"karla"},{id:"maq_delivered",l:"✅ Entregada (Maquila)",lt:"Entregada (Maquila)",Icon:CheckCircleIcon,c:"#3a9e6a",who:null}];
@@ -2445,6 +2462,15 @@ const db = {
   async deleteClientProduct(productId) {
     const {error}=await supabase.from("client_products").update({active:false,updated_at:new Date().toISOString()}).eq("id",productId);
     if(error)throw new Error("deleteClientProduct: "+error.message);
+  },
+  // v10.84.167 — el precio de lista y el nombre en la factura de un producto del catálogo. Sólo si nadie lo cambió desde que se leyó (updated_at; el
+  //   disparador de la tabla lo pone en cada cambio) y confirmando que se guardó: sin renglón de vuelta, no se guardó (la regla 2)
+  async guardarPrecioDeProducto(producto, {unit_price, specs}) {
+    let q=supabase.from("client_products").update({unit_price,specs}).eq("id",producto.id);
+    q=producto.updated_at?q.eq("updated_at",producto.updated_at):q.is("updated_at",null);
+    const {data,error}=await q.select("id");
+    if(error)throw new Error(error.message);
+    if(!data||data.length===0)throw new Error("Alguien más cambió este producto mientras lo editabas: ciérralo y vuelve a abrirlo");
   },
   // v10.46.0 — Karla carga orden a stock desde InvoiceModal (3ra opción Cuadra)
   async loadOrderToStock({order_id, client_product_id, user}) {
@@ -5854,7 +5880,10 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"start",gap:10}}>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{fontSize:13,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis"}}>{p.name}</div>
-                        <div style={{fontSize:11,color:p.stock_pool_id?C.emrInk:C.t2,marginTop:2,fontWeight:p.stock_pool_id?600:400}}>{productOwner(p)}{p.sku?" · "+p.sku:""}{p.unit_price?" · $"+Number(p.unit_price).toLocaleString():""}</div>
+                        <div style={{fontSize:11,color:p.stock_pool_id?C.emrInk:C.t2,marginTop:2,fontWeight:p.stock_pool_id?600:400}}>{productOwner(p)}{p.sku?" · "+p.sku:""}</div>
+                        {/* v10.84.167 — su precio de lista (por kilo o por pieza: con él arranca la venta) y cómo sale en la factura */}
+                        <div style={{fontSize:12,color:textoPrecioDeLista(p)?C.tx:C.wnTx,marginTop:4,fontWeight:600}}>{textoPrecioDeLista(p)||"Sin precio de lista"}</div>
+                        <div style={{fontSize:11,color:C.t2,marginTop:2,overflowWrap:"anywhere"}}>En la factura: {nombreEnFactura(p)||<>{p.name} <span style={{color:C.t2}}>(el del catálogo)</span></>}{(()=>{const m=(p.specs&&p.specs.nombre_factura_cliente)||{};const otros=Object.keys(m).filter(k=>String(m[k]||"").trim());return otros.length?" · otro para "+otros.map(k=>clientName(k)).join(", "):null})()}</div>
                       </div>
                       <div style={{textAlign:"right"}}>
                         <div style={{fontSize:18,fontWeight:800,color:p.stock_actual>0?C.emrInk:C.dnInk}}>{p.stock_actual}</div>
@@ -5866,6 +5895,8 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
                       {/* v10.54.9 — botones gated por role. Gerardo (produccion) puede load_stock pero NO ajustar/vender/eliminar */}
                       {/* v10.55.0 — "🛒 Vender" individual eliminado: ahora todo va por el Carrito de venta (header) con folio compartido */}
                       {canExecuteAction("adjust_stock",null,user,userLogin)&&<button onClick={()=>setEditing({mode:"adjust",product:p})} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd,padding:"6px 10px",fontSize:11}}><ChartBarIcon size={12} weight="bold"/>Ajustar</button>}
+                      {/* v10.84.167 — el precio y el nombre en la factura los cambian quienes venden (Dirección y Karla), como el carrito */}
+                      {(user==="admin"||user==="karla")&&<button onClick={()=>setEditing({mode:"precio",product:p})} aria-label={"Precio y nombre de "+p.name} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd,padding:"6px 10px",fontSize:11}}><CurrencyDollarIcon size={12} weight="bold" aria-hidden="true"/>Precio y nombre</button>}
                       {/* v10.46.0 — Eliminar producto vacío (stock=0) creado por error */}
                       {p.stock_actual===0&&canExecuteAction("delete_client_product",null,user,userLogin)&&quitar!==p.id&&<button onClick={()=>setQuitar(p.id)} aria-label={"Quitar "+p.name+" del catálogo"} title="Quitar del catálogo (sólo sin existencias)" style={{...bt(C.dn+"15",C.dnInk),justifyContent:"center",border:"0.5px solid "+C.dn+"40",padding:"6px 10px",fontSize:11}}><TrashIcon size={13} weight="bold" aria-hidden="true"/></button>}
                     </div>
@@ -5954,6 +5985,10 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
       try{await db.saveClientProduct(row);showToast("✅ Producto agregado al catálogo");setEditing(null);await reload()}
       catch(e){showToast("❌ "+e.message,"error")}
     }} onClose={()=>setEditing(null)}/>}
+    {/* v10.84.167 — el precio de lista y el nombre en la factura; con key por producto (la regla 14). Guarda sólo si nadie lo cambió desde que se abrió */}
+    {editing?.mode==="precio"&&<PrecioDeProductoModal key={editing.product.id} producto={editing.product}
+      clientes={editing.product.stock_pool_id?stockClients.filter(c=>c.stock_pool_id===editing.product.stock_pool_id):[]}
+      onGuardado={async()=>{showToast("Precio y nombre guardados: "+editing.product.name);setEditing(null);await reload()}} onClose={()=>setEditing(null)}/>}
     {editing?.mode==="adjust"&&<AdjustStockModal product={editing.product} userLogin={userLogin} onSave={async(qty,notes)=>{
       try{await db.recordStockMovement({client_product_id:editing.product.id,kind:"ADJUST",qty,notes,created_by:userLogin||user});showToast("✅ Ajuste registrado");setEditing(null);await reload()}
       catch(e){showToast(humanizeStockError(e),"error")}
@@ -5989,6 +6024,9 @@ function ProductFormModal({clients, userLogin, onSave, onClose}) {
   const [clientId,setClientId]=useState("");
   const [name,setName]=useState("");
   const [sku,setSku]=useState("");
+  // v10.84.167 — vuelven el precio (de lista, por pieza: con él arranca la venta del carrito) y el nombre en la factura (cómo lo pide el cliente)
+  const [precio,setPrecio]=useState("");
+  const [nombreFactura,setNombreFactura]=useState("");
   // v10.46.0 — Quitado campo "Precio unitario" del form (poco usado, lo captura SellFromStockModal).
   // v10.42.1 — `clients` del App se deriva de las órdenes (no incluye id ni billing_mode).
   // Cargamos los clientes stock vía RPC list_stock_clients (schema cobranza no expuesto a PostgREST).
@@ -6006,7 +6044,9 @@ function ProductFormModal({clients, userLogin, onSave, onClose}) {
     })();
     return ()=>{alive=false};
   },[]);
-  const canSave=clientId&&name.trim();
+  const pr=precio.trim();
+  const errPrecio=pr===""?null:/^-/.test(pr)?"El precio no puede ser negativo":precioValido(pr)==null?"Escribe el precio con números, hasta 4 decimales y sin comas":null;
+  const canSave=clientId&&name.trim()&&!errPrecio;
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
     <div style={{background:C.bg,borderRadius:20,padding:22,maxWidth:440,width:"94%"}}>
       <h3 style={{display:"flex",alignItems:"center",gap:8,fontSize:16,fontWeight:800,margin:"0 0 14px"}}><PlusIcon size={17} weight="bold"/>Nuevo Producto al Catálogo</h3>
@@ -6024,9 +6064,20 @@ function ProductFormModal({clients, userLogin, onSave, onClose}) {
           return <div style={{display:"flex",alignItems:"flex-start",gap:5,fontSize:10,color:C.emr,marginTop:4,padding:"4px 8px",background:C.emr+"08",borderRadius:6,lineHeight:1.4}}><PackageIcon size={11} weight="bold" style={{flexShrink:0,marginTop:1}}/><span>Producto compartido con pool <b>{sel.pool_name}</b> · {others.length} clientes más usan este stock</span></div>;
         })()}
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
         <div><label style={lbl}>Nombre *</label><input style={inp} value={name} onChange={e=>setName(e.target.value)} placeholder="ej. Tarjeta Presentación A"/></div>
         <div><label style={lbl}>SKU</label><input style={inp} value={sku} onChange={e=>setSku(e.target.value.toUpperCase())} placeholder="CUA-001"/></div>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1.4fr",gap:10,marginBottom:16}}>
+        <div>
+          <label style={lbl} htmlFor="pf-nuevo-precio">Precio de lista (por pieza, sin IVA)</label>
+          <input id="pf-nuevo-precio" style={{...inp,fontFamily:"'Geist Mono',monospace",boxShadow:"0 0 0 1px "+(errPrecio?C.dnInk:C.bd)}} type="text" inputMode="decimal" autoComplete="off" value={precio} onChange={e=>setPrecio(e.target.value.replace(/[$\s]/g,""))} placeholder="Opcional" aria-invalid={!!errPrecio||undefined} aria-describedby="pf-nuevo-precio-nota"/>
+          <div id="pf-nuevo-precio-nota" aria-live="polite" style={{fontSize:11,marginTop:3,color:C.dnInk,fontWeight:600}}>{errPrecio||""}</div>
+        </div>
+        <div>
+          <label style={lbl} htmlFor="pf-nuevo-nombre-factura">Nombre en la factura</label>
+          <input id="pf-nuevo-nombre-factura" style={inp} value={nombreFactura} onChange={e=>setNombreFactura(e.target.value)} placeholder={name.trim()||"Igual que el nombre"} maxLength={1000}/>
+        </div>
       </div>
       <div style={{display:"flex",gap:8}}>
         <button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
@@ -6035,11 +6086,88 @@ function ProductFormModal({clients, userLogin, onSave, onClose}) {
           // v10.48.0 — Si el cliente seleccionado pertenece a un pool, crear el SKU en el pool
           // (client_id queda NULL). Si no, crear con client_id directo (modelo legacy individual).
           const sel=stockClients.find(c=>c.id===clientId);
+          const unit_price=pr===""?null:precioValido(pr);   // v10.84.167
           const payload=sel?.stock_pool_id
-            ? {client_id:null,stock_pool_id:sel.stock_pool_id,name:name.trim(),sku:sku.trim()||null,unit_price:null,created_by:userLogin||null}
-            : {client_id:clientId,stock_pool_id:null,name:name.trim(),sku:sku.trim()||null,unit_price:null,created_by:userLogin||null};
+            ? {client_id:null,stock_pool_id:sel.stock_pool_id,name:name.trim(),sku:sku.trim()||null,unit_price,created_by:userLogin||null}
+            : {client_id:clientId,stock_pool_id:null,name:name.trim(),sku:sku.trim()||null,unit_price,created_by:userLogin||null};
+          if(nombreFactura.trim())payload.specs={nombre_factura:nombreFactura.trim()};
           onSave(payload);
         }} disabled={!canSave} style={{...bt(C.emr),flex:1,justifyContent:"center",opacity:canSave?1:.4,cursor:canSave?"pointer":"not-allowed"}}><FloppyDiskIcon size={14} weight="bold"/>Guardar</button>
+      </div>
+    </div>
+  </div>;
+}
+
+// v10.84.167 — EL PRECIO DE LISTA Y EL NOMBRE EN LA FACTURA de un producto del catálogo (Marcelo, 22-oct-2026: «Nosotros lo conocemos como china, pero
+//   el cliente a veces lo pide con nombre en la factura»). El precio es por kilo si el producto se vende por kilo (specs.sell_unit) y por pieza si no: con
+//   él arranca cada renglón del carrito. El nombre es el que la base pone en la descripción de la venta (auto_description) y cada cliente del apartado
+//   puede tener el suyo (specs.nombre_factura_cliente). Lo demás de specs (los kilos) se conserva. Esc o el clic afuera con algo escrito preguntan.
+function PrecioDeProductoModal({producto, clientes, onGuardado, onClose}) {
+  const porKilo = porUnidadDeVenta(producto.specs)==="kg";
+  const specs0 = producto.specs && typeof producto.specs==="object" ? producto.specs : {};
+  const [inicial] = useState(()=>({
+    precio: producto.unit_price==null ? "" : String(producto.unit_price),
+    nombre: String(specs0.nombre_factura||""),
+    porCliente: Object.fromEntries(clientes.map(c=>[c.id, String((specs0.nombre_factura_cliente||{})[c.id]||"")]))
+  }));
+  const [precio,setPrecio]=useState(inicial.precio);
+  const [nombre,setNombre]=useState(inicial.nombre);
+  const [porCliente,setPorCliente]=useState(inicial.porCliente);
+  const [busy,setBusy]=useState(false);
+  const busyRef=useRef(false);
+  const [error,setError]=useState("");
+  const [preguntaSalir,setPreguntaSalir]=useState(false);
+  useDevolverFoco();
+  const precioRef=useRef(null), seguirRef=useRef(null);
+  useEffect(()=>{precioRef.current?.focus({preventScroll:true})},[]);
+  useEffect(()=>{if(preguntaSalir)seguirRef.current?.focus({preventScroll:true})},[preguntaSalir]);
+  const p=precio.trim();
+  const errPrecio=p===""?null:/^-/.test(p)?"El precio no puede ser negativo":precioValido(p)==null?"Escribe el precio con números, hasta 4 decimales y sin comas":null;
+  const cambio=precio!==inicial.precio||nombre!==inicial.nombre||clientes.some(c=>(porCliente[c.id]||"")!==(inicial.porCliente[c.id]||""));
+  const salir=()=>{if(busyRef.current)return;if(cambio){setPreguntaSalir(true);return}onClose()};
+  useEscClose(()=>{if(busyRef.current)return;if(preguntaSalir){setPreguntaSalir(false);return}salir()});
+  const guardar=async()=>{
+    if(busyRef.current||errPrecio)return;
+    if(!cambio){onClose();return}
+    busyRef.current=true;setBusy(true);setError("");
+    const specs={...specs0};
+    const n=nombre.trim();if(n)specs.nombre_factura=n;else delete specs.nombre_factura;
+    const m={};
+    // el nombre de un cliente que ya no está en el apartado se conserva: no se ve aquí, pero abrir el diálogo no lo borra
+    for(const [k,v] of Object.entries(specs0.nombre_factura_cliente||{}))if(!clientes.some(c=>c.id===k)&&String(v||"").trim())m[k]=String(v).trim();
+    for(const c of clientes){const v=(porCliente[c.id]||"").trim();if(v)m[c.id]=v}
+    if(Object.keys(m).length)specs.nombre_factura_cliente=m;else delete specs.nombre_factura_cliente;
+    try{await db.guardarPrecioDeProducto(producto,{unit_price:p===""?null:precioValido(p),specs});await onGuardado()}
+    catch(e){console.warn("[PrecioDeProductoModal]",e);setError("No se guardó: "+motivoDeLaBase(e))}
+    finally{busyRef.current=false;setBusy(false)}
+  };
+  return <div onClick={salir} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:20}}>
+    <div role="dialog" aria-modal="true" aria-busy={busy} aria-labelledby="pf-precio-titulo" onKeyDown={atraparTab} onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:22,maxWidth:480,width:"100%",maxHeight:"92vh",overflowY:"auto"}}>
+      <h3 id="pf-precio-titulo" style={{fontSize:16,fontWeight:800,margin:"0 0 4px",overflowWrap:"anywhere"}}>Precio y nombre · {producto.name}</h3>
+      <div style={{fontSize:12,color:C.t2,marginBottom:14,lineHeight:1.45}}>Con este precio arranca cada venta del carrito, y ahí se puede cambiar. El nombre es el que sale en la factura.</div>
+      <label style={lbl} htmlFor="pf-precio-lista">Precio de lista ({porKilo?"por kilo":"por pieza"}, sin IVA)</label>
+      <input id="pf-precio-lista" ref={precioRef} style={{...inp,fontFamily:"'Geist Mono',monospace",boxShadow:"0 0 0 1px "+(errPrecio?C.dnInk:C.bd)}} type="text" inputMode="decimal" autoComplete="off" value={precio} onChange={e=>setPrecio(e.target.value.replace(/[$\s]/g,""))} placeholder="Sin precio de lista" aria-invalid={!!errPrecio||undefined} aria-describedby="pf-precio-lista-nota" disabled={busy}/>
+      <div id="pf-precio-lista-nota" aria-live="polite" style={{minHeight:17,fontSize:11,marginTop:4,color:errPrecio?C.dnInk:C.t2,fontWeight:errPrecio?600:400}}>{errPrecio||(p===""?"Vacío: el carrito lo pide en cada venta.":"")}</div>
+      <label style={{...lbl,marginTop:10}} htmlFor="pf-nombre-factura">Nombre en la factura</label>
+      <input id="pf-nombre-factura" style={inp} value={nombre} onChange={e=>setNombre(e.target.value)} placeholder={producto.name} maxLength={1000} aria-describedby="pf-nombre-factura-nota" disabled={busy}/>
+      <div id="pf-nombre-factura-nota" style={{fontSize:11,color:C.t2,marginTop:4,overflowWrap:"anywhere"}}>Como lo pide el cliente. Vacío: sale «{producto.name}».</div>
+      {clientes.length>1&&<fieldset style={{border:"none",padding:0,margin:"14px 0 0",minWidth:0}}>
+        <legend style={{...lbl,marginBottom:4,padding:0}}>Otro nombre para un cliente (opcional)</legend>
+        <div style={{fontSize:11,color:C.t2,marginBottom:8}}>Si un cliente lo pide con su propio nombre. Vacío: el de arriba.</div>
+        {clientes.map(c=><div key={c.id} style={{marginBottom:8}}>
+          <label htmlFor={"pf-nf-"+c.id} style={{display:"block",fontSize:11,fontWeight:600,color:C.tx,marginBottom:3,overflowWrap:"anywhere"}}>{c.name}</label>
+          <input id={"pf-nf-"+c.id} style={{...inp,fontSize:12,padding:"8px 12px"}} value={porCliente[c.id]||""} onChange={e=>{const v=e.target.value;setPorCliente(x=>({...x,[c.id]:v}))}} placeholder={nombre.trim()||producto.name} maxLength={1000} disabled={busy}/>
+        </div>)}
+      </fieldset>}
+      {error&&<div role="alert" style={{display:"flex",gap:6,alignItems:"flex-start",marginTop:12,padding:"8px 10px",borderRadius:8,background:C.dn+"12",border:"1px solid "+C.dn+"40",fontSize:12,fontWeight:600,color:C.dnInk}}><WarningIcon size={13} weight="fill" style={{flexShrink:0,marginTop:1}}/>{error}</div>}
+      {preguntaSalir&&<div role="alertdialog" aria-labelledby="pf-precio-salir" style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginTop:12,padding:"8px 10px",borderRadius:8,background:C.wn+"14",border:"1px solid "+C.wn+"55"}}>
+        <span id="pf-precio-salir" style={{flex:1,minWidth:180,fontSize:12,fontWeight:600,color:C.wnTx}}>¿Salir sin guardar? Se pierde lo que escribiste.</span>
+        <button ref={seguirRef} onClick={()=>setPreguntaSalir(false)} style={{...bs(C.ac),padding:"6px 12px"}}>Seguir editando</button>
+        <button onClick={()=>{setPreguntaSalir(false);onClose()}} style={{...bs(C.bg,C.dnInk),padding:"6px 12px",border:"1px solid "+C.dn+"55"}}>Salir sin guardar</button>
+      </div>}
+      <div style={{display:"flex",gap:8,marginTop:16}}>
+        <button onClick={onClose} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
+        <button onClick={guardar} disabled={busy||!!errPrecio} style={{...bt(C.okInk),flex:1,justifyContent:"center",opacity:busy||errPrecio?.5:1,cursor:busy?"wait":errPrecio?"not-allowed":"pointer"}}><FloppyDiskIcon size={14} weight="bold" aria-hidden="true"/>{busy?"Guardando…":"Guardar"}</button>
       </div>
     </div>
   </div>;
@@ -6095,13 +6223,13 @@ function AdjustStockModal({product, userLogin, onSave, onClose}) {
   </div>;
 }
 
-// v10.55.1 — Carrito de venta batch desde stock Cuadra con folio fiscal compartido + multi-pago.
-// Karla captura UN total (no precios unitarios). Estado de pago + N referencias bancarias.
+// v10.55.1 — Carrito de venta batch desde stock Cuadra con folio fiscal compartido + multi-pago. Estado de pago + N referencias bancarias.
 // Reemplaza el flujo individual sell_from_stock.
+// v10.84.167 — CADA PRODUCTO CON SU PRECIO (antes Karla capturaba UN total y la base lo repartía por piezas; ver porUnidadDeVenta). El precio de lista
+//   viene del catálogo y se puede cambiar; el total se calcula (subtotal + IVA renglón por renglón, como el CFDI) y ya no se teclea. Esc, el clic afuera o
+//   la × con algo en el carrito preguntan antes de tirarlo (antes se perdía todo lo capturado). Un diálogo con su nombre y el Tab adentro.
 function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
   const busyRef = useRef(false);
-  // v10.56.1 F-M1: ESC no cierra durante busy (evita cancelación visual con RPC corriendo)
-  useEscClose(useCallback(()=>{ if(!busyRef.current) onClose(); }, [onClose]));
   const [search, setSearch] = useState("");
   const [cart, setCart] = useState([]);
   const [poolClients, setPoolClients] = useState([]);
@@ -6111,8 +6239,8 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
   const [folioEdited, setFolioEdited] = useState(false); // M2: tracking si Karla editó manualmente
   const [folioAuto, setFolioAuto] = useState(false); // F1: emisor ON → folio autogenerado, se oculta el input
   const [suggestionByType, setSuggestionByType] = useState({factura:"", remision:""});
-  const [totalAmount, setTotalAmount] = useState("");
-  const [totalBase, setTotalBase] = useState("subtotal"); // v10.84.26 — 'subtotal' | 'con_iva' (sólo factura)
+  // v10.84.167 — el total ya no se teclea: sale de los renglones (abajo, «centavosDe»). Se fue «El importe que tecleo es» (v10.84.26), que existía porque
+  //   el 28-sep Karla tecleó el subtotal donde iba el total con IVA (la F-101 nació $5,464 corta): con el total calculado ese tropiezo ya no cabe.
   const [paymentStatus, setPaymentStatus] = useState("unpaid");
   const [paymentRefs, setPaymentRefs] = useState([]);
   const [agent, setAgent] = useState("");
@@ -6124,6 +6252,13 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
   const [busy, setBusy] = useState(false);
   // sync ref con state para que ESC handler lea el valor actual sin re-binding
   useEffect(()=>{ busyRef.current = busy; }, [busy]);
+  // v10.84.167 — salir con algo en el carrito pregunta (Esc, el clic afuera o la ×); con el carrito vacío sale directo. Mientras vende, nada (v10.56.1 F-M1:
+  //   Esc no cierra con la RPC corriendo). Con la pregunta a la vista, Esc es «Seguir vendiendo».
+  const [preguntaSalir, setPreguntaSalir] = useState(false);
+  const cerrarConX = () => { if (busyRef.current) return; if (cart.length > 0) { setPreguntaSalir(true); return; } onClose(); };
+  useEscClose(() => { if (busyRef.current) return; if (preguntaSalir) { setPreguntaSalir(false); return; } cerrarConX(); });
+  const seguirRef = useRef(null);
+  useEffect(()=>{ if (preguntaSalir) seguirRef.current?.focus({preventScroll:true}); }, [preguntaSalir]);
 
   useEffect(()=>{
     let alive = true;
@@ -6152,11 +6287,11 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
   const firstTypeChangeRef = useRef(true);
   useEffect(()=>{
     if (firstTypeChangeRef.current) { firstTypeChangeRef.current = false; return; }
-    if (totalAmount || paymentRefs.length>0) {
-      setTotalAmount("");
+    // v10.84.167 — el total se recalcula solo (con o sin IVA); lo que hay que volver a capturar son los pagos, que eran por el total de antes
+    if (paymentRefs.length>0) {
       setPaymentStatus("unpaid");
       setPaymentRefs([]);
-      if (showToast) showToast("ℹ️ Recaptura el total: cambió la base IVA del documento","info");
+      if (showToast) showToast("ℹ️ Vuelve a capturar los pagos: el total cambió (con o sin IVA)","info");
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [invoiceType]);
@@ -6228,6 +6363,7 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
       unitsPerKg: Number(p.specs?.units_per_kg)||null,
       qtyKg: "",
       qty: _kg ? 0 : 1,
+      precio: p.unit_price==null || p.unit_price==="" ? "" : String(p.unit_price),   // v10.84.167 — el de lista (por kg o por pieza); se puede cambiar
       stock_pool_id: p.stock_pool_id,
       client_id: p.client_id
     }]);
@@ -6243,31 +6379,26 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
   };
   const pref = invoiceType==="factura"?"D-":"R-";
   const folioOK = folioAuto ? true : (parseFolio(folio) !== null && folio.toUpperCase().startsWith(pref)); // F1: emisor ON → no exige folio manual
-  // v10.84.26 — LA BASE DEL IMPORTE, EXPLÍCITA. El campo decía "Total de venta (CON IVA)" y el 28-sep
-  // Karla tecleó ahí el SUBTOTAL ($34,150 = piezas × precio de lista, que es SIN IVA): la F-101 nació
-  // $5,464 corta (el IVA entero) y los conceptos no cuadraban. Mismo tropiezo que la F-13 de Factura sin
-  // orden (CBF v3.7.458), y mismo arreglo: se elige qué se teclea, default SUBTOTAL (como allá y como
-  // Facturar por partes v10.75.10), y abajo se ve el desglose completo. `totalNum` sigue siendo el total
-  // CON IVA para la factura: el RPC, los pagos y el picker no cambian.
-  const typedNum = parseFloat(totalAmount);
-  const baseSub = invoiceType==="factura" && totalBase==="subtotal";
-  const totalNum = baseSub ? Math.round(typedNum*116)/100 : typedNum;
-  const totalOK = Number.isFinite(totalNum) && totalNum > 0;
-  // MultiPaymentPicker espera SUBTOTAL SIN IVA (lo multiplica × 1.16 si factura).
-  // Karla captura el total CON IVA si factura, SIN IVA si remisión.
-  // v10.58.5 F10: NO pre-redondear el subtotal. Si pre-redondeamos, el picker
-  // luego hace round((round(X/1.16))*116)/100 y puede diferir 1¢ vs round(X*100)
-  // → bloquea facturas grandes con "Cubierto" verde pero sumCents !== totalCents.
-  // Pasamos el cociente exacto y dejamos que el picker haga UN solo redondeo final.
-  // v10.84.26 — si se tecleó el subtotal, ÉSE es el exacto (no se re-deriva del total redondeado).
-  const subtotalSinIVA = invoiceType==="factura" ? (baseSub ? typedNum : totalNum/1.16) : totalNum;
+  // v10.84.167 — EL TOTAL SALE DE LOS RENGLONES: cada uno, kilos o piezas × su precio (centavosDeRenglon); el subtotal, su suma; el IVA, el de cada renglón
+  //   redondeado y sumado, como lo suma el CFDI (Facturapi) y como lo revisa bulk_sell_from_stock. `totalNum` es el total CON IVA de la factura (sin IVA si
+  //   remisión): el RPC, los pagos y el picker lo reciben igual que antes.
+  const cantidadEnUnidad = c => c.sellUnit==="kg" ? parseFloat(c.qtyKg) : c.qty;
+  const centavosDe = c => { const pr = precioValido(c.precio); return pr==null ? null : centavosDeRenglon(cantidadEnUnidad(c), pr); };
+  const sinPrecio = cart.filter(c => precioValido(c.precio)==null);
+  const centavosPorRenglon = cart.map(centavosDe);
+  const todosConImporte = cart.length>0 && centavosPorRenglon.every(x => x!=null);
+  const subtotalCents = todosConImporte ? centavosPorRenglon.reduce((s,x)=>s+x, 0) : 0;
+  const ivaCents = todosConImporte && invoiceType==="factura" ? centavosPorRenglon.reduce((s,x)=>s+ivaDeRenglon(x), 0) : 0;
+  const totalCents = subtotalCents + ivaCents;
+  const totalNum = totalCents/100;
+  const totalOK = todosConImporte && totalCents > 0;
+  // MultiPaymentPicker recibe el SUBTOTAL sin IVA y, desde v10.84.167, también el total exacto (totalConIva): con el IVA renglón por renglón,
+  //   subtotal × 1.16 puede quedar un centavo distinto y «Pagada» no cuadraba
+  const subtotalSinIVA = subtotalCents/100;
 
-  const validCart = cart.length>0 && cart.every(c=>c.qty>0 && c.qty<=c.stock_actual);
+  const validCart = cart.length>0 && cart.every(c=>c.qty>0 && c.qty<=c.stock_actual) && sinPrecio.length===0;
   const validDest = !hasPooled || !!destClientId;
-  // v10.56.1 F-C2: ternaria muerta eliminada. totalAmount ya viene CON IVA si factura
-  // (el label de captura lo aclara). La suma de paymentRefs se compara directo contra él.
   const sumCents = paymentRefs.reduce((s,r)=>s+Math.round((Number(r.amount)||0)*100), 0);
-  const totalCents = Math.round((totalNum||0)*100);
   const refValid = refComplete; // v10.73.64 — compartido (incluye la categoría obligatoria de 'otro')
   const allRefsValid = paymentRefs.length===0 || paymentRefs.every(refValid);
   const validPayments = paymentStatus==="unpaid"
@@ -6292,7 +6423,7 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
       const refsForBackend = paymentStatus==="unpaid" ? null
         : paymentRefs.map(toBackendRef);
       const result = await db.bulkSellFromStock({
-        items: cart.map(c=>({client_product_id:c.client_product_id, qty:c.qty})),
+        items: cart.map(c=>({client_product_id:c.client_product_id, qty:c.qty, amount:centavosDe(c)/100})),   // v10.84.167 — el importe de cada producto, sin IVA
         total_amount: totalNum,
         dest_client_id: hasPooled ? destClientId : null,
         invoice_type: invoiceType,
@@ -6317,15 +6448,22 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
 
   const filtered = products.filter(p=>p.stock_actual>0 && (!search || (p.name||"").toLowerCase().includes(search.toLowerCase()) || (p.sku||"").toLowerCase().includes(search.toLowerCase())));
 
-  return <div onClick={busy?undefined:onClose} role="dialog" aria-modal="true" aria-busy={busy} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:20}}>
-    <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:0,maxWidth:980,width:"100%",maxHeight:"94vh",display:"flex",flexDirection:"column"}}>
+  const fmtPesos = n => "$"+Number(n).toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2});
+  return <div onClick={cerrarConX} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:20}}>
+    <div role="dialog" aria-modal="true" aria-busy={busy} aria-labelledby="pf-venta-titulo" onKeyDown={atraparTab} onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:0,maxWidth:980,width:"100%",maxHeight:"94vh",display:"flex",flexDirection:"column"}}>
       <div style={{padding:"16px 20px",borderBottom:"0.5px solid "+C.bd,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <div>
-          <h3 style={{display:"flex",alignItems:"center",gap:8,fontSize:17,fontWeight:800,margin:0}}><ShoppingCartIcon size={18} weight="bold"/>Carrito de venta — Stock Cuadra</h3>
-          <div style={{fontSize:11,color:C.t2,marginTop:2}}>Agrega productos, captura el total de la venta y registra los pagos en un solo paso</div>
+          <h3 id="pf-venta-titulo" style={{display:"flex",alignItems:"center",gap:8,fontSize:17,fontWeight:800,margin:0}}><ShoppingCartIcon size={18} weight="bold" aria-hidden="true"/>Carrito de venta — Stock Cuadra</h3>
+          <div style={{fontSize:11,color:C.t2,marginTop:2}}>Agrega productos con su precio y registra los pagos en un solo paso</div>
         </div>
-        <button onClick={onClose} disabled={busy} style={{...bt(C.sf,C.t2),padding:"8px",border:"0.5px solid "+C.bd,minWidth:40,minHeight:40,justifyContent:"center"}}><XIcon size={15} weight="bold"/></button>
+        <button onClick={cerrarConX} disabled={busy} aria-label="Cerrar el carrito" style={{...bt(C.sf,C.t2),padding:"8px",border:"0.5px solid "+C.bd,minWidth:40,minHeight:40,justifyContent:"center"}}><XIcon size={15} weight="bold"/></button>
       </div>
+      {/* v10.84.167 — salir con algo en el carrito pregunta aquí mismo (sin confirm(): la ventana de la app) */}
+      {preguntaSalir && <div role="alertdialog" aria-labelledby="pf-venta-salir" style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",padding:"10px 20px",background:C.wn+"14",borderBottom:"1px solid "+C.wn+"55"}}>
+        <span id="pf-venta-salir" style={{flex:1,minWidth:220,fontSize:12,fontWeight:600,color:C.wnTx}}>¿Salir sin vender? Se pierden {cart.length===1?"el producto":"los "+cart.length+" productos"} del carrito.</span>
+        <button ref={seguirRef} onClick={()=>setPreguntaSalir(false)} style={{...bs(C.ac),padding:"6px 14px"}}>Seguir vendiendo</button>
+        <button onClick={()=>{setPreguntaSalir(false);onClose();}} style={{...bs(C.bg,C.dnInk),padding:"6px 14px",border:"1px solid "+C.dn+"55"}}>Salir sin vender</button>
+      </div>}
 
       <div style={{display:"grid",gridTemplateColumns:"1fr 1.15fr",flex:1,minHeight:0,overflow:"hidden"}}>
         {/* Catálogo */}
@@ -6340,11 +6478,12 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
               return <div key={p.id} style={{padding:10,borderRadius:8,background:inCart?C.sal+"10":C.sf,border:"1px solid "+(inCart?C.sal:C.bd),marginBottom:6,display:"flex",alignItems:"center",gap:8}}>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:12,fontWeight:700,color:C.tx,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</div>
-                  <div style={{fontSize:10,color:C.t2,marginTop:2}}>{p.sku?p.sku+" · ":""}stock: <b style={{color:C.emr}}>{p.stock_actual}</b>{kgEquiv(p.stock_actual,p.specs)?<> · ≈<b style={{color:C.emr}}>{kgEquiv(p.stock_actual,p.specs)}</b></>:null}</div>
+                  <div style={{fontSize:11,color:C.t2,marginTop:2}}>{p.sku?p.sku+" · ":""}stock: <b style={{color:C.emrInk}}>{p.stock_actual}</b>{kgEquiv(p.stock_actual,p.specs)?<> · ≈<b style={{color:C.emrInk}}>{kgEquiv(p.stock_actual,p.specs)}</b></>:null}</div>
+                  <div style={{fontSize:11,color:textoPrecioDeLista(p)?C.t2:C.wnTx,marginTop:1}}>{textoPrecioDeLista(p)||"Sin precio de lista"}</div>
                 </div>
                 {inCart
-                  ? <button onClick={()=>removeFromCart(p.id)} disabled={busy} style={{...bt(C.dn+"15",C.dn),padding:"4px 8px",fontSize:10,border:"0.5px solid "+C.dn+"40"}}>Quitar</button>
-                  : <button onClick={()=>addToCart(p)} disabled={busy} style={{...bt(C.sal),padding:"4px 10px",fontSize:11}}>+ Agregar</button>
+                  ? <button onClick={()=>removeFromCart(p.id)} disabled={busy} aria-label={"Quitar "+p.name} style={{...bt(C.dn+"15",C.dnInk),padding:"4px 8px",fontSize:11,border:"0.5px solid "+C.dn+"40"}}>Quitar</button>
+                  : <button onClick={()=>addToCart(p)} disabled={busy} aria-label={"Agregar "+p.name} style={{...bt(C.okInk),padding:"4px 10px",fontSize:11}}>+ Agregar</button>
                 }
               </div>;
             })}
@@ -6355,42 +6494,55 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
         <div style={{display:"flex",flexDirection:"column",overflow:"hidden",background:"#fafafa"}}>
           <div style={{padding:"10px 14px",borderBottom:"0.5px solid "+C.bd,fontSize:11,fontWeight:800,color:C.t2,textTransform:"uppercase",letterSpacing:.5,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <span style={{display:"inline-flex",alignItems:"center",gap:5}}><ShoppingCartIcon size={12} weight="bold"/>Carrito ({cart.length})</span>
-            {cart.length>0 && <button onClick={()=>setCart([])} disabled={busy} style={{...bt(C.sf,C.t2),padding:"2px 8px",fontSize:9,border:"0.5px solid "+C.bd}}>Vaciar</button>}
+            {cart.length>0 && <button onClick={()=>setCart([])} disabled={busy} style={{...bt(C.sf,C.t2),padding:"2px 8px",fontSize:11,border:"0.5px solid "+C.bd}}>Vaciar</button>}
           </div>
           <div style={{flex:1,overflowY:"auto",padding:"10px 14px"}}>
             {cart.length===0 ? <div style={{padding:30,textAlign:"center",color:C.t2,fontSize:12}}>Agrega productos del catálogo →</div> :
             <>
               {/* M1/M3: warnings de mezcla */}
-              {mixedPools && <div style={{display:"flex",alignItems:"flex-start",gap:6,padding:10,background:C.dn+"15",border:"1px solid "+C.dn+"40",borderRadius:8,marginBottom:8,fontSize:11,color:C.dn,fontWeight:600}}>
+              {mixedPools && <div style={{display:"flex",alignItems:"flex-start",gap:6,padding:10,background:C.dn+"15",border:"1px solid "+C.dn+"40",borderRadius:8,marginBottom:8,fontSize:11,color:C.dnInk,fontWeight:600}}>
                 <WarningIcon size={13} weight="fill" style={{flexShrink:0,marginTop:1}}/>Hay productos de pools distintos. Solo puedes vender productos del mismo pool en una sola venta.
               </div>}
-              {mixedClientsNoPool && <div style={{display:"flex",alignItems:"flex-start",gap:6,padding:10,background:C.dn+"15",border:"1px solid "+C.dn+"40",borderRadius:8,marginBottom:8,fontSize:11,color:C.dn,fontWeight:600}}>
+              {mixedClientsNoPool && <div style={{display:"flex",alignItems:"flex-start",gap:6,padding:10,background:C.dn+"15",border:"1px solid "+C.dn+"40",borderRadius:8,marginBottom:8,fontSize:11,color:C.dnInk,fontWeight:600}}>
                 <WarningIcon size={13} weight="fill" style={{flexShrink:0,marginTop:1}}/>Hay productos de clientes distintos. Solo puedes vender productos de un mismo cliente en una sola venta.
               </div>}
-              {mixedPooledAndNonPooled && <div style={{display:"flex",alignItems:"flex-start",gap:6,padding:10,background:C.dn+"15",border:"1px solid "+C.dn+"40",borderRadius:8,marginBottom:8,fontSize:11,color:C.dn,fontWeight:600}}>
+              {mixedPooledAndNonPooled && <div style={{display:"flex",alignItems:"flex-start",gap:6,padding:10,background:C.dn+"15",border:"1px solid "+C.dn+"40",borderRadius:8,marginBottom:8,fontSize:11,color:C.dnInk,fontWeight:600}}>
                 <WarningIcon size={13} weight="fill" style={{flexShrink:0,marginTop:1}}/>Hay productos de pool junto con productos individuales (sin pool). Solo se permite uno u otro en la misma venta.
               </div>}
               {cart.map(c=>{
                 const qtyOk = c.qty>0 && c.qty<=c.stock_actual;
-                return <div key={c.client_product_id} style={{padding:10,borderRadius:8,background:C.bg,border:"1px solid "+(qtyOk?C.bd:C.amb),marginBottom:8}}>
+                // v10.84.167 — cada renglón: cuánto (kilos o piezas), a cuánto (su precio, el de lista de entrada) y su importe sin IVA
+                const porKilo = c.sellUnit==="kg";
+                const precioOk = precioValido(c.precio)!=null;
+                const importe = centavosDe(c);
+                const etq = {color:C.t2,fontSize:10,textTransform:"uppercase",fontWeight:600,marginBottom:2};
+                return <div key={c.client_product_id} style={{padding:10,borderRadius:8,background:C.bg,border:"1px solid "+(qtyOk&&precioOk?C.bd:C.amb),marginBottom:8}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6,gap:6}}>
-                    <div style={{fontSize:12,fontWeight:700,color:C.tx,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.name}</div>
-                    <button onClick={()=>removeFromCart(c.client_product_id)} disabled={busy} style={{...bt(C.sf,C.dn),padding:"2px 8px",fontSize:11,border:"0.5px solid "+C.dn+"40"}}><XIcon size={12} weight="bold"/></button>
+                    <div style={{fontSize:12,fontWeight:700,color:C.tx,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={c.name}>{c.name}</div>
+                    <button onClick={()=>removeFromCart(c.client_product_id)} disabled={busy} aria-label={"Quitar "+c.name+" del carrito"} style={{...bt(C.sf,C.dnInk),padding:"2px 8px",fontSize:11,border:"0.5px solid "+C.dn+"40"}}><XIcon size={12} weight="bold"/></button>
                   </div>
-                  {c.sellUnit==="kg" ? <div style={{display:"flex",alignItems:"center",gap:8,fontSize:11}}>
-                    <div style={{flex:1}}>
-                      <div style={{color:C.t2,fontSize:9,textTransform:"uppercase",fontWeight:600}}>Kilos</div>
-                      <input style={{...inp,padding:"4px 6px",fontSize:12,border:"1.5px solid "+(qtyOk?C.bd:C.amb+"60")}} type="number" step="0.5" min="0" value={c.qtyKg} placeholder="kg" onChange={e=>{const kg=parseFloat(e.target.value)||0;updateItem(c.client_product_id,{qtyKg:e.target.value,qty:Math.round(kg*(c.unitsPerKg||0))})}} disabled={busy}/>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,alignItems:"start",fontSize:11}}>
+                    <div>
+                      <div style={etq} aria-hidden="true">{porKilo?"Kilos":"Piezas"}</div>
+                      {porKilo
+                        ? <input aria-label={"Kilos de "+c.name} style={{...inp,padding:"4px 6px",fontSize:12,boxShadow:"0 0 0 1.5px "+(qtyOk?C.bd:C.amb)}} type="number" step="0.5" min="0" value={c.qtyKg} placeholder="kg" onChange={e=>{const kg=parseFloat(e.target.value)||0;updateItem(c.client_product_id,{qtyKg:e.target.value,qty:Math.round(kg*(c.unitsPerKg||0))})}} disabled={busy}/>
+                        : <input aria-label={"Piezas de "+c.name} style={{...inp,padding:"4px 6px",fontSize:12,boxShadow:"0 0 0 1.5px "+(qtyOk?C.bd:C.amb)}} type="number" step="1" min="1" max={c.stock_actual} value={c.qty} onChange={e=>updateItem(c.client_product_id,{qty:parseInt(e.target.value,10)||0})} disabled={busy}/>}
                     </div>
-                    <div style={{flex:1.4,fontSize:10,color:c.qty>c.stock_actual?C.dn:C.t3,paddingTop:5,lineHeight:1.4}}>{c.qty>0?<>= <b>{c.qty.toLocaleString()}</b> u · {(c.qty/1000).toLocaleString(undefined,{maximumFractionDigits:2})} millares<br/></>:null}de ~<b>{(c.stock_actual/(c.unitsPerKg||1)).toLocaleString(undefined,{maximumFractionDigits:1})}</b> kg disp.</div>
+                    <div>
+                      <div style={etq} aria-hidden="true">{porKilo?"Precio por kilo":"Precio por pieza"}</div>
+                      <input aria-label={"Precio de "+c.name+(porKilo?" por kilo":" por pieza")} aria-invalid={!precioOk||undefined} style={{...inp,padding:"4px 6px",fontSize:12,fontFamily:"'Geist Mono',monospace",textAlign:"right",boxShadow:"0 0 0 1.5px "+(precioOk?C.bd:C.amb)}} type="text" inputMode="decimal" autoComplete="off" value={c.precio} placeholder="0.00" onChange={e=>updateItem(c.client_product_id,{precio:e.target.value.replace(/[$\s]/g,"")})} disabled={busy}/>
+                    </div>
+                    <div style={{textAlign:"right"}}>
+                      <div style={etq} aria-hidden="true">Importe</div>
+                      <div style={{fontSize:13,fontWeight:800,fontFamily:"'Geist Mono',monospace",color:importe!=null?C.tx:C.t2,paddingTop:4}}>{importe!=null?fmtPesos(importe/100):"—"}</div>
+                    </div>
                   </div>
-                  : <div style={{display:"flex",alignItems:"center",gap:8,fontSize:11}}>
-                    <div style={{flex:1}}>
-                      <div style={{color:C.t2,fontSize:9,textTransform:"uppercase",fontWeight:600}}>Cantidad</div>
-                      <input style={{...inp,padding:"4px 6px",fontSize:12,border:"1.5px solid "+(qtyOk?C.bd:C.amb+"60")}} type="number" step="1" min="1" max={c.stock_actual} value={c.qty} onChange={e=>updateItem(c.client_product_id,{qty:parseInt(e.target.value,10)||0})} disabled={busy}/>
-                    </div>
-                    <div style={{flex:1,fontSize:10,color:c.qty>c.stock_actual?C.dn:C.t3,paddingTop:14}}>de <b>{c.stock_actual}</b> disp.</div>
-                  </div>}
+                  <div style={{fontSize:11,color:c.qty>c.stock_actual?C.dnInk:C.t2,marginTop:5,lineHeight:1.4}}>
+                    {porKilo
+                      ? <>{c.qty>0?<>= <b>{c.qty.toLocaleString("es-MX")}</b> piezas · </>:null}de ~<b>{(c.stock_actual/(c.unitsPerKg||1)).toLocaleString("es-MX",{maximumFractionDigits:1})}</b> kg disponibles</>
+                      : <>de <b>{c.stock_actual.toLocaleString("es-MX")}</b> disponibles</>}
+                    {!precioOk && <span style={{color:C.wnInk,fontWeight:600}}> · {String(c.precio).trim()===""?"Sin precio":"Escribe el precio con números (hasta 4 decimales)"}</span>}
+                  </div>
                 </div>;
               })}
             </>}
@@ -6413,7 +6565,7 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
                 <div style={{display:"flex",gap:3}}>
                   {["factura","remision"].map(t=>{
                     const sel = invoiceType===t;
-                    const c = t==="factura"?C.fac:C.live;
+                    const c = t==="factura"?C.fac:C.okInk;   // v10.84.167 — la remisión elegida en su tinta (el verde vivo daba 2.2:1 con la letra blanca)
                     return <button key={t} onClick={()=>setInvoiceType(t)} disabled={busy} style={{flex:1,padding:"6px 4px",fontSize:10,fontWeight:700,borderRadius:6,border:"1.5px solid "+(sel?c:C.bd),background:sel?c:C.bg,color:sel?"#fff":C.t2,cursor:busy?"wait":"pointer"}}>{t==="factura"?"Factura":"Remisión"}</button>;
                   })}
                 </div>
@@ -6428,7 +6580,7 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
               <div>
-                <label style={{...lbl,marginTop:0,fontSize:10,color:agentOK?undefined:C.dn}}>Vendedor *</label>
+                <label style={{...lbl,marginTop:0,fontSize:10,color:agentOK?undefined:C.dnInk}}>Vendedor *</label>
                 <select style={{...inp,fontSize:11,border:"1.5px solid "+(agentOK?C.bd:C.dn+"60")}} value={agent} onChange={e=>{agentTouched.current=true;setAgent(e.target.value)}} disabled={busy}>
                   <option value="">— Selecciona vendedor —</option>
                   {AGENTS.map(a=><option key={a} value={a}>{a}</option>)}
@@ -6446,25 +6598,17 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
               <datalist id="cuadra-client-agents">{clientAgents.map(a=><option key={a.id} value={a.name}/>)}</datalist>
             </div>
 
-            {/* Total venta */}
-            <div style={{background:C.sal+"08",border:"1.5px solid "+(totalOK?C.sal+"40":C.amb+"60"),borderRadius:10,padding:12,marginBottom:10}}>
-              {/* v10.84.26 — qué se está tecleando, explícito (ver comentario de typedNum). */}
-              {invoiceType==="factura" && <div role="group" aria-label="Base del importe" style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",marginBottom:8}}>
-                <span style={{fontSize:10,color:C.t2}}>El importe que tecleo es:</span>
-                {[{k:"subtotal",l:"Subtotal (sin IVA)"},{k:"con_iva",l:"Total (con IVA)"}].map(m => (
-                  <button key={m.k} type="button" onClick={()=>setTotalBase(m.k)} aria-pressed={totalBase===m.k} disabled={busy}
-                    style={{...bs(totalBase===m.k?C.ac:C.sf, totalBase===m.k?"#fff":C.t2),padding:"4px 10px",fontSize:10,border:totalBase===m.k?"none":"0.5px solid "+C.bd}}>
-                    {m.l}
-                  </button>
-                ))}
-              </div>}
-              <label style={{...lbl,display:"flex",alignItems:"center",gap:5,marginTop:0,fontSize:10,color:C.sal,fontWeight:700}}><CurrencyDollarIcon size={11} weight="bold"/>{baseSub?"Subtotal de la venta":"Total de venta"} * <span style={{color:C.t3,fontWeight:400}}>({baseSub||invoiceType!=="factura"?"SIN IVA":"CON IVA"})</span></label>
-              <input style={{...inp,fontSize:18,fontWeight:800,fontFamily:"'Geist Mono',monospace",color:C.sal,textAlign:"right",border:"1.5px solid "+(totalOK?C.bd:C.amb+"60")}} type="number" step="0.01" value={totalAmount} onChange={e=>setTotalAmount(e.target.value)} placeholder="0.00" disabled={busy}/>
-              {invoiceType==="factura" && totalOK && (()=>{const f=n=>"$"+(Math.round(n*100)/100).toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2});const sub=Math.round(subtotalSinIVA*100)/100;return(
-                <div style={{display:"flex",justifyContent:"flex-end",alignItems:"baseline",gap:10,flexWrap:"wrap",marginTop:6,fontSize:10,color:C.t2,fontFamily:"'Geist Mono',monospace"}}>
-                  <span>Subtotal {f(sub)}</span><span>IVA 16% {f(totalNum-sub)}</span>
-                  <span style={{fontSize:13,fontWeight:800,color:C.tx}}>Total factura {f(totalNum)}</span>
-                </div>);})()}
+            {/* v10.84.167 — EL TOTAL SE CALCULA (ya no se teclea): la suma de los importes, el IVA renglón por renglón y el total, como saldrá en el CFDI */}
+            <div role="group" aria-label="Total de la venta" style={{background:C.sal+"08",border:"1.5px solid "+(totalOK?C.sal+"40":C.amb+"60"),borderRadius:10,padding:12,marginBottom:10,fontFamily:"'Geist Mono',monospace"}}>
+              {!todosConImporte
+                ? <div style={{fontSize:12,color:C.t2,fontFamily:"'Geist',sans-serif"}}>{cart.length===0?"El total sale de los productos del carrito.":"El total sale cuando cada producto tenga su cantidad y su precio."}</div>
+                : <>
+                  {invoiceType==="factura" && <>
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:C.t2}}><span>Subtotal</span><span>{fmtPesos(subtotalCents/100)}</span></div>
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:C.t2,marginTop:2}}><span>IVA 16%</span><span>{fmtPesos(ivaCents/100)}</span></div>
+                  </>}
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",fontSize:15,fontWeight:800,color:C.tx,marginTop:invoiceType==="factura"?4:0}}><span>{invoiceType==="factura"?"Total factura":"Total remisión (sin IVA)"}</span><span>{fmtPesos(totalNum)}</span></div>
+                </>}
             </div>
 
             {/* MultiPaymentPicker: estado de pago + multi-pago */}
@@ -6473,18 +6617,24 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
                 status={paymentStatus}
                 refs={paymentRefs}
                 orderTotal={subtotalSinIVA}
+                totalConIva={invoiceType==="factura"?totalNum:undefined}
                 invoiceType={invoiceType}
                 onChange={(st, rs)=>{setPaymentStatus(st); setPaymentRefs(rs);}}
               />
             </div>}
 
-            <button onClick={submit} disabled={!canSubmit} style={{...bt(canSubmit?C.sal:"#9ca3af"),width:"100%",justifyContent:"center",padding:"12px",fontSize:13,opacity:canSubmit?1:.6,cursor:canSubmit?"pointer":(busy?"wait":"not-allowed")}}>{busy?<><HourglassIcon size={14} weight="bold"/>Procesando...</>:<><ShoppingCartIcon size={14} weight="bold"/>Vender y facturar todo</>}</button>
-            {!folioOK && folio && <div style={{fontSize:10,color:C.dn,marginTop:6,textAlign:"center"}}>Folio inválido. Formato: {pref}NNNN</div>}
-            {!totalOK && totalAmount && <div style={{fontSize:10,color:C.dn,marginTop:6,textAlign:"center"}}>Captura un total mayor a 0</div>}
-            {cart.length>0 && !validCart && <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:4,fontSize:10,color:C.amb,marginTop:6}}><WarningIcon size={11} weight="fill"/>Revisa las cantidades de los items</div>}
-            {hasPooled && !destClientId && cart.length>0 && <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:4,fontSize:10,color:C.amb,marginTop:6}}><WarningIcon size={11} weight="fill"/>Selecciona el cliente destino del pool</div>}
-            {!agentOK && cart.length>0 && <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:4,fontSize:10,color:C.amb,marginTop:6}}><WarningIcon size={11} weight="fill"/>Selecciona el vendedor — sin él la venta no genera comisión</div>}
-            {totalOK && !validPayments && <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:4,fontSize:10,color:C.amb,marginTop:6}}><WarningIcon size={11} weight="fill"/>Revisa el estado de pago y los montos</div>}
+            <button onClick={submit} disabled={!canSubmit} style={{...bt(canSubmit?C.okInk:"#9ca3af"),width:"100%",justifyContent:"center",padding:"12px",fontSize:13,opacity:canSubmit?1:.6,cursor:canSubmit?"pointer":(busy?"wait":"not-allowed")}}>{busy?<><HourglassIcon size={14} weight="bold"/>Procesando...</>:<><ShoppingCartIcon size={14} weight="bold"/>{invoiceType==="factura"?"Vender y facturar todo":"Vender con remisión"}</>}</button>
+            {!folioOK && folio && <div style={{fontSize:11,color:C.dnInk,marginTop:6,textAlign:"center"}}>Folio inválido. Formato: {pref}NNNN</div>}
+            {/* v10.84.167 — lo que falta y lo que está mal escrito, cada uno con su palabra (la vuelta 2: decía «Falta el precio» de uno sí escrito) */}
+            {(()=>{const vacio=c=>String(c.precio==null?"":c.precio).trim()==="";const faltan=sinPrecio.filter(vacio),malos=sinPrecio.filter(c=>!vacio(c));const fila={display:"flex",alignItems:"center",justifyContent:"center",gap:4,fontSize:11,color:C.wnInk,fontWeight:600,marginTop:6,textAlign:"center"};return <>
+              {faltan.length>0 && <div style={fila}><WarningIcon size={11} weight="fill" style={{flexShrink:0}}/>Falta el precio de {faltan.map(c=>c.name).join(", ")}</div>}
+              {malos.length>0 && <div style={fila}><WarningIcon size={11} weight="fill" style={{flexShrink:0}}/>Revisa el precio de {malos.map(c=>c.name).join(", ")}: con números, hasta 4 decimales</div>}
+            </>})()}
+            {todosConImporte && totalCents===0 && <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:4,fontSize:11,color:C.wnInk,fontWeight:600,marginTop:6,textAlign:"center"}}><WarningIcon size={11} weight="fill" style={{flexShrink:0}}/>La venta suma $0.00: ponle precio a lo que se cobra</div>}
+            {cart.length>0 && cart.some(c=>!(c.qty>0 && c.qty<=c.stock_actual)) && <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:4,fontSize:11,color:C.wnInk,marginTop:6}}><WarningIcon size={11} weight="fill"/>Revisa las cantidades: cada producto, más de 0 y no más de lo disponible</div>}
+            {hasPooled && !destClientId && cart.length>0 && <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:4,fontSize:11,color:C.wnInk,marginTop:6}}><WarningIcon size={11} weight="fill"/>Selecciona el cliente destino del pool</div>}
+            {!agentOK && cart.length>0 && <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:4,fontSize:11,color:C.wnInk,marginTop:6}}><WarningIcon size={11} weight="fill"/>Selecciona el vendedor — sin él la venta no genera comisión</div>}
+            {totalOK && !validPayments && <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:4,fontSize:11,color:C.wnInk,marginTop:6}}><WarningIcon size={11} weight="fill"/>Revisa el estado de pago y los montos</div>}
           </div>
         </div>
       </div>
@@ -7876,7 +8026,9 @@ const METODO_PALABRA={efectivo:"Efectivo",transferencia:"Transferencia",tarjeta:
 const montoLimpio=v=>{let s=String(v??"").replace(/[^\d.]/g,"");const i=s.indexOf(".");if(i>=0)s=s.slice(0,i+1)+s.slice(i+1).replace(/\./g,"").slice(0,2);return s};
 // Lo que le falta a un pago, en palabras (la misma regla que refComplete); null si está completo
 const faltaDelPago=r=>!r.method?"el método":!(Number(r.amount)>0)?"el monto":(r.method==="otro"&&!r.otro_category)?"el motivo":(r.method==="otro"&&r.otro_category==="otro_especificar"&&!(r.otro_detail||"").trim())?"escribir el motivo":null;
-function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange, allowCash=false, notaSinPrecio=null}) {
+// v10.84.167 — `totalConIva` (opcional): el total exacto de la factura cuando ya se sabe (la venta de inventario suma el IVA renglón por renglón, como el
+//   CFDI, y subtotal × 1.16 puede quedar un centavo distinto: «Pagada» no cuadraba). Sin él, como siempre.
+function MultiPaymentPicker({status, refs, orderTotal, totalConIva, invoiceType, onChange, allowCash=false, notaSinPrecio=null}) {
   const METHODS = [
     // v10.73.65 Nivel 3 — Efectivo real (solo donde allowCash=true, hoy InvoiceModal): crea un vale de caja (VC-XXXX)
     // que baja el balance de la factura y aparece en el corte de Lucero. El efectivo NUNCA va por assign_invoice.
@@ -7886,7 +8038,7 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange, al
     {id: "cheque", Icon: MoneyIcon},
     {id: "otro", Icon: NotePencilIcon}
   ];
-  const totalDisplay = invoiceType === "factura" ? Math.round((orderTotal || 0) * 116) / 100 : (orderTotal || 0);
+  const totalDisplay = invoiceType === "factura" ? (totalConIva != null ? totalConIva : Math.round((orderTotal || 0) * 116) / 100) : (orderTotal || 0);
   const fmtMx = n => Number(n||0).toLocaleString("es-MX", {minimumFractionDigits: 2, maximumFractionDigits: 2});
   const list = Array.isArray(refs) ? refs : [];
   // v10.50.3 — Comparación en centavos enteros: elimina drift de float (antes tolerancia 0.01

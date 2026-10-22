@@ -138,6 +138,9 @@ const TANDAS = [
   // v10.84.166 — «Nueva Orden de Compra» propone el vendedor de la ficha del cliente (Marcelo, 21-oct: Mónica Cuadra e Isabel Quiroz, de Pepe
   //   Chuy, salían con Manuel); lo elegido a mano manda, la respuesta tarde no pisa y el nombre escrito exacto también lo lleva
   { nombre: "nueva-oc", gen: "tests/banco/gen-nueva-oc.mjs", romper: "tests/romper/nueva-oc.mjs", puerto: 5491 },
+  // v10.84.167 — la venta desde inventario con el precio de cada producto (Marcelo, 22-oct: «PrintFlow infla el precio por dividirlos… podemos asustar
+  //   al cliente»): el carrito pedía UN total y la base lo repartía por piezas; el precio de lista y el nombre en la factura de cada producto del catálogo
+  { nombre: "venta-inventario", gen: "tests/banco/gen-venta-inventario.mjs", romper: "tests/romper/venta-inventario.mjs", puerto: 5492 },
 ];
 // 🔑 LA SEGUNDA OPORTUNIDAD (8-oct-2026, Marcelo: «sí es una mejora, aplica la misma metodología para todos los proyectos»; la misma de
 // CobranzaFlow desde el 7-oct, con sus candados: scripts/reintento.mjs). Lo que falla se repite UNA vez, y sólo eso: lo que vuelve a fallar
@@ -145,7 +148,7 @@ const TANDAS = [
 // subida no pasa con una sin revisar). Sin segunda oportunidad: las tandas de dinero (las que folian y facturan) y toda prueba de doble
 // acción; más de 3 a la vez, o la misma otra vez en 14 días, frenan. Las tandas que aceptan SOLO repiten sólo sus casos que fallaron;
 // las demás (cortas), completas.
-const TANDAS_DE_DINERO = ["folio", "oc", "plan", "partes", "cancelar", "orden", "orden-2", "corregir", "cancelaciones"];   // cancelar mueve facturas y saldos; orden, el precio de una facturada; corregir, el de una por facturar: sin segunda oportunidad
+const TANDAS_DE_DINERO = ["folio", "oc", "plan", "partes", "cancelar", "orden", "orden-2", "corregir", "cancelaciones", "venta-inventario"];   // cancelar mueve facturas y saldos; orden, el precio de una facturada; corregir, el de una por facturar: sin segunda oportunidad
 const sinSegundaDe = tanda => hacerSinSegunda({ tandasDeDinero: TANDAS_DE_DINERO, tanda });
 const TOPE_MS = 12 * 60 * 1000;   // una tanda colgada no puede detener el candado para siempre
 
