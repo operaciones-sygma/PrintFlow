@@ -45,7 +45,8 @@ BEGIN
   ords AS (
     SELECT o.id, o.purchase_order_id oc, o.invoice_folio folio, cp.sku, o.quantity q, o.price
     FROM public.orders o JOIN public.client_products cp ON cp.id = o.client_product_id
-    WHERE o.stock_role = 'sale' AND o.created_at >= '2026-01-01' AND o.cancelled_at IS NULL),
+    -- lo vendido hasta el 21-oct (lo que se midió): una venta de hoy en adelante no entra (con la base nueva ya nace con su precio)
+    WHERE o.stock_role = 'sale' AND o.created_at >= '2026-01-01' AND o.created_at < '2026-10-22 00:00:00-06' AND o.cancelled_at IS NULL),
   multi AS (SELECT oc FROM ords GROUP BY oc HAVING count(*) > 1),
   lin AS (
     SELECT i.doc_number folio, l.importe,
@@ -59,7 +60,7 @@ BEGIN
   nuevo_f AS (
     SELECT o.*, (SELECT sum(l.importe) FROM lin l WHERE l.folio = o.folio
                   AND l.sku = CASE WHEN o.folio = 'F-1' AND o.sku = 'CORD-ETIQ' THEN 'ETIQ-COLG' ELSE o.sku END) nuevo
-    FROM ords o WHERE o.folio LIKE 'F-%' AND o.oc IN (SELECT oc FROM multi)),
+    FROM ords o WHERE o.folio LIKE 'F-%' AND o.oc IN (SELECT oc FROM multi) AND EXISTS (SELECT 1 FROM lin l WHERE l.folio = o.folio)),
   nuevo_d0 AS (
     SELECT o.*, CASE WHEN o.sku = 'CHIN-BLA' THEN (CASE WHEN o.q <= 2000 THEN o.q * 40 ELSE round(o.q / 80.0 * 40, 2) END)
                      WHEN o.sku = 'TARJ-BILL' THEN NULL ELSE o.q * l.precio END nuevo
