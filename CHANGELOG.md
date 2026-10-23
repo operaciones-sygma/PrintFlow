@@ -76,6 +76,13 @@ FABRICA DE ALTA CALIDAD» y «Precio y nombre». **Vuelta atrás**: PRIMERO `v10
 la pantalla de antes no puede vender) y luego promover `dpl_4jyCrywYxZymjNrUstiEgRatzugv` (la app de v10.84.166); los datos, con
 `v10.84.167_datos_vuelta_atras.sql` (lee lo de antes de `cobranza.audit_log`).
 
+**Después, la misma tarde** (Marcelo: «si arranca con lo tuyo… y sigo con tus recomendaciones»; «sobre el 4 e inventario no te preocupes, después haremos
+un reconteo total de todo el inventario»): **F-1** quedó ligada a «Etiqueta colgante» (`v10_84_167_f1_etiqueta`, ensayada con rollback; su descripción ya
+es la del CFDI, «ETIQUETA CUADRA COLGANTE 25 CR»; sin marca ni discrepancia, OC-0680 igual); el inventario (se descontó del cordón) y los 39.7 millones
+de hojas de China blanco (un «Ajustar» de +40,000,000 del 14-sep) los arregla el reconteo total. **D-6015** espera sus renglones de Alpha (se pidieron
+a la sesión del servidor). **Las claves SAT de Cuadra** (24141508 soportes, 55121600 etiquetas, 55121505 cordón, 60121117 papel en kilos y en millar)
+se le encargaron a CobranzaFlow: hoy la siembra pone 82121500 · pieza y Karla cambia cada renglón a mano.
+
 ## v10.84.166 — «Nueva Orden de Compra» propone el vendedor de la ficha del cliente — 21-oct-2026
 
 **Qué pasaba.** Marcelo, 21-oct: a Pepe Chuy le faltaban dos clientas en sus comisiones, MONICA CUADRA BECERRA e ISABEL DE LOS ANGELES QUIROZ, y
