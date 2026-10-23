@@ -81,7 +81,13 @@ un reconteo total de todo el inventario»): **F-1** quedó ligada a «Etiqueta c
 es la del CFDI, «ETIQUETA CUADRA COLGANTE 25 CR»; sin marca ni discrepancia, OC-0680 igual); el inventario (se descontó del cordón) y los 39.7 millones
 de hojas de China blanco (un «Ajustar» de +40,000,000 del 14-sep) los arregla el reconteo total. **D-6015** espera sus renglones de Alpha (se pidieron
 a la sesión del servidor). **Las claves SAT de Cuadra** (24141508 soportes, 55121600 etiquetas, 55121505 cordón, 60121117 papel en kilos y en millar)
-se le encargaron a CobranzaFlow: hoy la siembra pone 82121500 · pieza y Karla cambia cada renglón a mano.
+se le encargaron a CobranzaFlow: hoy la siembra pone 82121500 · pieza y Karla cambia cada renglón a mano. Ya están cargadas en los 9 productos
+(`v10_84_167_claves_sat`, `client_products.specs.cfdi = {clave_prod_serv, clave_unidad, unidad, piezas_por_unidad}`, la forma que fijó CobranzaFlow); no
+cambian nada hasta que su siembra las lea (una sesión nueva de CobranzaFlow). **D-6015** quedó con los renglones de su factura en Alpha (los trajo la
+sesión del servidor; `v10_84_167_d6015`, ensayada; OC-0491 en $79,300, 0 marcadas, 0 discrepancias; invariantes 87 de 87): los $120 eran el Soporte No 2
+cobrado a $1.75. **La tarjeta de billetera** es un solo artículo en Alpha (PT-00004): a $1.75 casi siempre hasta agosto y a $2.30 en todas las timbradas
+desde el 21-sep; el precio de lista se queda en $2.30. Alpha fecha D-6015 el 08-jul y D-6073 el 27-jul; cobranza las tiene el 28-jul (con otras 25 D-
+capturadas en lote el 28 y 29-jul): se le pasó a CobranzaFlow.
 
 ## v10.84.166 — «Nueva Orden de Compra» propone el vendedor de la ficha del cliente — 21-oct-2026
 
