@@ -16,6 +16,11 @@
 // trae) · falla=red-ligar (sin conexión, pero la base sí la ligó) · falla=red-ligar-sin (sin conexión y no la ligó) · falla=ligar-y-lectura (sin conexión,
 // y la relectura también falla) · lentoAd=10 (la lectura tarda 10 s: pasa el tope de 8 s) · lentoAd=1 (la lectura tarda 1.5 s) · lentoAd=c-man (sólo la de MANUFACTURERA: su respuesta llega después
 // de la de otro cliente elegido luego)
+// v10.84.170 (el freno de la base, 170b): la base simulada FRENA como la de verdad el folio nuevo si el cliente tiene una hecha por adelantado del mismo
+// tipo e importe (±2 centavos) sin ligar, salvo las que nombra «No es de esta venta» (venderDeInventarioAunqueHaya) · falla=frena (la que llegó después
+// de leer: al vender aparece F-234 y la base frena; la relectura ya la trae) · falla=frena-y-lectura (igual, y la relectura falla) · falla=frena-otra
+// (con «No es de esta venta» llega F-241, que no se vio: la base frena por ella) · falla=frena-sin-leer (la primera lectura falla, «Ya revisé», y al
+// vender la base frena por F-234; la relectura ya la trae)
 import fs from "node:fs";
 import path from "node:path";
 import { LIGA_FUENTES, copiarFuentes } from "./fuentes.mjs";
@@ -92,6 +97,15 @@ const ADELANTADAS = (() => {
     "El cliente «Botas & Más 🎄» pide la factura YA porque su contador cierra el mes y no acepta remisiones ni facturas sin orden de compra firmada ".repeat(3) + ". Se liga en PrintFlow." })];
   return [];
 })();
+// v10.84.170 — lo que la base sabe además de lo leído (las que llegaron después de leer) y su freno, con la regla de bulk_sell_from_stock (170b)
+let aparecio = [];
+const adelantadasVivas = () => yaLigada ? [] : [...ADELANTADAS, ...aparecio];
+const queFrenan = args => adelantadasVivas().filter(f => f.client_id === args.dest_client_id && f.doc_type === args.invoice_type
+  && Math.abs(Math.round(Number(f.amount) * 100) - Math.round(Number(args.total_amount) * 100)) <= 2);
+const freno = (lista, args) => Object.assign(new Error((CLIENTES.find(c => c.id === args.dest_client_id)?.name || "El cliente") + " ya tiene "
+  + lista.map(f => f.doc_number).join(" y ") + " hecha por adelantado y sin ligar, por $" + Number(lista[0].amount).toLocaleString("en-US", { minimumFractionDigits: 2 })
+  + ", el importe de esta venta: véndela ligándola («Vender y ligar») o, si de verdad es otra venta, elige «No es de esta venta» (si no lo ves,"
+  + " actualiza la página). Si no, se le cobraría dos veces."), { code: "PFADL", details: lista.map(f => f.doc_number).join(",") });
 const db = {
   loadClientProducts: async () => { await espera(40); anota("db loadClientProducts"); return PRODUCTOS.map(x => ({ ...x, specs: x.specs ? JSON.parse(JSON.stringify(x.specs)) : x.specs })); },
   loadStockMovements: async () => { await espera(40); return []; },
@@ -107,6 +121,22 @@ const db = {
     anota("db bulkSellFromStock " + JSON.stringify({ items: args.items, total_amount: args.total_amount, invoice_type: args.invoice_type, dest_client_id: args.dest_client_id, folio: args.folio,
       payment_status: args.payment_status, pagos: (args.payment_refs || []).map(r => Number(r.amount)) }));
     if (FALLA === "vender") throw new Error("Stock insuficiente para Etiqueta colgante: 50 disponible vs 10000 requerido");
+    if ((FALLA === "frena" || FALLA === "frena-y-lectura" || FALLA === "frena-sin-leer") && !aparecio.length) {
+      aparecio = [adelantada("F-234", CLIENTES[0], 47560, { issued_date: "2026-10-31", dias_sin_orden: 0 })];
+      if (FALLA === "frena-y-lectura") lecturaRota = true;
+    }
+    const frenan = queFrenan(args); if (frenan.length) throw freno(frenan, args);
+    return { oc_id: "OC-1234", folio: EMISOR ? (args.invoice_type === "factura" ? "F-300" : "RS-40") : args.folio, invoice_type: args.invoice_type, items_count: args.items.length, total_amount: args.total_amount };
+  },
+  // v10.84.170 — «No es de esta venta»: la venta con folio nuevo nombrando las que se vieron (vender_de_inventario_aunque_haya)
+  venderDeInventarioAunqueHaya: async args => {
+    await espera(LENTO ? 1500 : 150);
+    anota("db venderAunqueHaya " + JSON.stringify({ vistas: args.vistas, items: args.items, total_amount: args.total_amount, invoice_type: args.invoice_type,
+      dest_client_id: args.dest_client_id, folio: args.folio, payment_status: args.payment_status, pagos: (args.payment_refs || []).map(r => Number(r.amount)) }));
+    const vistas = (args.vistas || []).map(s => String(s).trim().toUpperCase()).filter(Boolean);
+    if (!vistas.length) throw new Error("«No es de esta venta» necesita las facturas hechas por adelantado que viste: vuelve a abrir el carrito.");
+    if (FALLA === "frena-otra" && !aparecio.length) aparecio = [adelantada("F-241", CLIENTES[0], 47560, { issued_date: "2026-10-31", dias_sin_orden: 0 })];
+    const frenan = queFrenan(args).filter(f => !vistas.includes(f.doc_number)); if (frenan.length) throw freno(frenan, args);
     return { oc_id: "OC-1234", folio: EMISOR ? (args.invoice_type === "factura" ? "F-300" : "RS-40") : args.folio, invoice_type: args.invoice_type, items_count: args.items.length, total_amount: args.total_amount };
   },
   // v10.84.168 — lo que el carrito revisa antes de vender, y la venta que se liga a la factura que ya existe
@@ -116,10 +146,9 @@ const db = {
     // lentoAd=10: tarda 10 s (pasa el tope de 8 s del carrito: «está tardando» y luego «Llegó la revisión que tardaba»)
     await espera(LENTO_AD === "10" ? 10000 : LENTO_AD === "1" || LENTO_AD === clientId ? 1500 : 60);
     anota("db facturasPorAdelantado " + clientId);
-    if (FALLA === "adelantadas" || (FALLA === "adelantadas1" && n === 1) || lecturaRota) throw new Error("Failed to fetch");
+    if (FALLA === "adelantadas" || ((FALLA === "adelantadas1" || FALLA === "frena-sin-leer") && n === 1) || lecturaRota) throw new Error("Failed to fetch");
     const c = CLIENTES.find(x => x.id === clientId);
-    if (yaLigada) return [];
-    return ADELANTADAS.filter(f => f.client_id === clientId || (c && c.stock_pool_id === POOL)).map(f => ({ ...f, es_de_otro_cliente: f.client_id !== clientId }));
+    return adelantadasVivas().filter(f => f.client_id === clientId || (c && c.stock_pool_id === POOL)).map(f => ({ ...f, es_de_otro_cliente: f.client_id !== clientId }));
   },
   venderDeInventarioLigando: async args => {
     await espera(LENTO ? 1500 : 150);

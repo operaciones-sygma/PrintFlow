@@ -12,6 +12,73 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.170 — El carrito ya no acuña otra factura por una venta que se facturó por adelantado: el freno, en la base — 31-oct-2026
+
+**Qué pasaba.** Desde v10.84.168 el carrito ofrece ligar la factura hecha por adelantado del mismo importe, pero eso lo cuidaba sólo la pantalla.
+Tres caminos acuñaban otra factura por el mismo trabajo, y al cliente se le cobraba dos veces:
+- una pestaña abierta desde antes;
+- la lectura que no se pudo hacer, con «Ya revisé en CobranzaFlow» marcado;
+- la factura que llegó con el carrito abierto.
+
+En las otras puertas (asignar folio a la orden o a la OC) lo frena la base desde v3.7.465 (`assign_invoice`); en el carrito no. Era un pendiente de la 168.
+Marcelo, 31-oct: «sí hagamos los pendientes», y a «¿lo aplico en la base cuando pase su ensayo y sus pruebas?»: «Sí, aplícalo tú». La salida explícita
+de «No es de esta venta» fue su recomendación aceptada: Cuadra pide lo mismo cada semana.
+
+**Qué se cambió.**
+- **La base, en dos partes** (`docs/migrations/v10.84.170a_vender_aunque_haya.sql`, `v10.84.170b_freno_folio_nuevo.sql`; vuelta atrás
+  `v10.84.170_vuelta_atras.sql`):
+  - **170a:** `public.vender_de_inventario_aunque_haya` (nueva). Es la venta de siempre, con folio nuevo y con sus pagos, nombrando las hechas por
+    adelantado que la persona vio. Es la única que pone `pf.venta_nueva_aunque_haya`, que dura la transacción. Dirección y Karla.
+  - **170b:** `bulk_sell_from_stock` (misma firma), antes de crear la OC. Si no se liga y el cliente tiene una hecha por adelantado viva, sin ligar,
+    del mismo tipo e importe (±2 centavos), frena el folio nuevo: ERRCODE `PFADL`, con las que frenan en el detalle.
+  - Pasa sólo si todas las que frenan vienen entre las vistas, y entonces queda en la bitácora (`venta_nueva_con_adelantada`, con el folio nuevo).
+    Una que llegó después de leer sigue frenando. Las de otro cliente del apartado no frenan.
+  - **Orden de aplicación:** la 170a antes de la pantalla y la 170b después, para que ninguna pantalla se quede sin poder vender. A una pestaña vieja la
+    base le dice «… elige «No es de esta venta» (si no lo ves, actualiza la página)».
+- **El carrito** (`BulkSellModal`):
+  - **«No es de esta venta»** manda la venta por la función nueva con las que se vieron (`db.venderDeInventarioAunqueHaya`). Sin una del mismo importe,
+    la venta va por el camino de siempre.
+  - **El freno de la base** se queda en la ventana, en el pie fijo, con `role="alert"` y el foco, en ámbar (es una decisión, no un daño): «No se
+    registró la venta: MANUFACTURERA DE BOTAS CUADRA ya tiene F-234 hecha por adelantado, del mismo importe y sin ligar.»
+  - **Luego se vuelve a leer**, y la caja dice qué sigue: «Ya sale arriba: si es la de esta venta, «Vender y ligar F-234»; si no, «No es de esta
+    venta».». O dice que no se pudo revisar («Reintentar»), o que aquí no cuadra y hay que revisarla en CobranzaFlow. Otro cliente lo quita y Esc lo
+    conserva.
+  - **`db.bulkSellFromStock`** conserva el código y el detalle del error.
+  - **El botón apagado nombra la caja que lo explica.** Con el freno o con el rechazo del ligado (de la 169), el renglón del porqué se calla y su
+    `aria-describedby` apuntaba a ese renglón vacío: el lector de pantalla no decía por qué. Lo vi al mirar las capturas.
+
+**Cómo se probó.**
+- **La base:** ensayo con rollback como Karla, 15 de 15 (las dos partes tal cual):
+  - sin adelantada vende y la del mismo importe frena;
+  - «No es de esta venta» con la que vio vende, la anota en la bitácora y no deja la marca puesta (la venta siguiente vuelve a frenar);
+  - la que llegó después de leer sigue frenando;
+  - no frenan otro importe, la factura contra la remisión, la cancelada, la ya ligada ni la de otro cliente; la remisión frena a la remisión;
+  - ligar sigue igual;
+  - Secretaría no puede y sin nombrar ninguna no pasa;
+  - ±2 centavos frena y a 3 no;
+  - `anon` no la ejecuta.
+
+  La vuelta atrás, dentro del mismo ensayo, deja la huella md5 de la 168 (`4f2fbf49203298c9aa012e88769ae66d`).
+- **Los parámetros:** el banco simula `db`, así que los nombres que la app manda se compararon con la firma de cada función: los 13 de la nueva y los
+  12 de `bulk_sell_from_stock`, iguales.
+- **La tanda `venta-inventario`:** la base simulada frena como la de verdad (mismo cliente, tipo e importe, salvo las nombradas).
+  - **Vuelta 1**, 7 escritas antes de cambiar la pantalla (vin-113 a vin-119): contra la 169 fallaban 6. La otra, vin-118, cuida que la venta sin
+    adelantadas siga igual. vin-64 se ajustó por diseño: con el freno, la venta nueva por el camino de siempre se frena.
+  - **Vuelta 2**, 10 (vin-120 a vin-128): doble clic con «No es», la que llega después de «No es», la relectura caída, otro cliente, Esc, 1366, AA a
+    1366 y 1920, los pagos que viajan con «No es», y el porqué del botón apagado con el freno y con el rechazo. vin-128 también fallaba con la 169.
+  - **Corrida doble:** con la 169, 118 pasan y 17 fallan (las nuevas, salvo vin-118, y vin-64); con la 170, **135 de 135**; ninguna regresión.
+- **Sabotajes:** 31 (los 24 de la 168 y la 169, y 7 nuevos), de los que caen 30.
+  - Los nuevos quitan, uno a la vez: que «No es» nombre las vistas, el freno en la ventana (vuelve a ser un aviso suelto), la relectura tras el freno,
+    que otro cliente lo quite, su foco, su contraste, y lo que el botón apagado nombra.
+  - El que no cae es el de la 169 (s21, el escudo de «Cambiar a Remisión»).
+  - Dos anclas se pusieron al día: s14, porque esa línea ahora también quita el freno, y s23, porque la caja del freno repite su renglón. Las anclas se
+    comparan con LF, para que puedan llevar dos renglones.
+
+**Vuelta atrás.** PRIMERO la pantalla (`git revert` del commit de v10.84.170 y subir) y luego `docs/migrations/v10.84.170_vuelta_atras.sql` en el
+editor: quita el freno con las mismas anclas (ensayada: la huella regresa) y la función nueva. Lo vendido con «No es de esta venta» se queda.
+
+---
+
 ## v10.84.169b (base) — Sin contraseñas legibles en `public.users` — 31-oct-2026
 
 **Qué pasaba.** `public.users.password_hash`, la columna del login de antes de Supabase Auth, guardaba 8 de sus 10 valores en texto plano (los

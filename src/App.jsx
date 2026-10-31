@@ -2532,7 +2532,19 @@ const db = {
       p_actor: actor,
       p_client_agent: client_agent||null // v10.59.2 C2 — contacto del cliente (no el vendedor SYGMA)
     });
-    if (error) throw new Error(error.message);
+    // v10.84.170 — con su código y su detalle: el freno de la base (PFADL) trae en `details` las hechas por adelantado que frenan, para volver a leer
+    if (error) throw Object.assign(new Error(error.message), {code: error.code, details: error.details});
+    return data;
+  },
+  // 🔗 v10.84.170 — «No es de esta venta»: la venta de siempre, con folio nuevo, nombrando las hechas por adelantado del mismo importe que la persona vio.
+  //   bulk_sell_from_stock (170b) frena el folio nuevo si hay una así sin ligar; con ésta pasa sólo si todas las que frenan van en `vistas`.
+  async venderDeInventarioAunqueHaya({vistas, items, total_amount, dest_client_id, invoice_type, folio, payment_status='unpaid', payment_refs=null, due_date, agent, notes, actor, client_agent}) {
+    const {data, error} = await supabase.rpc("vender_de_inventario_aunque_haya", {
+      p_vistas: vistas, p_items: items, p_total_amount: total_amount, p_client_id: dest_client_id||null, p_invoice_type: invoice_type, p_folio: folio,
+      p_payment_status: payment_status, p_payment_refs: payment_refs, p_due_date: due_date||null, p_agent: agent||null, p_notes: notes||null,
+      p_actor: actor, p_client_agent: client_agent||null
+    });
+    if (error) throw Object.assign(new Error(error.message), {code: error.code, details: error.details});
     return data;
   },
   // 🔗 v10.84.168 — las facturas hechas por adelantado (sin orden, vivas y sin ligar) del cliente al que se vende y de su apartado (Cuadra): el carrito
@@ -6283,9 +6295,13 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
   //   foco a lo nuevo cuando el botón apretado desaparece, y lo que cambió dicho para el lector de pantalla en una región que existe antes de su texto.
   const [adTarde, setAdTarde] = useState(false), [adLlego, setAdLlego] = useState(false);
   const [rechazo, setRechazo] = useState(null);              // {folio, motivo}: la base no ligó; no se vende hasta que Karla elige qué sigue
+  // v10.84.170 — la base frenó el folio nuevo (bulk_sell_from_stock, 170b): el cliente tiene una hecha por adelantado del mismo importe sin ligar que la
+  //   venta no nombró (llegó después de leer, una pestaña vieja, o no se pudo leer y se marcó «Ya revisé»). {folios, motivo}: se dice aquí, con el foco, y
+  //   se vuelve a leer: la que frenó sale arriba para ligarla o decir «No es de esta venta»
+  const [freno, setFreno] = useState(null);
   const [anuncio, setAnuncio] = useState("");                // la región viva
   const focoA = useRef(null);                                // a dónde va el foco después de un cambio de camino: "deshacer" | "liga" | "zona"
-  const refLiga = useRef(null), refDeshacer = useRef(null), refZonaAd = useRef(null), refRechazo = useRef(null), ofrecidaAntes = useRef(null);
+  const refLiga = useRef(null), refDeshacer = useRef(null), refZonaAd = useRef(null), refRechazo = useRef(null), refFreno = useRef(null), ofrecidaAntes = useRef(null);
   // sync ref con state para que ESC handler lea el valor actual sin re-binding
   useEffect(()=>{ busyRef.current = busy; }, [busy]);
   // v10.84.167 — salir con algo en el carrito pregunta (Esc, el clic afuera o la ×); con el carrito vacío sale directo. Mientras vende, nada (v10.56.1 F-M1:
@@ -6398,8 +6414,8 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
       .catch(()=>{ if(alive){ clearTimeout(tope); setAdelantadas(null); setAdTarde(false); } });
     return ()=>{ alive=false; clearTimeout(tope); };
   }, [idClienteVenta, lecturaAd]);
-  // v10.84.169 — el rechazo del ligado se queda aunque se vuelva a leer; otro cliente es otra venta
-  useEffect(()=>{ setRechazo(null); }, [idClienteVenta]);
+  // v10.84.169 — el rechazo del ligado se queda aunque se vuelva a leer; otro cliente es otra venta. v10.84.170 — el freno de la base, igual
+  useEffect(()=>{ setRechazo(null); setFreno(null); }, [idClienteVenta]);
 
   const addToCart = (p) => {
     if (cart.find(c=>c.client_product_id===p.id)) return;
@@ -6506,7 +6522,7 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
     return (n===1 ? "un pago" : n+" pagos")+" por "+fmtPesos(suma)+" ("+metodos.join(", ")+(refs.length ? ", ref. "+refs.join(", ") : "")+")";
   })() : "";
   // v10.84.169 — el porqué del botón apagado, junto al botón en el pie fijo: en gris lo que falta hacer, en ámbar lo que está mal (DESIGN.md, v10.84.70)
-  const faltaAd = !busy && idClienteVenta && !rechazo ? (
+  const faltaAd = !busy && idClienteVenta && !rechazo && !freno ? (
     adelantadas===undefined ? {mal:false, texto:"Revisando si "+nombreCliente+" tiene facturas hechas por adelantado…"}
     : adelantadas===null && !revisoSinLeer ? {mal:true, texto:"No se pudo revisar si "+nombreCliente+" tiene facturas hechas por adelantado: «Reintentar» o «Ya revisé en CobranzaFlow», arriba."}
     : pagosAlLigar && !pagosVistos ? {mal:false, texto:"Marca arriba qué haces con "+(paymentRefs.length===1?"el pago capturado":"los pagos capturados")+"."}
@@ -6515,6 +6531,8 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
     && !mixedPools && !mixedClientsNoPool && !mixedPooledAndNonPooled && (!!ligarA || validPayments)
     && revisadoAd && (!pagosAlLigar || pagosVistos) && !rechazo;
   const sigueSinLigar = !!rechazo && paraLigar.some(f=>f.doc_number===rechazo.folio);
+  // v10.84.170 — después del freno, ¿la relectura ya trae lo que frenó? (sin folios en el detalle, basta con que haya una del mismo importe)
+  const frenoSeVe = !!freno && (freno.folios.length ? freno.folios.every(x=>paraLigar.some(f=>f.doc_number===x)) : paraLigar.length>0);
 
   // v10.84.169 — el foco no cae al <body> cuando el botón apretado desaparece: va a lo nuevo (DESIGN.md, v10.84.70)
   useEffect(()=>{
@@ -6524,6 +6542,8 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
   });
   // v10.84.169 — el rechazo se lleva el foco a su aviso
   useEffect(()=>{ if (rechazo) { refRechazo.current?.focus({preventScroll:true}); } }, [rechazo]);
+  // v10.84.170 — el freno de la base, igual
+  useEffect(()=>{ if (freno) { refFreno.current?.focus({preventScroll:true}); } }, [freno]);
   // v10.84.169 — la caja de ligar que aparece se trae a la vista (el pie pudo haberse quedado abajo) y se anuncia; también cuando deja de ofrecerse
   useEffect(()=>{
     const f = ligarA?.doc_number || null, antes = ofrecidaAntes.current;
@@ -6538,6 +6558,7 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
     if (!canSubmit || busyRef.current) return;
     busyRef.current = true;   // v10.84.90 — ocupado DESDE EL CLIC (la ref, no el efecto: Esc en el hueco preguntaba o cerraba mientras guardaba; folio/inv-29)
     setBusy(true);
+    setFreno(null);           // v10.84.170 — el freno de antes ya se leyó; si la base vuelve a frenar, se dice otra vez
     try {
       // v10.72.29 — helper toBackendRef incluye bank_ref_omitted_intentional
       // (CRÍTICO: sin esto la marca de "cliente no proporciono folio" se pierde
@@ -6561,7 +6582,7 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
         onSuccess(result);
         return;
       }
-      const result = await db.bulkSellFromStock({
+      const venta = {
         items: cart.map(c=>({client_product_id:c.client_product_id, qty:c.qty, amount:centavosDe(c)/100})),   // v10.84.167 — el importe de cada producto, sin IVA
         total_amount: totalNum,
         dest_client_id: hasPooled ? destClientId : null,
@@ -6574,7 +6595,11 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
         notes: notes.trim() || null,
         actor: userLogin || "sistema",
         client_agent: clientAgent.trim() || null // v10.59.2 C3 — contacto del cliente comprador
-      });
+      };
+      // v10.84.170 — «No es de esta venta» con una del mismo importe a la vista: la venta nombra las que Karla vio. El freno de la base deja pasar sólo ésas
+      //   (una que llegó después de leer sigue frenando); por el camino de siempre, la base frena el folio nuevo
+      const vistas = emitirOtra ? paraLigar.map(f=>f.doc_number) : [];
+      const result = vistas.length ? await db.venderDeInventarioAunqueHaya({...venta, vistas}) : await db.bulkSellFromStock(venta);
       showToast(`✅ ${result.folio} · OC ${result.oc_id} · ${result.items_count} productos · $${Number(result.total_amount).toLocaleString("es-MX",{minimumFractionDigits:2})}`);
       onSuccess(result);
     } catch(e) {
@@ -6586,6 +6611,12 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
         // Sin conexión no se sabe si la base alcanzó a ligarla (la respuesta pudo perderse después): lo aclara la relectura, no se afirma «no se registró»
         const motivo = motivoDeLaBase(e);
         setRechazo({folio: ligarA.doc_number, motivo, deRed: motivo==="sin conexión"});
+        setLecturaAd(k=>k+1);
+      } else if (e?.code === "PFADL") {
+        // v10.84.170 — el freno de la base: no se acuñó nada. Se dice aquí, con el foco (no en un aviso que se va), y se vuelve a leer: lo que frenó sale
+        //   arriba para ligarlo o decir que no es de esta venta
+        const folios = String(e.details||"").split(",").map(s=>s.trim()).filter(Boolean);
+        setFreno({folios, motivo: folios.length ? nombreCliente+" ya tiene "+folios.join(" y ")+" hecha por adelantado, del mismo importe y sin ligar." : motivoDeLaBase(e)});
         setLecturaAd(k=>k+1);
       } else {
         showToast("❌ "+(e?.message||"error desconocido"), "error");
@@ -6813,7 +6844,7 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
               a la vista. A 1366 el botón quedaba de 140 a 245 px debajo del scroll y «F-234 por $47,560.00» y el total nunca se veían juntos. */}
           <div style={{flexShrink:0,borderTop:"0.5px solid "+C.bd,padding:"10px 14px 12px",background:C.bg}}>
             {/* v10.84.169 — la base no ligó: se dice aquí, con el foco, y el botón espera a que Karla elija (antes, un aviso de 7 s y «Vender y facturar todo» listo) */}
-            {rechazo && <div ref={refRechazo} tabIndex={-1} role="alert" style={{background:C.dn+"0d",border:"1px solid "+C.dn+"40",borderRadius:10,padding:"8px 12px",marginBottom:8,fontSize:12,color:C.tx,lineHeight:1.45}}>
+            {rechazo && <div ref={refRechazo} id="pf-venta-rechazo" tabIndex={-1} role="alert" style={{background:C.dn+"0d",border:"1px solid "+C.dn+"40",borderRadius:10,padding:"8px 12px",marginBottom:8,fontSize:12,color:C.tx,lineHeight:1.45}}>
               <div style={{display:"flex",alignItems:"flex-start",gap:6,fontWeight:700,color:C.dnInk}}><WarningIcon size={13} weight="fill" style={{flexShrink:0,marginTop:2}}/><span>{rechazo.deRed ? "No se sabe si se registró la venta" : "No se registró la venta"}: {rechazo.motivo}</span></div>
               <div style={{color:C.t2,marginTop:3}}>{adelantadas===undefined ? "Revisando de nuevo las facturas hechas por adelantado…"
                 : adelantadas===null ? "No se pudo volver a revisar las facturas hechas por adelantado: «Reintentar», arriba, antes de elegir."
@@ -6825,6 +6856,16 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
                 {Array.isArray(adelantadas) && <button type="button" onClick={()=>{escudoDeClics(500);setRechazo(null);setEmitirOtra(true)}} style={{...bt(C.bg,C.tx),border:"0.5px solid "+C.bdSt,fontSize:11.5,padding:"6px 12px"}}>Es otra venta: emitir {docPalabraAd(invoiceType)} nueva</button>}
                 <button type="button" onClick={onClose} style={{...bt(C.bg,C.dnInk),border:"0.5px solid "+C.dn+"55",fontSize:11.5,padding:"6px 12px"}}>Salir sin vender</button>
               </div>
+            </div>}
+            {/* v10.84.170 — la base frenó el folio nuevo (no se acuñó nada): aquí, con el foco, en ámbar (es una decisión, no un daño); la relectura trae lo que
+                frenó y esto dice qué sigue */}
+            {freno && <div ref={refFreno} id="pf-venta-freno" tabIndex={-1} role="alert" style={{background:C.wn+"12",border:"1px solid "+C.wn+"55",borderRadius:10,padding:"8px 12px",marginBottom:8,fontSize:12,color:C.tx,lineHeight:1.45}}>
+              <div style={{display:"flex",alignItems:"flex-start",gap:6,fontWeight:700,color:C.wnInk}}><WarningIcon size={13} weight="fill" style={{flexShrink:0,marginTop:2}}/><span>No se registró la venta: {freno.motivo}</span></div>
+              <div style={{color:C.t2,marginTop:3}}>{adelantadas===undefined ? "Revisando de nuevo las facturas hechas por adelantado…"
+                : adelantadas===null ? "No se pudo volver a revisar las facturas hechas por adelantado: «Reintentar», arriba, antes de vender."
+                : frenoSeVe ? (ligarA ? "Ya sale arriba: si es la de esta venta, «Vender y ligar "+ligarA.doc_number+"»; si no, «No es de esta venta»."
+                    : "Con «No es de esta venta», la venta nueva la nombra: "+paraLigar.map(f=>f.doc_number).join(" y ")+".")
+                : "Aquí no sale como del mismo importe: revisa "+(freno.folios.join(" y ")||"la factura")+" en CobranzaFlow antes de vender."}</div>
             </div>}
             {/* v10.84.167 — EL TOTAL SE CALCULA (ya no se teclea): la suma de los importes, el IVA renglón por renglón y el total, como saldrá en el CFDI.
                 v10.84.169 — en un renglón, en el pie fijo, junto al botón */}
@@ -6838,7 +6879,8 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
             </div>
             {/* v10.84.169 — decidir necesita con qué comparar (DESIGN.md, v10.84.70): la hecha por adelantado contra esta venta, con su fecha y cómo va de cobro */}
             {ligarA && <div style={{fontSize:11.5,color:C.t2,marginBottom:8,lineHeight:1.4,overflowWrap:"anywhere"}}><b style={{color:C.tx}}>{ligarA.doc_number}</b>{" "}<span style={{fontFamily:"'Geist Mono',monospace",color:C.tx}}>{fmtPesos(ligarA.amount)}</span>{" = esta venta "}<span style={{fontFamily:"'Geist Mono',monospace",color:C.tx}}>{fmtPesos(totalNum)}</span>{fechaAd(ligarA)?" · emitida el "+fechaAd(ligarA):""}{" · "+cobroAd(ligarA)}</div>}
-            <button key={ligarA?"ligar-"+ligarA.doc_number:"vender-"+invoiceType} onClick={submit} disabled={!canSubmit} aria-describedby={!canSubmit && !busy ? "pf-venta-falta" : undefined} style={{...(canSubmit?bt(C.okInk):bt(C.sf,C.t2)),border:canSubmit?undefined:"0.5px solid "+C.bd,width:"100%",justifyContent:"center",padding:"12px",fontSize:13,cursor:canSubmit?"pointer":(busy?"wait":"not-allowed")}}>{busy?<><HourglassIcon size={14} weight="bold"/>Procesando...</>:<>{ligarA?<LinkIcon size={14} weight="bold"/>:<ShoppingCartIcon size={14} weight="bold"/>}{ligarA?"Vender y ligar "+ligarA.doc_number:invoiceType==="factura"?"Vender y facturar todo":"Vender con remisión"}</>}</button>
+            {/* v10.84.170 — apagado por el rechazo o por el freno, su porqué está en esa caja (el renglón de abajo se calla): el botón la nombra */}
+            <button key={ligarA?"ligar-"+ligarA.doc_number:"vender-"+invoiceType} onClick={submit} disabled={!canSubmit} aria-describedby={!canSubmit && !busy ? (rechazo ? "pf-venta-rechazo" : freno ? "pf-venta-freno" : "pf-venta-falta") : undefined} style={{...(canSubmit?bt(C.okInk):bt(C.sf,C.t2)),border:canSubmit?undefined:"0.5px solid "+C.bd,width:"100%",justifyContent:"center",padding:"12px",fontSize:13,cursor:canSubmit?"pointer":(busy?"wait":"not-allowed")}}>{busy?<><HourglassIcon size={14} weight="bold"/>Procesando...</>:<>{ligarA?<LinkIcon size={14} weight="bold"/>:<ShoppingCartIcon size={14} weight="bold"/>}{ligarA?"Vender y ligar "+ligarA.doc_number:invoiceType==="factura"?"Vender y facturar todo":"Vender con remisión"}</>}</button>
             {/* v10.84.169 — el porqué del botón apagado, junto a él (el botón lo nombra con aria-describedby) */}
             <div id="pf-venta-falta">
             {faltaAd && <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:4,fontSize:11,color:faltaAd.mal?C.wnInk:C.t2,fontWeight:faltaAd.mal?600:500,marginTop:6,textAlign:"center"}}>{faltaAd.mal?<WarningIcon size={11} weight="fill" style={{flexShrink:0}}/>:<InfoIcon size={11} weight="bold" style={{flexShrink:0}}/>}{faltaAd.texto}</div>}

@@ -637,6 +637,8 @@ await caso("vin-58-nombre-solo-con-espacios-es-vacio", "", async p => {
 //   antes de entregar y el carrito sólo sabía acuñar otra; sin venta no había OC y Traslados no la encontraba). Vuelta 1: escritas antes del arreglo,
 //   contra el carrito de v10.84.167. En el banco F-234 es por $47,560.00, lo que suma la venta típica (500 kg de China blanco y 10,000 etiquetas).
 const ligadas = async p => (await lineas(p, "db venderLigando ")).map(l => JSON.parse(l.slice("db venderLigando ".length)));
+// v10.84.170 — la venta con folio nuevo que nombra las hechas por adelantado que Karla vio («No es de esta venta»)
+const aunque = async p => (await lineas(p, "db venderAunqueHaya ")).map(l => JSON.parse(l.slice("db venderAunqueHaya ".length)));
 const leidasAd = async p => (await lineas(p, "db facturasPorAdelantado ")).map(l => l.slice("db facturasPorAdelantado ".length));
 const avisos = async p => (await lineas(p, "aviso ")).join(" | ");
 await caso("vin-59-ofrece-ligar-la-hecha-por-adelantado", "adelantadas=igual", async p => {
@@ -701,9 +703,11 @@ await caso("vin-64-no-es-de-esta-venta-emite-otra", "adelantadas=igual", async p
   const nombre = await textoDe(botonVender(p));
   const t = await textoDe(carrito(p));
   const b = botonVender(p); if (await b.isEnabled().catch(() => false)) { await b.click(); await espera(p, 700); }
-  const v = await ventas(p), l = await ligadas(p);
-  ok("vin-64-no-es-de-esta-venta-emite-otra", !!hay && /Vender y facturar todo/.test(nombre) && /F-234/.test(t) && v.length === 1 && l.length === 0,
-    `${hay ? "tiene «No es de esta venta»" : "NO tiene «No es de esta venta»"}; luego el botón «${nombre}»; ${/F-234/.test(t) ? "sigue diciendo que F-234 queda sin ligar" : "ya no dice nada de F-234"}; ventas ${v.length}, ligadas ${l.length}`);
+  // 🔧 Ajustada por diseño en v10.84.170: con el freno de la base (170b) la venta nueva por el camino de siempre se frena; «No es de esta venta» la manda
+  //   por la que nombra la factura vista (venderDeInventarioAunqueHaya). Lo que cuida sigue igual: emite una venta nueva, sin ligar, y se vende.
+  const v = await ventas(p), a = await aunque(p), l = await ligadas(p), vendio = /✅/.test(await avisos(p));
+  ok("vin-64-no-es-de-esta-venta-emite-otra", !!hay && /Vender y facturar todo/.test(nombre) && /F-234/.test(t) && v.length + a.length === 1 && l.length === 0 && vendio,
+    `${hay ? "tiene «No es de esta venta»" : "NO tiene «No es de esta venta»"}; luego el botón «${nombre}»; ${/F-234/.test(t) ? "sigue diciendo que F-234 queda sin ligar" : "ya no dice nada de F-234"}; ventas ${v.length + a.length}, ligadas ${l.length}; ${vendio ? "se vendió" : "NO se vendió"}`);
 });
 await caso("vin-65-la-base-rechaza-el-ligado", "adelantadas=igual&falla=ligar", async p => {
   await ventaTipica(p); await espera(p, 400);
@@ -1147,6 +1151,148 @@ await caso("vin-112-a-1920-el-boton-y-la-comparacion-se-ven", "adelantadas=igual
   const veComp = await comp.count() ? await seVe(comp) : false;
   ok("vin-112-a-1920-el-boton-y-la-comparacion-se-ven", boton && veComp, `a 1920: el botón ${boton ? "se ve" : "NO se ve"}, la comparación ${veComp ? "se ve" : "NO se ve"}`);
 }, { viewport: { width: 1920, height: 1080 } });
+
+// ── v10.84.170 — EL FRENO DE LA BASE (Marcelo, 31-oct: «Sí, aplícalo tú»): bulk_sell_from_stock ya no acuña otra factura si el cliente tiene una hecha
+//   por adelantado del mismo tipo e importe sin ligar, salvo «No es de esta venta» nombrando las que se vieron. La base simulada frena como la de verdad.
+//   Vuelta 1: escritas antes de cambiar la pantalla, contra v10.84.169.
+const frenoEnLaVentana = p => carrito(p).getByRole("alert").filter({ hasText: /hecha por adelantado/ }).first();
+// lo que el lector de pantalla dice del botón apagado: el texto de lo que nombra su aria-describedby
+const porQueDelBoton = p => botonVender(p).evaluate(b => { const id = b.getAttribute("aria-describedby"); const el = id && document.getElementById(id);
+  return el ? el.innerText.replace(/\s+/g, " ").trim() : ""; }).catch(() => "");
+await caso("vin-113-no-es-de-esta-venta-nombra-la-que-vio", "adelantadas=igual", async p => {
+  await ventaTipica(p); await espera(p, 400);
+  await carrito(p).getByRole("button", { name: /No es de esta venta/ }).click(); await espera(p, 300);
+  const b = botonVender(p); if (await b.isEnabled().catch(() => false)) { await b.click(); await espera(p, 700); }
+  const a = await aunque(p), v = await ventas(p), avs = await avisos(p);
+  ok("vin-113-no-es-de-esta-venta-nombra-la-que-vio", a.length === 1 && JSON.stringify(a[0].vistas) === '["F-234"]' && v.length === 0 && /✅/.test(avs),
+    `«No es de esta venta» ${a.length ? "manda la venta nombrando " + JSON.stringify(a[0].vistas) : "NO nombra la factura que vio"}; por el camino de siempre ${v.length} (la base la frena); ${/✅/.test(avs) ? "se vendió" : "NO se vendió («" + avs.slice(0, 140) + "»)"}`);
+});
+await caso("vin-114-con-dos-iguales-nombra-las-dos", "adelantadas=dos-iguales", async p => {
+  await ventaTipica(p); await espera(p, 400);
+  await carrito(p).getByRole("button", { name: /No es de esta venta/ }).click(); await espera(p, 300);
+  const b = botonVender(p); if (await b.isEnabled().catch(() => false)) { await b.click(); await espera(p, 700); }
+  const a = await aunque(p);
+  ok("vin-114-con-dos-iguales-nombra-las-dos", a.length === 1 && [...a[0].vistas].sort().join() === "F-234,F-240" && /✅/.test(await avisos(p)),
+    `con F-234 y F-240 del mismo importe, «No es de esta venta» ${a.length ? "nombra " + JSON.stringify(a[0].vistas) : "NO nombra las que vio"}`);
+});
+await caso("vin-115-el-freno-de-la-base-se-queda-en-la-ventana", "falla=frena", async p => {
+  await ventaTipica(p); await espera(p, 400);
+  const n0 = await textoDe(botonVender(p));
+  await botonVender(p).click(); await espera(p, 1000);
+  const al = frenoEnLaVentana(p); const hay = await al.count(); const t = hay ? await textoDe(al) : "";
+  const foco = await enfocado(p), avs = await avisos(p), sigue = await carrito(p).count();
+  ok("vin-115-el-freno-de-la-base-se-queda-en-la-ventana", /Vender y facturar todo/.test(n0) && !!hay && /No se registró la venta/.test(t) && /F-234/.test(t) && /\[alerta\]/.test(foco) && !/✅/.test(avs) && sigue === 1,
+    `al vender con «${n0}» y F-234 llegada después de leer: ${hay ? "el freno se queda en la ventana («" + t.slice(0, 140) + "»)" : "el freno NO se queda en la ventana (avisos: «" + avs.slice(0, 140) + "»)"}; foco en «${foco}»; carrito ${sigue ? "abierto" : "cerrado"}`);
+});
+await caso("vin-116-tras-el-freno-se-relee-y-se-ofrece-ligar", "falla=frena", async p => {
+  await ventaTipica(p); await espera(p, 400);
+  await botonVender(p).click(); await espera(p, 1200);
+  const leidas = (await leidasAd(p)).length, n = await textoDe(botonVender(p)), habil = await botonVender(p).isEnabled().catch(() => false);
+  if (habil && /ligar F-234/.test(n)) { await botonVender(p).click(); await espera(p, 800); }
+  const l = await ligadas(p), v = await ventas(p);
+  ok("vin-116-tras-el-freno-se-relee-y-se-ofrece-ligar", leidas >= 2 && /ligar F-234/.test(n) && habil && l.length === 1 && l[0].folio === "F-234" && v.length === 1,
+    `lecturas ${leidas} (tras el freno se vuelve a leer); el botón «${n}» ${habil ? "habilitado" : "apagado"}; ligadas ${l.length}, ventas por el camino de siempre ${v.length} (sólo la que frenó)`);
+});
+await caso("vin-117-con-remision-nombra-la-remision", "adelantadas=remision", async p => {
+  await ventaTipica(p); await espera(p, 400);
+  await carrito(p).getByRole("button", { name: /Cambiar a Remisión/ }).click(); await espera(p, 500);
+  await carrito(p).getByRole("button", { name: /No es de esta venta/ }).click(); await espera(p, 300);
+  const b = botonVender(p); if (await b.isEnabled().catch(() => false)) { await b.click(); await espera(p, 700); }
+  const a = await aunque(p);
+  ok("vin-117-con-remision-nombra-la-remision", a.length === 1 && JSON.stringify(a[0].vistas) === '["RS-41"]' && a[0].invoice_type === "remision" && (await ventas(p)).length === 0 && /✅/.test(await avisos(p)),
+    `con remisión y RS-41: ${a.length ? "nombra " + JSON.stringify(a[0].vistas) + " (" + a[0].invoice_type + ")" : "NO nombra RS-41"}; por el camino de siempre ${(await ventas(p)).length}`);
+});
+await caso("vin-118-sin-adelantadas-la-venta-de-siempre", "", async p => {
+  await ventaTipica(p); await espera(p, 400);
+  await botonVender(p).click(); await espera(p, 800);
+  const v = await ventas(p), a = await aunque(p);
+  ok("vin-118-sin-adelantadas-la-venta-de-siempre", v.length === 1 && a.length === 0 && /✅/.test(await avisos(p)), `sin facturas por adelantado: por el camino de siempre ${v.length}, nombrando ${a.length}`);
+});
+await caso("vin-119-con-ya-revise-el-freno-tambien-se-queda", "falla=frena-sin-leer", async p => {
+  await ventaTipica(p); await espera(p, 400);
+  const caja = carrito(p).getByLabel(/Ya revisé en CobranzaFlow/); if (await caja.count()) { await caja.check(); await espera(p, 200); }
+  await botonVender(p).click(); await espera(p, 1200);
+  const hay = await frenoEnLaVentana(p).count(); const n = await textoDe(botonVender(p));
+  ok("vin-119-con-ya-revise-el-freno-tambien-se-queda", !!hay && /ligar F-234/.test(n) && (await ventas(p)).length === 1,
+    `sin la primera lectura y con «Ya revisé»: el freno ${hay ? "se queda en la ventana" : "NO se queda en la ventana"}; luego el botón «${n}»`);
+});
+
+// ── v10.84.170, vuelta 2: por donde no se diseñó (escritas después del arreglo; las que cuidan una pieza se sabotean quitándola) ─────────────────────
+await caso("vin-120-doble-clic-con-no-es-vende-una-vez", "adelantadas=igual&lento=1", async p => {
+  await ventaTipica(p); await espera(p, 400);
+  await carrito(p).getByRole("button", { name: /No es de esta venta/ }).click(); await espera(p, 300);
+  await botonVender(p).evaluate(b => { b.click(); b.click(); }); await espera(p, 2200);
+  const a = await aunque(p);
+  ok("vin-120-doble-clic-con-no-es-vende-una-vez", a.length === 1 && (await ventas(p)).length === 0, `dos clics juntos con «No es de esta venta»: ${a.length} ventas nombrando (debe 1), ${(await ventas(p)).length} por el camino de siempre`);
+});
+await caso("vin-121-la-que-llega-despues-de-no-es-frena-y-se-vuelve-a-elegir", "adelantadas=igual&falla=frena-otra", async p => {
+  await ventaTipica(p); await espera(p, 400);
+  await carrito(p).getByRole("button", { name: /No es de esta venta/ }).click(); await espera(p, 300);
+  await botonVender(p).click(); await espera(p, 1200);
+  const t = await textoDe(frenoEnLaVentana(p)); const n = await textoDe(botonVender(p));
+  const no = carrito(p).getByRole("button", { name: /No es de esta venta/ }); const hayNo = await no.count();
+  if (hayNo) { await no.click(); await espera(p, 300); }
+  const b = botonVender(p); if (await b.isEnabled().catch(() => false)) { await b.click(); await espera(p, 800); }
+  const a = await aunque(p);
+  ok("vin-121-la-que-llega-despues-de-no-es-frena-y-se-vuelve-a-elegir", /F-241/.test(t) && /ligar F-2(34|41)/.test(n) && !!hayNo && a.length === 2
+      && [...a[1].vistas].sort().join() === "F-234,F-241" && /✅/.test(await avisos(p)),
+    `F-241 llegó después de «No es»: el freno ${/F-241/.test(t) ? "la nombra" : "NO la nombra («" + t.slice(0, 100) + "»)"}; el botón «${n}»; ${hayNo ? "otra vez «No es»" : "SIN «No es»"}; la segunda venta nombra ${a[1] ? JSON.stringify(a[1].vistas) : "—"}`);
+});
+await caso("vin-122-el-freno-con-la-relectura-caida-no-deja-vender", "falla=frena-y-lectura", async p => {
+  await ventaTipica(p); await espera(p, 400);
+  await botonVender(p).click(); await espera(p, 1200);
+  const t = await textoDe(frenoEnLaVentana(p)); const apagado = !(await botonVender(p).isEnabled().catch(() => true));
+  const dice = await porQueDelBoton(p);
+  ok("vin-122-el-freno-con-la-relectura-caida-no-deja-vender", /No se pudo volver a revisar/.test(t) && apagado && (await ventas(p)).length === 1 && /No se pudo volver a revisar/.test(dice),
+    `«${t.slice(0, 200)}»; el botón ${apagado ? "apagado" : "HABILITADO sin saber qué frenó"}; para el lector de pantalla dice «${dice.slice(0, 80)}»`);
+});
+await caso("vin-128-con-el-rechazo-el-boton-apagado-dice-por-que", "adelantadas=igual&falla=ya-ligada", async p => {
+  await ventaTipica(p); await espera(p, 400);
+  await botonVender(p).click(); await espera(p, 1000);
+  const apagado = !(await botonVender(p).isEnabled().catch(() => true)); const dice = await porQueDelBoton(p);
+  ok("vin-128-con-el-rechazo-el-boton-apagado-dice-por-que", apagado && /No se registró la venta/.test(dice) && /ya no está por ligar/.test(dice),
+    `con el rechazo: el botón ${apagado ? "apagado" : "HABILITADO"}; para el lector de pantalla dice «${dice.slice(0, 120) || "(nada)"}»`);
+});
+await caso("vin-123-el-freno-se-va-al-cambiar-de-cliente", "falla=frena", async p => {
+  await ventaTipica(p); await espera(p, 400);
+  await botonVender(p).click(); await espera(p, 1200);
+  const antes = await frenoEnLaVentana(p).count();
+  await elegirCliente(p, "TIENDAS CUADRA"); await espera(p, 600);
+  const despues = await frenoEnLaVentana(p).count();
+  ok("vin-123-el-freno-se-va-al-cambiar-de-cliente", antes === 1 && despues === 0, `con el freno: ${antes ? "está" : "NO está"}; a TIENDAS (otra venta): ${despues ? "SIGUE" : "se fue"}`);
+});
+await caso("vin-124-esc-con-el-freno-pregunta-y-lo-conserva", "falla=frena", async p => {
+  await ventaTipica(p); await espera(p, 400);
+  await botonVender(p).click(); await espera(p, 1200);
+  await esc(p);
+  const pregunta = await carrito(p).getByRole("alertdialog").count();
+  await carrito(p).getByRole("button", { name: "Seguir vendiendo" }).click().catch(() => {}); await espera(p, 250);
+  const sigue = await frenoEnLaVentana(p).count();
+  ok("vin-124-esc-con-el-freno-pregunta-y-lo-conserva", pregunta === 1 && sigue === 1, `Esc ${pregunta ? "pregunta" : "NO pregunta"}; al seguir, el freno ${sigue ? "sigue" : "SE PERDIÓ"}`);
+});
+await caso("vin-125-a-1366-el-freno-y-el-boton-se-ven", "falla=frena", async p => {
+  await ventaTipica(p); await espera(p, 400);
+  await botonVender(p).click(); await espera(p, 1200);
+  const al = await seVe(frenoEnLaVentana(p)), bo = await seVe(botonVender(p));
+  ok("vin-125-a-1366-el-freno-y-el-boton-se-ven", al && bo, `a 1366: el freno ${al ? "se ve" : "NO se ve"} y el botón ${bo ? "se ve" : "NO se ve"}`);
+});
+for (const [nombre, ancho, alto] of [["1366", 1366, 768], ["1920", 1920, 1080]]) {
+  await caso(`vin-126-el-freno-se-lee-${nombre}`, "falla=frena", async p => {
+    await ventaTipica(p); await espera(p, 400);
+    await botonVender(p).click(); await espera(p, 1200);
+    const hay = await frenoEnLaVentana(p).count(); const malos = await sinAA(p);
+    ok(`vin-126-el-freno-se-lee-${nombre}`, hay === 1 && malos.length === 0, !hay ? "no hay freno que medir" : malos.length ? "sin AA: " + malos.slice(0, 8).join(" | ") : "se lee");
+  }, { viewport: { width: ancho, height: alto } });
+}
+await caso("vin-127-con-no-es-los-pagos-capturados-viajan", "adelantadas=igual", async p => {
+  await ventaTipica(p); await espera(p, 400);
+  await carrito(p).getByRole("button", { name: /No es de esta venta/ }).click(); await espera(p, 400);
+  await pagadaPorTransferencia(p);
+  const b = botonVender(p); if (await b.isEnabled().catch(() => false)) { await b.click(); await espera(p, 800); }
+  const a = (await aunque(p))[0];
+  ok("vin-127-con-no-es-los-pagos-capturados-viajan", !!a && a.payment_status === "paid" && a.pagos.length === 1 && Math.abs(a.pagos[0] - 47560) < 0.005,
+    a ? `con «No es» y pagada por transferencia: ${a.payment_status}, pagos ${JSON.stringify(a.pagos)}` : "no se vendió nombrando la que vio");
+});
 
 await browser.close();
 for (const r of res) console.log(r);
