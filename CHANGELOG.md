@@ -12,6 +12,36 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.169b (base) — Sin contraseñas legibles en `public.users` — 31-oct-2026
+
+**Qué pasaba.** `public.users.password_hash`, la columna del login de antes de Supabase Auth, guardaba 8 de sus 10 valores en texto plano (los
+otros 2 parecían bcrypt). 6 de esas 10 cuentas todavía entraban con lo guardado, porque sus cuentas de Auth se crearon con la misma contraseña. Lo
+vi el 30-oct al buscar los uid para F-234, y Central lo midió aparte el 31-oct, sin imprimir ninguna.
+- **Nadie de fuera las podía leer:** RLS prendido y sin políticas; ningún permiso de tabla ni de columna para `anon` ni `authenticated`; y ninguna
+  función devuelve el renglón entero (revisadas todas las que leen `users`).
+- **Pero las veía quien administra la base:** el panel de Supabase, la llave de servicio y el conector de Claude.
+
+**Qué se cambió** (Marcelo, 31-oct: «Borrar columna y función»):
+- **Fuera `public.verify_user_password`:** era el login viejo y comparaba en texto. Nadie la llamaba desde v10.73.48, y ni `anon` ni `authenticated`
+  la podían ejecutar.
+- **Fuera la columna:** era el último paso del plan de `docs/migrations/supabase-auth-native.md`. Crear un usuario por SQL ya no la lleva.
+
+La app no cambió. `docs/migrations/v10.84.169b_sin_contrasenas_legibles.sql`.
+
+**Cómo se probó.**
+- **Ensayo con rollback, 6 de 6:** la columna y la función quedan fuera. Como Karla siguen contestando `get_user_session`, `pf_uid_role()`, las órdenes
+  con la RLS (1110) y `almacen.mi_perfil()`.
+- **Aplicada por la API** el 31-oct a las 13:09 con el OK de Marcelo (`v10_84_169b_sin_contrasenas_legibles`, 20261031190930).
+- **Revisada después** de la misma forma, sin escribir. Invariantes 91 de 91.
+
+**Vuelta atrás.** `docs/migrations/v10.84.169b_sin_contrasenas_legibles_vuelta_atras.sql`: regresa la columna (vacía y sin NOT NULL) y la función
+con sus permisos de antes. Las contraseñas no regresan, a propósito.
+
+**Para Marcelo.** Las contraseñas de esas cuentas siguen siendo las mismas en Auth: conviene cambiarlas en Supabase → Authentication cuando no
+estorbe (las cuentas son por área y Almacén usa las mismas).
+
+---
+
 ## v10.84.169 — El carrito con ligar, después de su crítica: el rechazo se queda, el pie fijo y la causa real — 31-oct-2026
 
 **Qué pasaba.** Marcelo, 31-oct: *«hagamos una pasada de /impeccable critique a lo que hiciste»*. La crítica (dos agentes aislados: revisión de

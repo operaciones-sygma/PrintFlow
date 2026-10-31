@@ -36,7 +36,8 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
   entra con un despliegue nuevo**, y regresar a un despliegue de antes de ponerla trae la de antes. Los recorridos contra la app publicada la mandan
   (`tests/recorrido/sitio.mjs`, credencial en `claude-navegador\credencial-sitio.json`); la tanda `middleware` lo vigila.
 - **Auth:** Supabase Auth (identidades **separadas** de CobranzaFlow; `public.users.user_id` = uid de
-  Auth, `public.users.id` NO). Rol en `public.users.role`; en base `pf_uid_role()`,
+  Auth, `public.users.id` NO; desde v10.84.169b ya no tiene `password_hash` ni existe `verify_user_password`, el login de antes de Auth).
+  Rol en `public.users.role`; en base `pf_uid_role()`,
   `verify_actor_role(p_actor, roles[])` (JWT-first: la identidad la da `auth.uid()`, `p_actor` es
   etiqueta). 🔥 **Toda salida es `signOut({scope:"local"})`**: un `signOut()` a secas es GLOBAL y cierra esa cuenta en todas las
   estaciones (las cuentas son por área) y en Almacén, que usa las mismas (`grep -n "signOut("` antes de subir). Desde v10.84.71 la

@@ -253,7 +253,8 @@ Esto NO bloquea el go-live. Una vez que login funciona via Auth, se pueden ir ag
 
 - [ ] Verificar que nadie usa `db.login` viejo
 - [ ] DROP `verify_user_password` y `get_user_session` RPCs viejas
-- [ ] Después de 1 semana sin issues: DROP `public.users.password_hash` (mantener username + role + display_name)
+- [x] Después de 1 semana sin issues: DROP `public.users.password_hash` (mantener username + role + display_name) — hecho el 31-oct-2026 en
+  v10.84.169b, junto con `verify_user_password` (la columna seguía guardando contraseñas legibles).
 - [ ] Después de 2 semanas: eliminar fallback a `public.users` en `verify_actor_role` (solo user_profiles)
 
 ---
