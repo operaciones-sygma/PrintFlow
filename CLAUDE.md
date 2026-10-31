@@ -177,6 +177,16 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
   notifications, notes, purchase_orders, **order_invoice_splits**). Una tabla nueva debe entrar a la
   publicación `supabase_realtime`.
 - **Storage:** bucket `order-files` **privado** desde 18-ago (lectura firmada).
+- 🔑 **Lo que Almacén lee o liga de PrintFlow** (medido en la base el 31-oct; si cambia, avisar ANTES a la conversación de Almacén): las listas de
+  Almacén se quedan cortas sin avisar.
+  - `public.maquinas_fichas`: la leen `almacen.fichas_de_planta()` y `almacen._pieza_planta_que_frena` (el equipo con la ficha de «Planta»).
+  - `public.orders(id)`: `almacen.vales`, `almacen.movimientos` y `almacen.requisiciones` la ligan `on delete set null` (y `almacen.activos.machine_id`
+    a `public.machines(id)`, igual). Almacén no frena borrar un pedido: sus vales se quedan con el folio escrito y pierden la liga.
+  - `public.orders` y `public.order_timeline`: `almacen._impresos` (los impresos sin vale, A9), `pedidos_para_vale`, `pedidos_para_requisicion`,
+    `_pedido_de`, `carrito_mandar`, `impreso_no_lleva_vale` e `impreso_quitar_marca` leen id, production_number, client, product, paper_type,
+    paper_grammage, paper_size, quantity, notes, created_at, delivered_at, order_type ('interna'), source ('stock') y stage ('cancelled',
+    'maq_cancelled', 'delivered', 'maq_delivered', 'web_pending', 'web_rejected'). De la bitácora, `to_stage` ('in_production', 'packaging', 'salidas'):
+    si un pedido se mueve sin escribirla, A9 no lo ve. La app de Almacén busca en las notas «EL CLIENTE TRAE EL PAPEL».
 - **Migraciones:** se aplican con `apply_migration` del MCP y viven en
   `supabase_migrations.schema_migrations`; copia legible de las de facturación en
   `docs/migrations/v10.84.*.sql`. Ver `cobranzaflow/supabase/migrations/LEEME-*.md`.
