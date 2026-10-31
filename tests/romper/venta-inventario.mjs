@@ -708,10 +708,12 @@ await caso("vin-64-no-es-de-esta-venta-emite-otra", "adelantadas=igual", async p
 await caso("vin-65-la-base-rechaza-el-ligado", "adelantadas=igual&falla=ligar", async p => {
   await ventaTipica(p); await espera(p, 400);
   const b = botonVender(p); if (await b.isEnabled().catch(() => false)) { await b.click(); await espera(p, 700); }
-  const a = await avisos(p), cerro = (await lineas(p, "cerrar")).length > 0;
+  // 🔧 Ajustada por diseño en v10.84.169 (la crítica, P1): el rechazo ya no es un aviso de 7 s abajo; se queda DENTRO del carrito, con role="alert"
+  const a = await textoDe(carrito(p).getByRole("alert").filter({ hasText: /No se registró la venta/ }).first()), avs = await avisos(p);
+  const cerro = (await lineas(p, "cerrar")).length > 0;
   const sigue = await carrito(p).count();
-  ok("vin-65-la-base-rechaza-el-ligado", /ya está ligada/.test(a) && !/✅/.test(a) && !cerro && sigue === 1 && (await ligadas(p)).length === 1,
-    `avisos «${a.slice(0, 160)}»; ${cerro ? "SE CERRÓ" : "no se cerró"}; carrito ${sigue ? "abierto" : "cerrado"}; intentos de ligar ${(await ligadas(p)).length}`);
+  ok("vin-65-la-base-rechaza-el-ligado", /ya está ligada/.test(a) && !/✅/.test(avs) && !cerro && sigue === 1 && (await ligadas(p)).length === 1,
+    `en el carrito «${a.slice(0, 160)}»; ${cerro ? "SE CERRÓ" : "no se cerró"}; carrito ${sigue ? "abierto" : "cerrado"}; intentos de ligar ${(await ligadas(p)).length}`);
 });
 
 // ── v10.84.168, vuelta 2: por donde no se diseñó (escritas después del arreglo; las que dependen de una pieza se sabotearon quitándola) ──────────────
@@ -810,7 +812,8 @@ await caso("vin-75-pagos-capturados-antes-de-ligar-se-dicen", "adelantadas=igual
   await elegirCliente(p); await espera(p, 300);
   await carrito(p).getByRole("button", { name: /^Pagada/ }).click(); await espera(p, 200);
   await piezas(p, "Etiqueta colgante", 10000); await espera(p, 300);
-  const caja = carrito(p).getByLabel(/Capturaste un pago: al ligar no se registra aquí/);
+  // 🔧 Ajustada por diseño en v10.84.169: la casilla dice el pago con su monto («Capturaste un pago por $…: al ligar…»)
+  const caja = carrito(p).getByLabel(/Capturaste un pago( por [^:]+)?: al ligar no se registra aquí/);
   const hay = await caja.count(); const antes = await botonVender(p).isEnabled();
   if (hay) { await caja.check(); await espera(p, 150); }
   const despues = await botonVender(p).isEnabled();
@@ -868,7 +871,8 @@ await caso("vin-81-se-lee-por-el-cliente-de-la-venta", "adelantadas=igual", asyn
 await caso("vin-83-si-otro-la-ligo-ya-no-se-ofrece", "adelantadas=igual&falla=ya-ligada", async p => {
   await ventaTipica(p); await espera(p, 400);
   await botonVender(p).click(); await espera(p, 900);
-  const a = await avisos(p); const n = await textoDe(botonVender(p)); const leidas = await leidasAd(p);
+  // 🔧 Ajustada por diseño en v10.84.169: el porqué del rechazo se lee en el carrito (role="alert"), no en el aviso de abajo
+  const a = await textoDe(carrito(p).getByRole("alert").filter({ hasText: /No se registró la venta/ }).first()); const n = await textoDe(botonVender(p)); const leidas = await leidasAd(p);
   ok("vin-83-si-otro-la-ligo-ya-no-se-ofrece", /ya está ligada/.test(a) && !/ligar F-234/.test(n) && leidas.length === 2,
     `${/ya está ligada/.test(a) ? "dice que ya está ligada" : "NO dice por qué no ligó"}; después el botón «${n}» (no debe ofrecer F-234 otra vez); lecturas ${leidas.length} (debe releer: 2)`);
 });
@@ -882,6 +886,267 @@ await caso("vin-82-una-remision-por-adelantado-se-liga-con-remision", "adelantad
   ok("vin-82-una-remision-por-adelantado-se-liga-con-remision", !/ligar/i.test(n1) && /ligar RS-41/.test(n2) && /¿es la remisión de esta venta\?/.test(t) && l?.folio === "RS-41" && Math.abs(l.total_amount - 41000) < 0.005,
     `con factura «${n1}» (RS-41 es remisión: no se liga); con remisión «${n2}»; ${l ? "liga " + l.folio + " por " + l.total_amount : "no liga"}`);
 });
+
+// ── v10.84.169 — LA CRÍTICA DEL CARRITO CON LIGAR (/impeccable critique, 31-oct, revisor independiente: 24/40; Marcelo eligió los 2 P1 y los 3 P2, ligar
+//   por omisión con la comparación a la vista, pie fijo). Vuelta 1: escritas antes de los arreglos, contra v10.84.168.
+// Lo que se ve de verdad (no la caja que mide Playwright): el centro del elemento lo toca él mismo y no algo encima o un recorte del scroll
+const seVe = loc => loc.evaluate(el => { const r = el.getBoundingClientRect(); if (!r.width || !r.height) return false;
+  const e = document.elementFromPoint(r.left + r.width / 2, r.top + Math.min(r.height / 2, 12)); return !!e && (e === el || el.contains(e)); }).catch(() => false);
+const enfocado = p => p.evaluate(() => { const a = document.activeElement; if (!a || a === document.body) return "body";
+  return (a.getAttribute("aria-label") || a.innerText || a.tagName || "").replace(/\s+/g, " ").slice(0, 90) + (a.closest('[role="alert"]') ? " [alerta]" : "") + (a.closest('[aria-labelledby="pf-venta-liga"]') ? " [caja de ligar]" : ""); });
+const pieCaptura = async p => { const c = carrito(p).locator("[data-captura]"); return (await c.count()) ? c.first() : carrito(p).locator("div[style*='max-height']").last(); };
+const alerta = p => carrito(p).getByRole("alert").filter({ hasText: /No se registró la venta/ }).first();
+// P1 — el rechazo del ligado
+await caso("vin-84-el-rechazo-se-queda-y-no-ofrece-el-duplicado", "adelantadas=igual&falla=ya-ligada", async p => {
+  await ventaTipica(p); await espera(p, 400);
+  await botonVender(p).click(); await espera(p, 1000);
+  const hay = await alerta(p).count(); const t = hay ? await textoDe(alerta(p)) : "";
+  const apagado = !(await botonVender(p).isEnabled().catch(() => true));
+  const foco = await enfocado(p);
+  const otra = carrito(p).getByRole("button", { name: /Es otra venta: emitir factura nueva/ });
+  const hayOtra = await otra.count(); if (hayOtra) { await otra.click(); await espera(p, 700); }
+  const despues = await botonVender(p).isEnabled().catch(() => false); const n = await textoDe(botonVender(p));
+  ok("vin-84-el-rechazo-se-queda-y-no-ofrece-el-duplicado", !!hay && /ya está ligada a OC-1080/.test(t) && /si fue esta misma venta/i.test(t) && apagado && /\[alerta\]/.test(foco) && !!hayOtra && despues && /Vender y facturar todo/.test(n),
+    `${hay ? "el rechazo se queda en el carrito" : "el rechazo NO se queda en el carrito"} («${t.slice(0, 120)}»); el botón principal ${apagado ? "apagado" : "HABILITADO para emitir otra"}; foco en «${foco}»; ${hayOtra ? "«Es otra venta» lo destraba: «" + n + "» " + (despues ? "habilitado" : "apagado") : "NO hay «Es otra venta»"}`);
+});
+await caso("vin-85-rechazo-sin-ligar-deja-volver-a-intentar", "adelantadas=igual&falla=ligar", async p => {
+  await ventaTipica(p); await espera(p, 400);
+  await botonVender(p).click(); await espera(p, 1000);
+  const t = await textoDe(alerta(p)); const apagado = !(await botonVender(p).isEnabled().catch(() => true));
+  const otraVez = carrito(p).getByRole("button", { name: /Volver a intentar ligar F-234/ });
+  const hay = await otraVez.count(); if (hay) { await otraVez.click(); await espera(p, 700); }
+  const n = await textoDe(botonVender(p)); const habil = await botonVender(p).isEnabled().catch(() => false);
+  ok("vin-85-rechazo-sin-ligar-deja-volver-a-intentar", /F-234 sigue sin ligar/.test(t) && apagado && !!hay && /ligar F-234/.test(n) && habil,
+    `${/sigue sin ligar/.test(t) ? "dice que F-234 sigue sin ligar" : "NO dice que F-234 sigue sin ligar («" + t.slice(0, 100) + "»)"}; botón ${apagado ? "apagado" : "HABILITADO"}; ${hay ? "«Volver a intentar» deja «" + n + "» " + (habil ? "habilitado" : "apagado") : "NO hay «Volver a intentar ligar F-234»"}`);
+});
+// P1 — a 1366, el botón, la comparación y el porqué a la vista
+await caso("vin-86-a-1366-el-boton-y-la-comparacion-se-ven", "adelantadas=igual", async p => {
+  await ventaTipica(p); await espera(p, 500);
+  const boton = await seVe(botonVender(p));
+  const comp = carrito(p).getByText(/F-234 \$47,560\.00 = esta venta \$47,560\.00/).first();
+  const hayComp = await comp.count(); const veComp = hayComp ? await seVe(comp) : false; const tc = hayComp ? await textoDe(comp) : "";
+  ok("vin-86-a-1366-el-boton-y-la-comparacion-se-ven", boton && veComp && /emitida el 28-oct/.test(tc),
+    `a 1366: el botón ${boton ? "se ve" : "NO se ve sin bajar"}; ${hayComp ? "la comparación " + (veComp ? "se ve" : "NO se ve") + " («" + tc + "»)" : "NO hay comparación «F-234 $47,560.00 = esta venta $47,560.00»"}`);
+});
+await caso("vin-87-a-1366-el-boton-apagado-dice-por-que", "adelantadas=igual&falla=adelantadas", async p => {
+  await ventaTipica(p); await espera(p, 500);
+  const b = botonVender(p); const apagado = !(await b.isEnabled());
+  const desc = await b.getAttribute("aria-describedby");
+  const por = desc ? carrito(p).locator("#" + desc) : null;
+  const t = por && await por.count() ? await textoDe(por) : ""; const ve = por && await por.count() ? await seVe(por) : false;
+  const veBoton = await seVe(b);
+  ok("vin-87-a-1366-el-boton-apagado-dice-por-que", apagado && veBoton && ve && /No se pudo revisar/.test(t),
+    `apagado ${apagado}; el botón ${veBoton ? "se ve" : "NO se ve"}; su porqué ${desc ? (ve ? "se ve" : "NO se ve") + " («" + t.slice(0, 120) + "»)" : "NO está ligado al botón (aria-describedby)"}`);
+});
+await caso("vin-88-el-boton-apagado-se-lee", "adelantadas=igual&falla=adelantadas", async p => {
+  await ventaTipica(p); await espera(p, 500);
+  const r = await botonVender(p).evaluate(el => { const s = getComputedStyle(el); const n = c => (c.match(/[\d.]+/g) || []).map(Number);
+    const lum = ([r, g, b]) => { const f = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+    let fondo = n(s.backgroundColor); if (fondo.length === 4 && fondo[3] < 1) fondo = fondo.slice(0, 3).map(v => v * fondo[3] + 255 * (1 - fondo[3]));
+    const a = lum(n(s.color)), b = lum(fondo); return { op: Number(s.opacity), k: (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) }; });
+  ok("vin-88-el-boton-apagado-se-lee", r.op === 1 && r.k >= 4.5, `el botón apagado: opacidad ${r.op} (debe 1: un estado no se dice con opacidad), contraste ${r.k.toFixed(2)}:1 (debe ≥4.5)`);
+});
+await caso("vin-89-la-caja-que-aparece-se-trae-a-la-vista", "adelantadas=igual", async p => {
+  await abrirCarrito(p);
+  await agregar(p, "China blanco (relleno)"); await agregar(p, "Etiqueta colgante");
+  await kilos(p, "China blanco (relleno)", 500); await piezas(p, "Etiqueta colgante", 10000);
+  await elegirCliente(p, "TIENDAS CUADRA"); await espera(p, 400);
+  const pie = await pieCaptura(p); await pie.evaluate(e => e.scrollTo({ top: e.scrollHeight, behavior: "instant" })); await espera(p, 150);
+  await elegirCliente(p, "MANUFACTURERA DE BOTAS CUADRA"); await espera(p, 700);
+  const caja = carrito(p).locator("#pf-venta-liga"); const ve = await caja.count() ? await seVe(caja) : false;
+  ok("vin-89-la-caja-que-aparece-se-trae-a-la-vista", ve, ve ? "la pregunta de F-234 queda a la vista" : "la pregunta de F-234 aparece fuera de la vista (arriba del scroll del pie)");
+}, { viewport: { width: 1366, height: 768 } });
+// P2 — el foco, el anuncio y el tope de la lectura
+await caso("vin-90-no-es-lleva-el-foco-a-lo-nuevo", "adelantadas=igual", async p => {
+  await ventaTipica(p); await espera(p, 400);
+  await carrito(p).getByRole("button", { name: /No es de esta venta/ }).focus(); await p.keyboard.press("Enter"); await espera(p, 700);
+  const f = await enfocado(p);
+  ok("vin-90-no-es-lleva-el-foco-a-lo-nuevo", /Ligar F-234/.test(f), `después de «No es de esta venta» el foco está en «${f}» (debe ir a «Ligar F-234»)`);
+});
+await caso("vin-91-ligar-de-regreso-lleva-el-foco-a-la-caja", "adelantadas=igual", async p => {
+  await ventaTipica(p); await espera(p, 400);
+  await carrito(p).getByRole("button", { name: /No es de esta venta/ }).click(); await espera(p, 700);
+  await carrito(p).getByRole("button", { name: /^Ligar F-234/ }).focus(); await p.keyboard.press("Enter"); await espera(p, 700);
+  const f = await enfocado(p);
+  ok("vin-91-ligar-de-regreso-lleva-el-foco-a-la-caja", /\[caja de ligar\]/.test(f), `después de «Ligar F-234» el foco está en «${f}» (debe ir a la caja de ligar)`);
+});
+await caso("vin-92-reintentar-no-tira-el-foco", "adelantadas=igual&falla=adelantadas1", async p => {
+  await ventaTipica(p); await espera(p, 400);
+  await carrito(p).getByRole("button", { name: /Reintentar/ }).focus(); await p.keyboard.press("Enter"); await espera(p, 700);
+  const f = await enfocado(p); const dentro = await p.evaluate(() => !!document.activeElement?.closest('[role="dialog"]'));
+  ok("vin-92-reintentar-no-tira-el-foco", f !== "body" && dentro, `después de «Reintentar» el foco está en «${f}»${dentro ? "" : " (fuera del carrito)"}`);
+});
+await caso("vin-93-la-caja-se-anuncia", "adelantadas=igual", async p => {
+  await abrirCarrito(p);
+  await agregar(p, "China blanco (relleno)"); await agregar(p, "Etiqueta colgante");
+  await kilos(p, "China blanco (relleno)", 500); await piezas(p, "Etiqueta colgante", 10000);
+  const region = carrito(p).locator('[aria-live="polite"][data-anuncio]');
+  const antes = await region.count(); const tAntes = antes ? (await region.first().textContent()) || "" : "";
+  await elegirCliente(p); await espera(p, 700);
+  const tDespues = antes ? (await region.first().textContent()) || "" : "";
+  ok("vin-93-la-caja-se-anuncia", antes === 1 && !/F-234/.test(tAntes) && /F-234/.test(tDespues) && /Vender y ligar F-234/.test(tDespues),
+    antes ? `antes «${tAntes}», después «${tDespues}»` : "no hay una región viva (aria-live) que exista antes de que aparezca la caja");
+});
+await caso("vin-94-la-lectura-tiene-tope-y-lo-que-llega-tarde-se-dice", "adelantadas=igual&lentoAd=10", async p => {
+  await ventaTipica(p); await espera(p, 8600);
+  const t1 = await textoDe(carrito(p)); const apagado = !(await botonVender(p).isEnabled().catch(() => true));
+  const reintentar = await carrito(p).getByRole("button", { name: /Reintentar/ }).count();
+  await espera(p, 2200);
+  const t2 = await textoDe(carrito(p)); const n = await textoDe(botonVender(p));
+  ok("vin-94-la-lectura-tiene-tope-y-lo-que-llega-tarde-se-dice", /está tardando/.test(t1) && apagado && reintentar > 0 && /Llegó la revisión que tardaba/.test(t2) && /ligar F-234/.test(n),
+    `a los 8.6 s ${/está tardando/.test(t1) ? "dice que está tardando" : "NO dice que está tardando"}${reintentar ? " con «Reintentar»" : " y sin «Reintentar»"} (botón ${apagado ? "apagado" : "HABILITADO"}); a los 10.8 s ${/Llegó la revisión que tardaba/.test(t2) ? "dice que llegó" : "NO dice que llegó la revisión"} y el botón «${n}»`);
+});
+await caso("vin-95-el-select-de-cual-ligar-ensena-su-foco", "adelantadas=dos-iguales", async p => {
+  await ventaTipica(p); await espera(p, 400);
+  const sel = carrito(p).getByLabel("Cuál factura hecha por adelantado se liga");
+  await carrito(p).locator("select").filter({ has: p.locator("option", { hasText: "MANUFACTURERA" }) }).first().focus();
+  await p.keyboard.press("Tab"); await espera(p, 150);
+  const r = await sel.evaluate(el => ({ activo: document.activeElement === el, outline: getComputedStyle(el).outlineStyle, sombra: getComputedStyle(el).boxShadow })).catch(() => ({ activo: false }));
+  ok("vin-95-el-select-de-cual-ligar-ensena-su-foco", r.activo && r.outline !== "none", `con Tab ${r.activo ? "llega al select" : "NO llega al select"}; su contorno: ${r.outline} (no debe ser «none»)`);
+});
+// P2 — los pagos capturados, con sus cifras
+await caso("vin-96-los-pagos-capturados-se-dicen-con-cifras-y-se-anotan", "adelantadas=igual", async p => {
+  await abrirCarrito(p);
+  await agregar(p, "China blanco (relleno)"); await agregar(p, "Etiqueta colgante");
+  await kilos(p, "China blanco (relleno)", 500); await piezas(p, "Etiqueta colgante", 9999);
+  await elegirCliente(p); await espera(p, 400);
+  await carrito(p).getByRole("button", { name: /^Pagada/ }).click(); await espera(p, 250);
+  await piezas(p, "Etiqueta colgante", 10000); await espera(p, 400);
+  const caja = carrito(p).getByLabel(/Capturaste un pago por \$47,557\.56/);
+  const hay = await caja.count(); if (hay) { await caja.check(); await espera(p, 150); }
+  if (await botonVender(p).isEnabled().catch(() => false)) { await botonVender(p).click(); await espera(p, 700); }
+  const l = (await ligadas(p))[0];
+  ok("vin-96-los-pagos-capturados-se-dicen-con-cifras-y-se-anotan", !!hay && !!l && /47,557\.56/.test(l.notas || ""),
+    `${hay ? "la casilla dice el monto ($47,557.56)" : "la casilla NO dice el monto del pago capturado"}; ${l ? "la venta anota: «" + (l.notas || "(nada)") + "»" : "no ligó"}`);
+});
+await caso("vin-97-mientras-revisa-no-se-capturan-pagos", "adelantadas=otro-importe&lentoAd=1", async p => {
+  await abrirCarrito(p);
+  await agregar(p, "China blanco (relleno)"); await agregar(p, "Etiqueta colgante");
+  await kilos(p, "China blanco (relleno)", 500); await piezas(p, "Etiqueta colgante", 10000);
+  await elegirCliente(p); await espera(p, 200);
+  const durante = await carrito(p).getByRole("button", { name: /^No pagada/ }).count();
+  await espera(p, 1900);
+  const despues = await carrito(p).getByRole("button", { name: /^No pagada/ }).count();
+  ok("vin-97-mientras-revisa-no-se-capturan-pagos", durante === 0 && despues === 1, `mientras revisa, el selector de pagos ${durante ? "SÍ está" : "no está"}; al llegar la lectura ${despues ? "está" : "NO está"}`);
+});
+// P2 — «de otro importe» con su causa real
+await caso("vin-98-una-remision-con-factura-dice-el-tipo-y-ofrece-cambiar", "adelantadas=remision", async p => {
+  await ventaTipica(p); await espera(p, 400);
+  const t = await textoDe(carrito(p));
+  const cambiar = carrito(p).getByRole("button", { name: /Cambiar a Remisión/ });
+  const hay = await cambiar.count(); if (hay) { await cambiar.click(); await espera(p, 500); }
+  const n = await textoDe(botonVender(p));
+  ok("vin-98-una-remision-con-factura-dice-el-tipo-y-ofrece-cambiar", /RS-41 es remisión por \$41,000\.00, lo que suma esta venta sin IVA/.test(t) && !/revisa las cantidades y los precios/i.test(t) && !!hay && /ligar RS-41/.test(n),
+    `${/RS-41 es remisión/.test(t) ? "dice que RS-41 es remisión por lo que suma sin IVA" : "NO dice la causa (es remisión, sin IVA)"}${/revisa las cantidades y los precios/i.test(t) ? "; SIGUE el consejo de mover precios" : ""}; ${hay ? "«Cambiar a Remisión» deja «" + n + "»" : "NO ofrece cambiar a Remisión"}`);
+});
+await caso("vin-99-la-del-subtotal-sin-iva-lo-dice", "adelantadas=igual-sin-iva", async p => {
+  await ventaTipica(p); await espera(p, 400);
+  const t = await textoDe(carrito(p));
+  ok("vin-99-la-del-subtotal-sin-iva-lo-dice", /F-234 por \$41,000\.00 · lo mismo que esta venta sin IVA/.test(t), /lo mismo que esta venta sin IVA/.test(t) ? "dice que F-234 es lo de esta venta sin IVA" : "NO dice que F-234 es justo lo de esta venta sin IVA");
+});
+await caso("vin-100-otro-importe-dice-la-diferencia", "adelantadas=otro-importe", async p => {
+  await ventaTipica(p); await espera(p, 400);
+  const t = await textoDe(carrito(p));
+  ok("vin-100-otro-importe-dice-la-diferencia", /\$2,440\.00 más que esta venta/.test(t) && !/revisa las cantidades y los precios/i.test(t),
+    `${/\$2,440\.00 más que esta venta/.test(t) ? "dice la diferencia ($2,440.00 más)" : "NO dice la diferencia"}${/revisa las cantidades y los precios/i.test(t) ? "; SIGUE el consejo de mover precios" : ""}`);
+});
+await caso("vin-101-con-remision-los-botones-dicen-remision", "adelantadas=remision", async p => {
+  await ventaTipica(p); await espera(p, 400);
+  await carrito(p).getByRole("button", { name: /^Remisión$/ }).click(); await espera(p, 400);
+  const no = carrito(p).getByRole("button", { name: /No es de esta venta/ });
+  const nombre = await no.count() ? await textoDe(no) : "";
+  if (await no.count()) { await no.click(); await espera(p, 700); }
+  const t = await textoDe(carrito(p));
+  ok("vin-101-con-remision-los-botones-dicen-remision", /emitir remisión nueva/.test(nombre) && /Se emite una remisión nueva/.test(t),
+    `el botón dice «${nombre}»; después ${/Se emite una remisión nueva/.test(t) ? "dice «Se emite una remisión nueva»" : "NO dice que se emite una remisión"}`);
+});
+
+// ── v10.84.169, vuelta 2: por donde no se diseñó (escritas después de los arreglos; las que cuidan una pieza se sabotean quitándola) ─────────────────
+await caso("vin-102-el-rechazo-se-va-al-cambiar-de-cliente", "adelantadas=igual&falla=ya-ligada", async p => {
+  await ventaTipica(p); await espera(p, 400);
+  await botonVender(p).click(); await espera(p, 1000);
+  const antes = await alerta(p).count();
+  await elegirCliente(p, "TIENDAS CUADRA"); await espera(p, 600);
+  const despues = await alerta(p).count(); const habil = await botonVender(p).isEnabled().catch(() => false);
+  ok("vin-102-el-rechazo-se-va-al-cambiar-de-cliente", antes === 1 && despues === 0 && habil, `con el rechazo: ${antes ? "está" : "NO está"}; a TIENDAS (otra venta): ${despues ? "SIGUE" : "se fue"}, el botón ${habil ? "habilitado" : "apagado"}`);
+});
+await caso("vin-103-esc-con-el-rechazo-pregunta-y-lo-conserva", "adelantadas=igual&falla=ya-ligada", async p => {
+  await ventaTipica(p); await espera(p, 400);
+  await botonVender(p).click(); await espera(p, 1000);
+  await esc(p);
+  const pregunta = await carrito(p).getByRole("alertdialog").count();
+  await carrito(p).getByRole("button", { name: "Seguir vendiendo" }).click().catch(() => {}); await espera(p, 250);
+  const sigue = await alerta(p).count(); const apagado = !(await botonVender(p).isEnabled().catch(() => true));
+  ok("vin-103-esc-con-el-rechazo-pregunta-y-lo-conserva", pregunta === 1 && sigue === 1 && apagado, `Esc ${pregunta ? "pregunta" : "NO pregunta"}; al seguir, el rechazo ${sigue ? "sigue" : "SE PERDIÓ"} y el botón ${apagado ? "apagado" : "HABILITADO"}`);
+});
+await caso("vin-104-salir-sin-vender-desde-el-rechazo", "adelantadas=igual&falla=ya-ligada", async p => {
+  await ventaTipica(p); await espera(p, 400);
+  await botonVender(p).click(); await espera(p, 1000);
+  await alerta(p).getByRole("button", { name: "Salir sin vender" }).click(); await espera(p, 500);
+  const abierto = await carrito(p).count();
+  ok("vin-104-salir-sin-vender-desde-el-rechazo", abierto === 0 && (await ventas(p)).length === 0, `«Salir sin vender» ${abierto ? "NO cerró el carrito" : "cerró el carrito"}; ventas con folio nuevo ${(await ventas(p)).length}`);
+});
+await caso("vin-105-sin-red-no-se-afirma-y-la-relectura-lo-aclara", "adelantadas=igual&falla=red-ligar", async p => {
+  await ventaTipica(p); await espera(p, 400);
+  await botonVender(p).click(); await espera(p, 1000);
+  const t = await textoDe(carrito(p).getByRole("alert").filter({ hasText: /se registró la venta/ }).first());
+  const apagado = !(await botonVender(p).isEnabled().catch(() => true));
+  ok("vin-105-sin-red-no-se-afirma-y-la-relectura-lo-aclara", /No se sabe si se registró la venta: sin conexión/.test(t) && /ya no está por ligar: si fue esta misma venta/.test(t) && apagado,
+    `«${t.slice(0, 200)}»; el botón ${apagado ? "apagado" : "HABILITADO"}`);
+});
+await caso("vin-106-sin-red-y-sigue-sin-ligar", "adelantadas=igual&falla=red-ligar-sin", async p => {
+  await ventaTipica(p); await espera(p, 400);
+  await botonVender(p).click(); await espera(p, 1000);
+  const t = await textoDe(carrito(p).getByRole("alert").filter({ hasText: /se registró la venta/ }).first());
+  const otraVez = await carrito(p).getByRole("button", { name: /Volver a intentar ligar F-234/ }).count();
+  ok("vin-106-sin-red-y-sigue-sin-ligar", /No se sabe si se registró la venta/.test(t) && /F-234 sigue sin ligar: no se registró\./.test(t) && otraVez === 1, `«${t.slice(0, 200)}»; ${otraVez ? "con" : "SIN"} «Volver a intentar»`);
+});
+await caso("vin-107-sin-relectura-no-ofrece-emitir-otra", "adelantadas=igual&falla=ligar-y-lectura", async p => {
+  await ventaTipica(p); await espera(p, 400);
+  await botonVender(p).click(); await espera(p, 1000);
+  const t = await textoDe(carrito(p).getByRole("alert").filter({ hasText: /se registró la venta/ }).first());
+  const otra = await carrito(p).getByRole("button", { name: /Es otra venta/ }).count(); const apagado = !(await botonVender(p).isEnabled().catch(() => true));
+  ok("vin-107-sin-relectura-no-ofrece-emitir-otra", /No se pudo volver a revisar/.test(t) && otra === 0 && apagado, `«${t.slice(0, 200)}»; «Es otra venta» ${otra ? "SE OFRECE sin saber cómo quedó" : "no se ofrece"}; el botón ${apagado ? "apagado" : "HABILITADO"}`);
+});
+await caso("vin-108-tarde-con-ya-revise-y-luego-llega", "adelantadas=igual&lentoAd=10", async p => {
+  await ventaTipica(p); await espera(p, 8600);
+  const caja = carrito(p).getByLabel(/Ya revisé en CobranzaFlow/); if (await caja.count()) { await caja.check(); await espera(p, 200); }
+  const n1 = await textoDe(botonVender(p)); const h1 = await botonVender(p).isEnabled().catch(() => false);
+  await espera(p, 2200);
+  const n2 = await textoDe(botonVender(p)); const t = await textoDe(carrito(p));
+  const anunciado = (await carrito(p).locator('[aria-live="polite"][data-anuncio]').first().textContent().catch(() => "")) || "";
+  ok("vin-108-tarde-con-ya-revise-y-luego-llega", h1 && /Vender y facturar todo/.test(n1) && /Llegó la revisión que tardaba/.test(t) && /ligar F-234/.test(n2) && /Vender y ligar F-234/.test(anunciado),
+    `con «Ya revisé» a los 8.6 s: «${n1}» ${h1 ? "habilitado" : "apagado"}; al llegar: ${/Llegó/.test(t) ? "lo dice" : "NO lo dice"}, el botón «${n2}», anuncio «${anunciado}»`);
+});
+await caso("vin-109-a-1366-el-precio-faltante-se-ve-junto-al-boton", "", async p => {
+  await abrirCarrito(p);
+  await agregar(p, "Cordón para Etiqueta"); await agregar(p, "Etiqueta colgante");
+  await piezas(p, "Cordón para Etiqueta", 2000); await piezas(p, "Etiqueta colgante", 1000);
+  await elegirCliente(p); await espera(p, 400);
+  const linea = carrito(p).locator("#pf-venta-falta").getByText(/Falta el precio de Cordón para Etiqueta/);
+  const ve = await linea.count() ? await seVe(linea.first()) : false; const veBoton = await seVe(botonVender(p));
+  ok("vin-109-a-1366-el-precio-faltante-se-ve-junto-al-boton", ve && veBoton, `a 1366: el botón ${veBoton ? "se ve" : "NO se ve"} y «Falta el precio…» ${ve ? "se ve junto a él" : "NO se ve junto a él"}`);
+});
+for (const [nombre, query, ancho, alto] of [["rechazo-1366", "adelantadas=igual&falla=ya-ligada", 1366, 768], ["lectura-caida-1920", "adelantadas=igual&falla=adelantadas", 1920, 1080]]) {
+  await caso(`vin-110-el-pie-fijo-se-lee-${nombre}`, query, async p => {
+    await ventaTipica(p); await espera(p, 400);
+    if (/ya-ligada/.test(query)) { await botonVender(p).click(); await espera(p, 1000); }
+    const malos = await sinAA(p);
+    ok(`vin-110-el-pie-fijo-se-lee-${nombre}`, malos.length === 0, malos.length ? "sin AA: " + malos.slice(0, 8).join(" | ") : "se lee");
+  }, { viewport: { width: ancho, height: alto } });
+}
+await caso("vin-111-doble-clic-en-cambiar-a-remision", "adelantadas=remision", async p => {
+  await ventaTipica(p); await espera(p, 400);
+  await carrito(p).getByRole("button", { name: /Cambiar a Remisión/ }).dblclick(); await espera(p, 700);
+  const n = await textoDe(botonVender(p)); const t = await textoDe(carrito(p));
+  ok("vin-111-doble-clic-en-cambiar-a-remision", /Vender y ligar RS-41/.test(n) && !/Se emite una remisión nueva/.test(t), `con doble clic en «Cambiar a Remisión»: «${n}»${/Se emite una/.test(t) ? " y el segundo clic cayó en «No es de esta venta»" : ""}`);
+});
+await caso("vin-112-a-1920-el-boton-y-la-comparacion-se-ven", "adelantadas=igual", async p => {
+  await ventaTipica(p); await espera(p, 500);
+  const boton = await seVe(botonVender(p)); const comp = carrito(p).getByText(/F-234 \$47,560\.00 = esta venta \$47,560\.00/).first();
+  const veComp = await comp.count() ? await seVe(comp) : false;
+  ok("vin-112-a-1920-el-boton-y-la-comparacion-se-ven", boton && veComp, `a 1920: el botón ${boton ? "se ve" : "NO se ve"}, la comparación ${veComp ? "se ve" : "NO se ve"}`);
+}, { viewport: { width: 1920, height: 1080 } });
 
 await browser.close();
 for (const r of res) console.log(r);

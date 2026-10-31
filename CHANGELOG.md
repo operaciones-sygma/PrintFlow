@@ -12,6 +12,74 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.169 — El carrito con ligar, después de su crítica: el rechazo se queda, el pie fijo y la causa real — 31-oct-2026
+
+**Qué pasaba.** Marcelo, 31-oct: *«hagamos una pasada de /impeccable critique a lo que hiciste»*. La crítica (dos agentes aislados: revisión de
+diseño, y detector + navegador; ~584 mil tokens) le dio **24/40** al carrito de v10.84.168, con dos P1 y tres P2. Snapshot:
+`.impeccable/critique/2026-10-31T17-16-32Z__ito-de-venta-ligar-factura-por-adelantado-77f76406.md`.
+- **P1:** si la base rechazaba el ligado, salía un aviso de 7 s y el carrito quedaba en «Vender y facturar todo», habilitado. Si «ya está ligada» era
+  ESTA venta (otra pestaña u otro clic), un segundo clic acuñaba otra factura y descontaba el inventario dos veces: el duplicado que la 168 vino a
+  evitar. Venía de la vuelta 3 de la 168 («volver a leer»).
+- **P1:** a 1366 el botón quedaba de 140 a 245 px debajo del scroll del pie (medido); «F-234 por $47,560.00» y el total nunca se veían juntos; el
+  botón apagado (al 60 %, 1.69:1) no decía por qué.
+- **P2:** el foco caía al `<body>` con «No es de esta venta», «Ligar F-234» y «Reintentar»; las cajas nacían sin una región viva; la lectura no tenía
+  tope; el select nuevo no enseñaba su foco.
+- **P2:** los pagos capturados se escondían sin monto ni método y no se anotaban; el selector de pagos seguía activo mientras decía «Revisando…».
+- **P2:** «de otro importe» mezclaba tipo e IVA con importe, y su consejo («revisa las cantidades y los precios») empujaba a mover precios; con una
+  remisión el botón decía «emitir factura nueva».
+Marcelo eligió los 2 P1 y los 3 P2, ligar por omisión con la comparación a la vista, y el pie fijo.
+
+**Qué se cambió** (sólo la pantalla; la base no cambió).
+- **El pie fijo, fuera del scroll** (DESIGN.md, v10.84.46): el total en un renglón; la comparación «F-234 $47,560.00 = esta venta $47,560.00 ·
+  emitida el 28-oct · sin cobrar»; el botón; y debajo su porqué, que el botón nombra con `aria-describedby`. En gris va lo que falta («Revisando…»,
+  «Marca arriba qué haces con el pago capturado»); en ámbar, lo que está mal («No se pudo revisar…»). El botón apagado va en `bt(C.sf, C.t2)`
+  (4.63:1), sin opacidad y con su `key` por camino. La ventana, anclada arriba. La caja de ligar que aparece se trae a la vista.
+- **El rechazo del ligado, dentro de la ventana**, con `role="alert"` y el foco:
+  - el aviso: «No se registró la venta: …», o, sin conexión, «No se sabe si se registró»;
+  - debajo, lo que dijo la relectura: «sigue sin ligar», o «ya no está por ligar: si fue esta misma venta, ya está registrada»; si la relectura
+    también falla, «Reintentar» antes de elegir;
+  - el botón espera a que Karla elija «Volver a intentar ligar F-234», «Es otra venta: emitir factura nueva» o «Salir sin vender»; mientras no se
+    sepa cómo quedó, no se ofrece emitir otra;
+  - Esc lo conserva, y otro cliente lo quita.
+- **La lectura con tope de 8 s** («está tardando», «Reintentar») y «Llegó la revisión que tardaba», como «Asignar folio» (v10.84.72).
+- **El foco a lo nuevo:**
+  - «No es» lleva a «Ligar F-234»;
+  - «Ligar» lleva a la caja;
+  - «Reintentar» deja el foco en la zona;
+  - el rechazo se lleva el foco a su aviso.
+  
+  Además, una región viva (presente antes de su texto) dice cuándo cambia el botón. Los campos del pie enseñan su anillo de foco
+  (`{...inp, outline: undefined}`) y tienen nombre accesible.
+- **Los pagos capturados**, con su monto y su método («Capturaste un pago por $47,557.56 (transferencia, ref. …)»), quedan anotados en la OC. El
+  selector de pagos no sale mientras se revisa.
+- **«De otro importe» con su causa:**
+  - la de otro tipo que con ese tipo cuadra se ofrece con «Cambiar a Remisión»;
+  - las demás dicen cómo se comparan: el mismo importe pero otro tipo, lo de esta venta sin IVA, o la diferencia («$2,440.00 más que esta venta»);
+  - se fue «revisa las cantidades y los precios»;
+  - los botones dicen el documento («emitir remisión nueva»), y la nota del folio es un renglón, no otra caja violeta.
+
+**Cómo se probó.**
+- **Tanda `venta-inventario`:** 30 casos nuevos (vin-84 a vin-112).
+- **Vuelta 1**, escrita antes de los arreglos: 18 nuevas, que fallaban con v10.84.168. Además, vin-65 y vin-83 se ajustaron por diseño (el rechazo ya
+  no es un aviso abajo) y vin-75 aceptó la casilla con monto.
+- **Vuelta 2**, 12 por donde no se diseñó:
+  - otro cliente quita el rechazo y Esc lo conserva; «Salir sin vender»;
+  - sin conexión: con la base que sí ligó, con la que no, y con la relectura caída;
+  - tarde con «Ya revisé»;
+  - el porqué de un precio faltante a 1366; AA del pie fijo a 1366 y 1920; 1920;
+  - doble clic en «Cambiar a Remisión».
+- **Sabotajes:** 24 (los 13 de la 168, con sus anclas al día, y 11 nuevos); caen 23. El que no cae (quitar el escudo de «Cambiar a Remisión»): en este
+  acomodo el segundo clic cae en el título de la caja de ligar, no en un botón; el escudo se queda por la regla del DESIGN.md y vin-111 cuida el
+  resultado.
+- **Corrida doble:** con v10.84.168, 88 pasan y 30 fallan (28 de las 30 nuevas, más vin-65 y vin-83); con v10.84.169, **118 de 118**; ninguna regresión.
+  Las dos de vin-110 (el contraste del pie en dos estados) pasan con las dos versiones; su sabotaje (s23) sí cae.
+- **Detector de impeccable:** los mismos 227 de antes en toda la app; en el carrito, sólo el fondo `rgba(0,0,0,.6)` que ya tenían los 7 modales.
+- **A ojo:** miradas las capturas a 1366 y a 1920 (el caso común, el rechazo, la lectura caída, la remisión).
+
+**Vuelta atrás.** `git revert` del commit de v10.84.169 y subir: la base no cambió, así que con la de la 168 la pantalla de antes funciona igual.
+
+---
+
 ## v10.84.168 — El carrito de inventario liga la factura hecha por adelantado (F-234 de Cuadra) — 30-oct-2026
 
 **Qué pasaba.** Marcelo, 30-oct: *«la F234 queremos sacar un traslado con esa factura, pero no aparece. El problema fue que esa factura no se creó desde

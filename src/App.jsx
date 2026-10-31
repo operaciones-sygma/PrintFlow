@@ -6277,6 +6277,15 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
   const [emitirOtra, setEmitirOtra] = useState(false);       // «No es de esta venta»: factura nueva aunque haya una del mismo importe
   const [elegidaAd, setElegidaAd] = useState("");            // con dos del mismo importe, cuál se liga (si nadie elige, la más vieja)
   const [pagosVistos, setPagosVistos] = useState(false);     // los pagos capturados no se registran al ligar: la persona lo dice
+  // v10.84.169 — LA CRÍTICA DEL CARRITO CON LIGAR (/impeccable critique, 31-oct, revisor independiente 24/40): la lectura con tope de 8 s («está tardando» y
+  //   «Llegó la revisión que tardaba», como «Asignar folio» desde v10.84.72); el rechazo del ligado DENTRO de la ventana y el botón esperando a que Karla
+  //   elija (antes, un aviso de 7 s y el carrito volvía a «Vender y facturar todo», listo para emitir otra: el duplicado que v10.84.168 vino a evitar); el
+  //   foco a lo nuevo cuando el botón apretado desaparece, y lo que cambió dicho para el lector de pantalla en una región que existe antes de su texto.
+  const [adTarde, setAdTarde] = useState(false), [adLlego, setAdLlego] = useState(false);
+  const [rechazo, setRechazo] = useState(null);              // {folio, motivo}: la base no ligó; no se vende hasta que Karla elige qué sigue
+  const [anuncio, setAnuncio] = useState("");                // la región viva
+  const focoA = useRef(null);                                // a dónde va el foco después de un cambio de camino: "deshacer" | "liga" | "zona"
+  const refLiga = useRef(null), refDeshacer = useRef(null), refZonaAd = useRef(null), refRechazo = useRef(null), ofrecidaAntes = useRef(null);
   // sync ref con state para que ESC handler lea el valor actual sin re-binding
   useEffect(()=>{ busyRef.current = busy; }, [busy]);
   // v10.84.167 — salir con algo en el carrito pregunta (Esc, el clic afuera o la ×); con el carrito vacío sale directo. Mientras vende, nada (v10.56.1 F-M1:
@@ -6378,15 +6387,19 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
   // v10.84.168 — las facturas hechas por adelantado del cliente de la venta, cada vez que cambia (la respuesta de otro cliente que llega tarde no cuenta)
   const idClienteVenta = hasPooled ? destClientId : (cart[0]?.client_id||null);
   useEffect(()=>{
-    setEmitirOtra(false); setElegidaAd(""); setRevisoSinLeer(false);
+    setEmitirOtra(false); setElegidaAd(""); setRevisoSinLeer(false); setAdTarde(false); setAdLlego(false);
     if(!idClienteVenta){ setAdelantadas(undefined); return; }
-    let alive=true;
+    let alive=true, tarde=false;
     setAdelantadas(undefined);
+    // v10.84.169 — con tope: a los 8 s se trata como «no se pudo leer» (dice que está tardando, con «Reintentar»), y si contesta después se dice
+    const tope=setTimeout(()=>{ if(alive){ tarde=true; setAdelantadas(a=>a===undefined?null:a); setAdTarde(true); } }, 8000);
     Promise.resolve().then(()=>db.facturasPorAdelantadoParaVenta(idClienteVenta))   // un error, aun el que salta antes de la promesa, es «no se pudo leer»
-      .then(v=>{ if(alive) setAdelantadas(Array.isArray(v)?v:[]); })
-      .catch(()=>{ if(alive) setAdelantadas(null); });
-    return ()=>{alive=false};
+      .then(v=>{ if(alive){ clearTimeout(tope); setAdelantadas(Array.isArray(v)?v:[]); setAdTarde(false); if(tarde) setAdLlego(true); } })
+      .catch(()=>{ if(alive){ clearTimeout(tope); setAdelantadas(null); setAdTarde(false); } });
+    return ()=>{ alive=false; clearTimeout(tope); };
   }, [idClienteVenta, lecturaAd]);
+  // v10.84.169 — el rechazo del ligado se queda aunque se vuelva a leer; otro cliente es otra venta
+  useEffect(()=>{ setRechazo(null); }, [idClienteVenta]);
 
   const addToCart = (p) => {
     if (cart.find(c=>c.client_product_id===p.id)) return;
@@ -6449,6 +6462,8 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
   // v10.74.2 — el vendedor es OBLIGATORIO: las ventas de stock SÍ comisionan (decisión del dueño),
   // y sin agente la factura nace sin seller y la comisión se pierde en silencio.
   const agentOK = !!(agent && agent.trim());
+  // v10.84.169 — aquí y no junto al return: el texto de los pagos capturados (abajo) la usa al pintar
+  const fmtPesos = n => "$"+Number(n).toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2});
   // v10.84.168 — la hecha por adelantado del mismo tipo e importe (al centavo, ±2 como la base) se liga; las de otro importe y las de otro cliente del
   //   apartado se avisan. Sin la lectura (leyendo, o falló sin «Ya revisé») no se vende: un anticipo se facturaría dos veces.
   const nombreCliente = (hasPooled ? poolClients.find(c=>c.id===destClientId)?.name : null) || "el cliente";
@@ -6457,15 +6472,67 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
   const propiasAd = listaAd.filter(f=>!f.es_de_otro_cliente);
   const paraLigar = propiasAd.filter(delMismoImporte);
   const ligarA = emitirOtra ? null : (paraLigar.find(f=>f.doc_number===elegidaAd) || paraLigar[0] || null);
-  const otrasPropias = propiasAd.filter(f=>!delMismoImporte(f));
+  // v10.84.169 — «de otro importe» con su causa real (la crítica, P2): la de OTRO tipo que con ese tipo sí cuadra (RS-41, remisión por lo que suma esta
+  //   venta sin IVA) se ofrece con «Cambiar a Remisión»; a las demás se les dice cómo se comparan (el mismo importe pero otro tipo, lo de esta venta sin
+  //   IVA, o la diferencia). Se fue «revisa las cantidades y los precios»: mover precios hasta que cuadre no es la salida.
+  const ivaSiFactura = todosConImporte ? centavosPorRenglon.reduce((s,x)=>s+ivaDeRenglon(x), 0) : 0;
+  const totalSi = t => t==="factura" ? subtotalCents + ivaSiFactura : subtotalCents;
+  const cuadraCon = (f, cents) => totalOK && Math.abs(Math.round(Number(f.amount)*100) - cents) <= 2;
+  const otroTipoQueCuadra = f => f.doc_type!==invoiceType && cuadraCon(f, totalSi(f.doc_type));
+  const cambiarDeTipo = propiasAd.filter(f=>!delMismoImporte(f) && otroTipoQueCuadra(f));
+  const otrasPropias = propiasAd.filter(f=>!delMismoImporte(f) && !otroTipoQueCuadra(f));
   const deOtroClienteIgual = listaAd.filter(f=>f.es_de_otro_cliente && delMismoImporte(f));
   const revisadoAd = !idClienteVenta || (adelantadas!==undefined && (adelantadas!==null || revisoSinLeer));
   const pagosAlLigar = !!ligarA && paymentStatus!=="unpaid" && paymentRefs.length>0;
   const haceDiasAd = d => { const n = Number(d)||0; return n<=0 ? "hoy" : n===1 ? "hace 1 día" : "hace "+n+" días"; };
   const motivoAd = f => { const m = /Motivo:\s*([^.]+)/i.exec(f?.notas||""); if (!m) return null; const t = m[1].trim(); return t.length>120 ? t.slice(0,117).trimEnd()+"…" : t; };
+  // v10.84.169 — la comparación junto al botón (la fecha de emisión y cómo va de cobro) y la palabra del documento según el tipo («emitir remisión nueva»)
+  const MESES_AD = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+  const fechaAd = f => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(f?.issued_date||""); return m ? (+m[3])+"-"+MESES_AD[+m[2]-1] : null; };
+  const cobroAd = f => f?.status==="pagada" ? "pagada" : f?.status==="parcial" ? "con abono: le quedan "+fmtPesos(f.balance) : "sin cobrar";
+  const docPalabraAd = t => t==="remision" ? "remisión" : "factura";
+  const comoSeCompara = f => {
+    if (!totalOK) return null;
+    if (cuadraCon(f, totalCents)) return "el mismo importe, pero es "+docPalabraAd(f.doc_type);
+    if (invoiceType==="factura" && f.doc_type==="factura" && cuadraCon(f, subtotalCents)) return "lo mismo que esta venta sin IVA";
+    const d = Math.round(Number(f.amount)*100) - totalCents;
+    return fmtPesos(Math.abs(d)/100)+(d>0?" más":" menos")+" que esta venta";
+  };
+  // v10.84.169 — los pagos capturados que el ligado no registra, con su monto y su método (la crítica, P2): así se dicen y así los anota la OC
+  const pagosTexto = pagosAlLigar ? (()=>{
+    const n = paymentRefs.length, suma = paymentRefs.reduce((s,r)=>s+(Number(r.amount)||0), 0);
+    const metodos = [...new Set(paymentRefs.map(r=>METODO_PALABRA[r.method] ? METODO_PALABRA[r.method].toLowerCase() : "sin método"))];
+    const refs = paymentRefs.map(r=>String(r.bank_reference||"").trim()).filter(Boolean);
+    return (n===1 ? "un pago" : n+" pagos")+" por "+fmtPesos(suma)+" ("+metodos.join(", ")+(refs.length ? ", ref. "+refs.join(", ") : "")+")";
+  })() : "";
+  // v10.84.169 — el porqué del botón apagado, junto al botón en el pie fijo: en gris lo que falta hacer, en ámbar lo que está mal (DESIGN.md, v10.84.70)
+  const faltaAd = !busy && idClienteVenta && !rechazo ? (
+    adelantadas===undefined ? {mal:false, texto:"Revisando si "+nombreCliente+" tiene facturas hechas por adelantado…"}
+    : adelantadas===null && !revisoSinLeer ? {mal:true, texto:"No se pudo revisar si "+nombreCliente+" tiene facturas hechas por adelantado: «Reintentar» o «Ya revisé en CobranzaFlow», arriba."}
+    : pagosAlLigar && !pagosVistos ? {mal:false, texto:"Marca arriba qué haces con "+(paymentRefs.length===1?"el pago capturado":"los pagos capturados")+"."}
+    : null) : null;
   const canSubmit = !busy && validCart && (!!ligarA || folioOK) && validDest && totalOK && agentOK
     && !mixedPools && !mixedClientsNoPool && !mixedPooledAndNonPooled && (!!ligarA || validPayments)
-    && revisadoAd && (!pagosAlLigar || pagosVistos);
+    && revisadoAd && (!pagosAlLigar || pagosVistos) && !rechazo;
+  const sigueSinLigar = !!rechazo && paraLigar.some(f=>f.doc_number===rechazo.folio);
+
+  // v10.84.169 — el foco no cae al <body> cuando el botón apretado desaparece: va a lo nuevo (DESIGN.md, v10.84.70)
+  useEffect(()=>{
+    const a = focoA.current; if (!a) return;
+    const el = a==="deshacer" ? refDeshacer.current : a==="liga" ? refLiga.current : a==="zona" ? refZonaAd.current : null;
+    if (el) { focoA.current = null; el.focus({preventScroll:true}); el.scrollIntoView?.({block:"nearest", behavior:"instant"}); }
+  });
+  // v10.84.169 — el rechazo se lleva el foco a su aviso
+  useEffect(()=>{ if (rechazo) { refRechazo.current?.focus({preventScroll:true}); } }, [rechazo]);
+  // v10.84.169 — la caja de ligar que aparece se trae a la vista (el pie pudo haberse quedado abajo) y se anuncia; también cuando deja de ofrecerse
+  useEffect(()=>{
+    const f = ligarA?.doc_number || null, antes = ofrecidaAntes.current;
+    if (f === antes) return;
+    ofrecidaAntes.current = f;
+    if (f) { refLiga.current?.scrollIntoView?.({block:"nearest", behavior:"instant"}); setAnuncio(f+" es del mismo importe que esta venta: el botón ahora dice «Vender y ligar "+f+"».") }
+    else if (antes) setAnuncio("Ya no se liga "+antes+": el botón dice «"+(invoiceType==="factura" ? "Vender y facturar todo" : "Vender con remisión")+"».");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ligarA?.doc_number]);
 
   const submit = async()=>{
     if (!canSubmit || busyRef.current) return;
@@ -6485,7 +6552,8 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
           total_amount: totalNum,
           dest_client_id: hasPooled ? destClientId : null,
           agent: agent || null,
-          notes: notes.trim() || null,
+          // v10.84.169 — lo capturado que el ligado no registra queda anotado en la OC, con su monto (DESIGN.md: «la orden lo anota»)
+          notes: [notes.trim(), pagosAlLigar ? "Pagos capturados al vender, por registrar en CobranzaFlow sobre "+ligarA.doc_number+": "+pagosTexto : ""].filter(Boolean).join(" · ") || null,
           actor: userLogin || "sistema",
           client_agent: clientAgent.trim() || null
         });
@@ -6510,10 +6578,18 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
       showToast(`✅ ${result.folio} · OC ${result.oc_id} · ${result.items_count} productos · $${Number(result.total_amount).toLocaleString("es-MX",{minimumFractionDigits:2})}`);
       onSuccess(result);
     } catch(e) {
-      showToast("❌ "+(e?.message||"error desconocido"), "error");
-      // v10.84.168 — si no se pudo ligar (otra persona la ligó, la cancelaron o cambió su importe con el carrito abierto), se vuelve a leer: lo que se
-      //   ofrecía puede ya no ser cierto
-      if (ligarA) setLecturaAd(k=>k+1);
+      if (ligarA) {
+        // v10.84.168 — si no se pudo ligar (otra persona la ligó, la cancelaron o cambió su importe con el carrito abierto), se vuelve a leer: lo que se
+        //   ofrecía puede ya no ser cierto. v10.84.169 (la crítica, P1) — y el rechazo se queda en la ventana, con el foco, con el botón apagado hasta que
+        //   Karla elija: antes era un aviso de 7 s y el carrito quedaba en «Vender y facturar todo», listo para emitir otra (si «ya está ligada» era ESTA
+        //   venta, desde otra pestaña, eso era el duplicado)
+        // Sin conexión no se sabe si la base alcanzó a ligarla (la respuesta pudo perderse después): lo aclara la relectura, no se afirma «no se registró»
+        const motivo = motivoDeLaBase(e);
+        setRechazo({folio: ligarA.doc_number, motivo, deRed: motivo==="sin conexión"});
+        setLecturaAd(k=>k+1);
+      } else {
+        showToast("❌ "+(e?.message||"error desconocido"), "error");
+      }
     } finally {
       busyRef.current = false;
       setBusy(false);
@@ -6522,8 +6598,8 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
 
   const filtered = products.filter(p=>p.stock_actual>0 && (!search || (p.name||"").toLowerCase().includes(search.toLowerCase()) || (p.sku||"").toLowerCase().includes(search.toLowerCase())));
 
-  const fmtPesos = n => "$"+Number(n).toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2});
-  return <div onClick={cerrarConX} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:20}}>
+  // v10.84.169 — anclada arriba (DESIGN.md, v10.84.72): con lo que aparece al elegir el cliente la ventana cambia de alto, y centrada se movía bajo el cursor
+  return <div onClick={cerrarConX} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:"flex",alignItems:"flex-start",justifyContent:"center",zIndex:1000,padding:"3vh 20px"}}>
     <div role="dialog" aria-modal="true" aria-busy={busy} aria-labelledby="pf-venta-titulo" onKeyDown={atraparTab} onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:0,maxWidth:980,width:"100%",maxHeight:"94vh",display:"flex",flexDirection:"column"}}>
       <div style={{padding:"16px 20px",borderBottom:"0.5px solid "+C.bd,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <div>
@@ -6622,12 +6698,15 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
             </>}
           </div>
 
-          {/* Footer: captura */}
-          <div style={{borderTop:"0.5px solid "+C.bd,padding:"12px 14px",background:C.bg,maxHeight:"55vh",overflowY:"auto"}}>
+          {/* Footer: la captura arriba (hace scroll) y el pie fijo abajo, FUERA del scroll (v10.84.169, la crítica, P1: a 1366 el botón nunca se veía sin
+              bajar, y la cifra de F-234 y el total no se veían juntos; DESIGN.md, v10.84.46) */}
+          <div style={{borderTop:"0.5px solid "+C.bd,background:C.bg,maxHeight:"62vh",minHeight:0,display:"flex",flexDirection:"column"}}>
+          <div data-captura style={{padding:"12px 14px",overflowY:"auto",minHeight:0,flex:"0 1 auto"}}>
             {hasPooled && (
               <div style={{marginBottom:10}}>
                 <label style={{...lbl,marginTop:0,fontSize:10}}>Cliente destino *</label>
-                <select style={{...inp,fontSize:12}} value={destClientId} onChange={e=>setDestClientId(e.target.value)} disabled={busy||poolClients.length===0}>
+                {/* v10.84.169 — con su nombre para el lector de pantalla y su anillo de foco (`inp` trae outline:none, que gana a la regla global) */}
+                <select aria-label="Cliente destino" style={{...inp,outline:undefined,fontSize:12}} value={destClientId} onChange={e=>setDestClientId(e.target.value)} disabled={busy||poolClients.length===0}>
                   <option value="">{poolClients.length===0?"— Sin clientes en pool —":"— Selecciona cliente —"}</option>
                   {poolClients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
@@ -6635,30 +6714,43 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
             )}
             {/* v10.84.168 — las facturas hechas por adelantado del cliente (F-234 de Cuadra, 30-oct): leyendo, sin lectura, la del mismo importe (se liga), las
                 de otro importe y la de otro cliente del apartado. Las mismas palabras que «Asignar folio y entregar». */}
+            {/* v10.84.169 — lo que cambió en el camino, dicho para el lector de pantalla: la región existe antes de su texto (si nace con él, no se anuncia) */}
+            <div aria-live="polite" data-anuncio style={{position:"absolute",width:1,height:1,margin:-1,padding:0,overflow:"hidden",clip:"rect(0 0 0 0)",whiteSpace:"nowrap",border:0}}>{anuncio}</div>
+            <div ref={refZonaAd} tabIndex={-1}>
+            {/* v10.84.169 — lo que llega tarde se dice (DESIGN.md, v10.84.72): pasado el tope, la respuesta que llega cambia el camino sin avisar si no */}
+            {adLlego && Array.isArray(adelantadas) && <div role="status" style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5,color:C.tx,marginBottom:10,padding:"6px 10px",background:C.sf,borderRadius:8}}><InfoIcon size={12} weight="bold" style={{flexShrink:0}}/>Llegó la revisión que tardaba: {ligarA ? ligarA.doc_number+" es del mismo importe (abajo)." : listaAd.length ? nombreCliente+" tiene facturas hechas por adelantado (abajo)." : "no hay facturas hechas por adelantado."}</div>}
             {idClienteVenta && adelantadas===undefined && <div role="status" style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5,color:C.t2,marginBottom:10,padding:"6px 10px",background:C.sf,borderRadius:8}}><HourglassIcon size={12} weight="bold" style={{flexShrink:0}}/>Revisando si {nombreCliente} ya tiene facturas hechas por adelantado…</div>}
-            {idClienteVenta && adelantadas===null && <SinRevisionSinOrden cliente={nombreCliente} onReintentar={()=>setLecturaAd(k=>k+1)} revisado={revisoSinLeer} onRevisado={setRevisoSinLeer} que="vender"/>}
-            {ligarA && <div role="group" aria-labelledby="pf-venta-liga" style={{background:C.fac+"0d",border:"1px solid "+C.fac+"40",borderRadius:10,padding:"10px 12px",marginBottom:10,fontSize:12,color:C.tx,lineHeight:1.45}}>
+            {idClienteVenta && adelantadas===null && <SinRevisionSinOrden cliente={nombreCliente} tarde={adTarde} onReintentar={()=>{focoA.current="zona";setLecturaAd(k=>k+1)}} revisado={revisoSinLeer} onRevisado={setRevisoSinLeer} que="vender"/>}
+            {ligarA && <div ref={refLiga} tabIndex={-1} role="group" aria-labelledby="pf-venta-liga" style={{background:C.fac+"0d",border:"1px solid "+C.fac+"40",borderRadius:10,padding:"10px 12px",marginBottom:10,fontSize:12,color:C.tx,lineHeight:1.45}}>
               <div id="pf-venta-liga" style={{display:"flex",alignItems:"flex-start",gap:6,fontSize:12.5,fontWeight:700,marginBottom:4}}><LinkIcon size={14} weight="bold" color={C.fac} style={{flexShrink:0,marginTop:2}}/>{ligarA.doc_number} es del mismo importe: ¿es la {ligarA.doc_type==="remision"?"remisión":"factura"} de esta venta?</div>
               <div style={{color:C.t2,overflowWrap:"anywhere"}}>{ligarA.doc_type==="remision"?"Remisión":"Factura"} por adelantado por <b style={{fontFamily:"'Geist Mono',monospace",color:C.tx}}>{fmtPesos(ligarA.amount)}</b>, emitida {haceDiasAd(ligarA.dias_sin_orden)}{motivoAd(ligarA)?" · «"+motivoAd(ligarA)+"»":""}.</div>
               <div style={{color:C.t2,marginTop:4}}>Si es de esta venta, se liga: se descuenta el inventario, {ligarA.doc_number} queda con su OC (para el traslado) y no se emite otra. Los cobros de {ligarA.doc_number} se registran en CobranzaFlow.</div>
               {paraLigar.length>1 && <label style={{display:"flex",alignItems:"center",flexWrap:"wrap",gap:8,marginTop:8,fontSize:11.5,fontWeight:600}}>Hay {paraLigar.length} del mismo importe; se liga
-                <select aria-label="Cuál factura hecha por adelantado se liga" style={{...inp,fontSize:11.5,width:"auto",padding:"4px 8px"}} value={ligarA.doc_number} onChange={e=>setElegidaAd(e.target.value)} disabled={busy}>{paraLigar.map(f=><option key={f.doc_number} value={f.doc_number}>{f.doc_number} · {haceDiasAd(f.dias_sin_orden)}</option>)}</select></label>}
-              {pagosAlLigar && <label style={{display:"flex",alignItems:"flex-start",gap:8,marginTop:8,padding:"8px 10px",background:C.wn+"10",border:"1px solid "+C.wn+"40",borderRadius:8,fontSize:11.5,fontWeight:600,cursor:"pointer"}}><input type="checkbox" checked={pagosVistos} onChange={e=>setPagosVistos(e.target.checked)} style={{marginTop:2,flexShrink:0}}/>Capturaste {paymentRefs.length===1?"un pago":paymentRefs.length+" pagos"}: al ligar no se registra{paymentRefs.length===1?"":"n"} aquí. Lo registro en CobranzaFlow, sobre {ligarA.doc_number}.</label>}
-              <button type="button" onClick={()=>{escudoDeClics(500);setEmitirOtra(true)}} disabled={busy} style={{...bt(C.bg,C.tx),border:"0.5px solid "+C.bdSt,fontSize:11.5,padding:"6px 12px",marginTop:8}}>No es de esta venta: emitir factura nueva</button>
+                <select aria-label="Cuál factura hecha por adelantado se liga" style={{...inp,outline:undefined,fontSize:11.5,width:"auto",padding:"4px 8px"}} value={ligarA.doc_number} onChange={e=>setElegidaAd(e.target.value)} disabled={busy}>{paraLigar.map(f=><option key={f.doc_number} value={f.doc_number}>{f.doc_number} · {haceDiasAd(f.dias_sin_orden)}</option>)}</select></label>}
+              {pagosAlLigar && <label style={{display:"flex",alignItems:"flex-start",gap:8,marginTop:8,padding:"8px 10px",background:C.wn+"10",border:"1px solid "+C.wn+"40",borderRadius:8,fontSize:11.5,fontWeight:600,cursor:"pointer"}}><input type="checkbox" checked={pagosVistos} onChange={e=>setPagosVistos(e.target.checked)} style={{marginTop:2,flexShrink:0}}/>Capturaste {pagosTexto}: al ligar no se registra{paymentRefs.length===1?"":"n"} aquí. Lo registro en CobranzaFlow, sobre {ligarA.doc_number}.</label>}
+              <button type="button" onClick={()=>{escudoDeClics(500);focoA.current="deshacer";setEmitirOtra(true)}} disabled={busy} style={{...bt(C.bg,C.tx),border:"0.5px solid "+C.bdSt,fontSize:11.5,padding:"6px 12px",marginTop:8}}>No es de esta venta: emitir {docPalabraAd(invoiceType)} nueva</button>
             </div>}
             {emitirOtra && paraLigar.length>0 && <div role="status" style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",background:C.wn+"10",border:"1px solid "+C.wn+"40",borderRadius:10,padding:"8px 12px",marginBottom:10,fontSize:12,color:C.tx,lineHeight:1.45}}>
-              <span style={{flex:"1 1 220px"}}>Se emite una factura nueva: {paraLigar.map(f=>f.doc_number).join(", ")} (del mismo importe) sigue sin ligar.</span>
-              <button type="button" onClick={()=>{escudoDeClics(500);setEmitirOtra(false)}} disabled={busy} style={{...bt(C.bg,C.tx),border:"0.5px solid "+C.bdSt,fontSize:11.5,padding:"6px 12px"}}><LinkIcon size={12} weight="bold"/>Ligar {paraLigar[0].doc_number}</button>
+              <span style={{flex:"1 1 220px"}}>Se emite una {docPalabraAd(invoiceType)} nueva: {paraLigar.map(f=>f.doc_number).join(", ")} (del mismo importe) sigue sin ligar.</span>
+              <button ref={refDeshacer} type="button" onClick={()=>{escudoDeClics(500);focoA.current="liga";setEmitirOtra(false)}} disabled={busy} style={{...bt(C.bg,C.tx),border:"0.5px solid "+C.bdSt,fontSize:11.5,padding:"6px 12px"}}><LinkIcon size={12} weight="bold"/>Ligar {paraLigar[0].doc_number}</button>
             </div>}
+            {/* v10.84.169 — la de otro tipo que con ese tipo sí cuadra (RS-41, remisión por lo que suma esta venta sin IVA): su causa y su botón (la crítica, P2) */}
+            {!ligarA && !emitirOtra && cambiarDeTipo.length>0 && (()=>{ const f = cambiarDeTipo[0], tipo = f.doc_type==="remision" ? "Remisión" : "Factura";
+              return <div role="status" style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",background:C.fac+"0d",border:"1px solid "+C.fac+"40",borderRadius:10,padding:"8px 12px",marginBottom:10,fontSize:12,color:C.tx,lineHeight:1.45}}>
+                <span style={{flex:"1 1 240px",overflowWrap:"anywhere"}}><b>{f.doc_number}</b> es {docPalabraAd(f.doc_type)} por <span style={{fontFamily:"'Geist Mono',monospace"}}>{fmtPesos(f.amount)}</span>, lo que suma esta venta {f.doc_type==="factura"?"con IVA":"sin IVA"}: si es de esta venta, cámbiala a {tipo}.</span>
+                <button type="button" onClick={()=>{escudoDeClics(400);setInvoiceType(f.doc_type)}} disabled={busy} style={{...bt(C.bg,C.tx),border:"0.5px solid "+C.bdSt,fontSize:11.5,padding:"6px 12px"}}>Cambiar a {tipo}</button>
+              </div>; })()}
             {!ligarA && !emitirOtra && otrasPropias.length>0 && <div role="status" style={{background:C.sf,border:"1px solid "+C.bd,borderRadius:10,padding:"8px 12px",marginBottom:10,fontSize:12,color:C.tx,lineHeight:1.45}}>
-              <div style={{fontWeight:700,marginBottom:3}}>{nombreCliente} tiene {otrasPropias.length===1?"una factura hecha por adelantado":otrasPropias.length+" facturas hechas por adelantado"} sin ligar, de otro importe</div>
-              <ul style={{margin:"0 0 4px",paddingLeft:18,overflowWrap:"anywhere"}}>{otrasPropias.slice(0,3).map(f=><li key={f.doc_number}><b>{f.doc_number}</b> por <span style={{fontFamily:"'Geist Mono',monospace"}}>{fmtPesos(f.amount)}</span>, {haceDiasAd(f.dias_sin_orden)}{motivoAd(f)?" · «"+motivoAd(f)+"»":""}</li>)}{otrasPropias.length>3&&<li>y {otrasPropias.length-3} más</li>}</ul>
-              <div style={{color:C.t2}}>Si una es de esta venta, revisa las cantidades y los precios: se liga cuando el importe es el mismo al centavo. Si no, sigue.</div>
+              <div style={{fontWeight:700,marginBottom:3}}>{nombreCliente} tiene {otrasPropias.length===1?"una factura hecha por adelantado":otrasPropias.length+" facturas hechas por adelantado"} sin ligar, {otrasPropias.every(f=>!cuadraCon(f, totalCents)) ? "de otro importe" : (otrasPropias.length===1?"que no cuadra":"que no cuadran")+" con esta venta"}</div>
+              {/* cómo se compara cada una (v10.84.169): el mismo importe pero otro tipo, lo de esta venta sin IVA, o la diferencia */}
+              <ul style={{margin:"0 0 4px",paddingLeft:18,overflowWrap:"anywhere"}}>{otrasPropias.slice(0,3).map(f=><li key={f.doc_number}><b>{f.doc_number}</b>{f.doc_type!==invoiceType?" ("+docPalabraAd(f.doc_type)+")":""} por <span style={{fontFamily:"'Geist Mono',monospace"}}>{fmtPesos(f.amount)}</span>{comoSeCompara(f)?" · "+comoSeCompara(f):""} · {haceDiasAd(f.dias_sin_orden)}{motivoAd(f)?" · «"+motivoAd(f)+"»":""}</li>)}{otrasPropias.length>3&&<li>y {otrasPropias.length-3} más</li>}</ul>
+              <div style={{color:C.t2}}>{otrasPropias.every(f=>!cuadraCon(f, totalCents)) ? "No se ligan: su importe no es el de esta venta." : "No se ligan a esta venta."} Si alguna es de esta venta, aclara cuál está bien antes de vender (la factura se corrige en CobranzaFlow).</div>
             </div>}
             {!ligarA && deOtroClienteIgual.length>0 && <div role="status" style={{display:"flex",alignItems:"flex-start",gap:6,background:C.wn+"10",border:"1px solid "+C.wn+"40",borderRadius:10,padding:"8px 12px",marginBottom:10,fontSize:12,color:C.tx,lineHeight:1.45}}>
               <WarningIcon size={13} weight="fill" color={C.wn} style={{flexShrink:0,marginTop:2}}/>
               <span><b>{deOtroClienteIgual[0].cliente}</b> tiene {deOtroClienteIgual[0].doc_number} por {fmtPesos(deOtroClienteIgual[0].amount)}, hecha por adelantado y del mismo importe. Si es esta venta, el cliente destino es {deOtroClienteIgual[0].cliente}: cámbialo arriba y se ofrece ligarla.</span>
             </div>}
+            </div>{/* fin de la zona de las hechas por adelantado (v10.84.169: «Reintentar» le pasa el foco) */}
             <div style={{display:"grid",gridTemplateColumns:"100px 1fr",gap:8,marginBottom:8}}>
               <div>
                 <label style={{...lbl,marginTop:0,fontSize:10}}>Tipo *</label>
@@ -6673,7 +6765,8 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
               <div>
                 {/* F1: en modo emisor el folio nace del counter → se oculta el input */}
                 {/* v10.84.168 — la venta que se liga lleva el folio de su factura: no se acuña ni se teclea otro */}
-                {ligarA?<div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 12px",marginBottom:8,marginTop:4,background:C.fac+"0E",border:"1px solid "+C.fac+"33",borderRadius:10,fontSize:11,color:C.t2,lineHeight:1.4}}><LinkIcon size={16} weight="bold" color={C.fac} style={{flexShrink:0}}/><span><b style={{color:C.tx}}>Folio {ligarA.doc_number}</b> · ya existe: no se emite otro</span></div>
+                {/* v10.84.169 — un renglón, no otra caja violeta: la caja de ligar ya lo enmarca (DESIGN.md, «Un recuadro por idea») */}
+                {ligarA?<><label style={{...lbl,marginTop:0,fontSize:10}}>Folio</label><div style={{fontSize:11.5,color:C.t2,padding:"6px 0",lineHeight:1.4}}><b style={{color:C.tx,fontFamily:"'Geist Mono',monospace"}}>{ligarA.doc_number}</b> · ya existe: no se emite otro</div></>
                 :folioAuto?<FolioAutoNote/>:<>
                 <label style={{...lbl,marginTop:0,fontSize:10}}>Folio fiscal * <span style={{color:C.t3,fontWeight:400}}>(sugerido — modificable)</span></label>
                 <input style={{...inp,fontSize:13,fontFamily:"'Geist Mono',monospace",fontWeight:700,letterSpacing:.5,border:"1.5px solid "+(folioOK?C.bd:C.dn+"40")}} value={folio} onChange={e=>{const v=e.target.value; setFolio(v); setFolioEdited(v.length>0);}} placeholder={pref+"XXXX"} disabled={busy}/>
@@ -6683,39 +6776,28 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
               <div>
                 <label style={{...lbl,marginTop:0,fontSize:10,color:agentOK?undefined:C.dnInk}}>Vendedor *</label>
-                <select style={{...inp,fontSize:11,border:"1.5px solid "+(agentOK?C.bd:C.dn+"60")}} value={agent} onChange={e=>{agentTouched.current=true;setAgent(e.target.value)}} disabled={busy}>
+                <select aria-label="Vendedor" style={{...inp,outline:undefined,fontSize:11,border:"1.5px solid "+(agentOK?C.bd:C.dn+"60")}} value={agent} onChange={e=>{agentTouched.current=true;setAgent(e.target.value)}} disabled={busy}>
                   <option value="">— Selecciona vendedor —</option>
                   {AGENTS.map(a=><option key={a} value={a}>{a}</option>)}
                 </select>
               </div>
               <div>
                 <label style={{...lbl,marginTop:0,fontSize:10}}>Notas</label>
-                <input style={{...inp,fontSize:11}} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Opcional" disabled={busy} maxLength={200}/>
+                <input aria-label="Notas" style={{...inp,outline:undefined,fontSize:11}} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Opcional" disabled={busy} maxLength={200}/>
               </div>
             </div>
             {/* v10.59.2 C3 — Agente (contacto del cliente comprador) */}
             <div style={{marginBottom:10}}>
               <label style={{...lbl,marginTop:0,fontSize:10}}>Agente de compras del cliente <span style={{color:C.t3,fontWeight:400}}>(opcional)</span></label>
-              <input style={{...inp,fontSize:11}} value={clientAgent} onChange={e=>setClientAgent(e.target.value)} placeholder="Quién pidió (ej. Eva, Jorge)" list="cuadra-client-agents" autoComplete="off" disabled={busy}/>
+              <input aria-label="Agente de compras del cliente" style={{...inp,outline:undefined,fontSize:11}} value={clientAgent} onChange={e=>setClientAgent(e.target.value)} placeholder="Quién pidió (ej. Eva, Jorge)" list="cuadra-client-agents" autoComplete="off" disabled={busy}/>
               <datalist id="cuadra-client-agents">{clientAgents.map(a=><option key={a.id} value={a.name}/>)}</datalist>
             </div>
 
-            {/* v10.84.167 — EL TOTAL SE CALCULA (ya no se teclea): la suma de los importes, el IVA renglón por renglón y el total, como saldrá en el CFDI */}
-            <div role="group" aria-label="Total de la venta" style={{background:C.sal+"08",border:"1.5px solid "+(totalOK?C.sal+"40":C.amb+"60"),borderRadius:10,padding:12,marginBottom:10,fontFamily:"'Geist Mono',monospace"}}>
-              {!todosConImporte
-                ? <div style={{fontSize:12,color:C.t2,fontFamily:"'Geist',sans-serif"}}>{cart.length===0?"El total sale de los productos del carrito.":"El total sale cuando cada producto tenga su cantidad y su precio."}</div>
-                : <>
-                  {invoiceType==="factura" && <>
-                    <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:C.t2}}><span>Subtotal</span><span>{fmtPesos(subtotalCents/100)}</span></div>
-                    <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:C.t2,marginTop:2}}><span>IVA 16%</span><span>{fmtPesos(ivaCents/100)}</span></div>
-                  </>}
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",fontSize:15,fontWeight:800,color:C.tx,marginTop:invoiceType==="factura"?4:0}}><span>{invoiceType==="factura"?"Total factura":"Total remisión (sin IVA)"}</span><span>{fmtPesos(totalNum)}</span></div>
-                </>}
-            </div>
-
             {/* MultiPaymentPicker: estado de pago + multi-pago */}
-            {/* v10.84.168 — al ligar no se capturan pagos: los cobros de esa factura se registran en CobranzaFlow (lo dice la caja de arriba) */}
-            {totalOK && !ligarA && <div style={{marginBottom:10}}>
+            {/* v10.84.168 — al ligar no se capturan pagos: los cobros de esa factura se registran en CobranzaFlow (lo dice la caja de arriba).
+                v10.84.169 — y mientras se revisa si hay una hecha por adelantado tampoco: no se decide antes de tiempo (DESIGN.md, v10.84.44), y de ahí nacía el
+                pago capturado que el ligado no registra */}
+            {totalOK && !ligarA && !(idClienteVenta && adelantadas===undefined) && <div style={{marginBottom:10}}>
               <MultiPaymentPicker
                 status={paymentStatus}
                 refs={paymentRefs}
@@ -6726,7 +6808,40 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
               />
             </div>}
 
-            <button onClick={submit} disabled={!canSubmit} style={{...bt(canSubmit?C.okInk:"#9ca3af"),width:"100%",justifyContent:"center",padding:"12px",fontSize:13,opacity:canSubmit?1:.6,cursor:canSubmit?"pointer":(busy?"wait":"not-allowed")}}>{busy?<><HourglassIcon size={14} weight="bold"/>Procesando...</>:<>{ligarA?<LinkIcon size={14} weight="bold"/>:<ShoppingCartIcon size={14} weight="bold"/>}{ligarA?"Vender y ligar "+ligarA.doc_number:invoiceType==="factura"?"Vender y facturar todo":"Vender con remisión"}</>}</button>
+          </div>{/* fin de la captura */}
+          {/* v10.84.169 — EL PIE FIJO (la crítica, P1): el rechazo del ligado, el total, la comparación con la hecha por adelantado, el botón y su porqué, siempre
+              a la vista. A 1366 el botón quedaba de 140 a 245 px debajo del scroll y «F-234 por $47,560.00» y el total nunca se veían juntos. */}
+          <div style={{flexShrink:0,borderTop:"0.5px solid "+C.bd,padding:"10px 14px 12px",background:C.bg}}>
+            {/* v10.84.169 — la base no ligó: se dice aquí, con el foco, y el botón espera a que Karla elija (antes, un aviso de 7 s y «Vender y facturar todo» listo) */}
+            {rechazo && <div ref={refRechazo} tabIndex={-1} role="alert" style={{background:C.dn+"0d",border:"1px solid "+C.dn+"40",borderRadius:10,padding:"8px 12px",marginBottom:8,fontSize:12,color:C.tx,lineHeight:1.45}}>
+              <div style={{display:"flex",alignItems:"flex-start",gap:6,fontWeight:700,color:C.dnInk}}><WarningIcon size={13} weight="fill" style={{flexShrink:0,marginTop:2}}/><span>{rechazo.deRed ? "No se sabe si se registró la venta" : "No se registró la venta"}: {rechazo.motivo}</span></div>
+              <div style={{color:C.t2,marginTop:3}}>{adelantadas===undefined ? "Revisando de nuevo las facturas hechas por adelantado…"
+                : adelantadas===null ? "No se pudo volver a revisar las facturas hechas por adelantado: «Reintentar», arriba, antes de elegir."
+                : sigueSinLigar ? rechazo.folio+" sigue sin ligar"+(rechazo.deRed?": no se registró.":".")
+                : rechazo.folio+" ya no está por ligar: si fue esta misma venta (otra pestaña u otro clic), ya está registrada y no hay que volver a venderla."}</div>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:8}}>
+                {sigueSinLigar && <button type="button" onClick={()=>{escudoDeClics(500);setRechazo(null)}} style={{...bt(C.bg,C.tx),border:"0.5px solid "+C.bdSt,fontSize:11.5,padding:"6px 12px"}}><LinkIcon size={12} weight="bold"/>Volver a intentar ligar {rechazo.folio}</button>}
+                {/* mientras no se sepa cómo quedó (releyendo, o la relectura falló), no se ofrece emitir otra */}
+                {Array.isArray(adelantadas) && <button type="button" onClick={()=>{escudoDeClics(500);setRechazo(null);setEmitirOtra(true)}} style={{...bt(C.bg,C.tx),border:"0.5px solid "+C.bdSt,fontSize:11.5,padding:"6px 12px"}}>Es otra venta: emitir {docPalabraAd(invoiceType)} nueva</button>}
+                <button type="button" onClick={onClose} style={{...bt(C.bg,C.dnInk),border:"0.5px solid "+C.dn+"55",fontSize:11.5,padding:"6px 12px"}}>Salir sin vender</button>
+              </div>
+            </div>}
+            {/* v10.84.167 — EL TOTAL SE CALCULA (ya no se teclea): la suma de los importes, el IVA renglón por renglón y el total, como saldrá en el CFDI.
+                v10.84.169 — en un renglón, en el pie fijo, junto al botón */}
+            <div role="group" aria-label="Total de la venta" style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",gap:"4px 12px",flexWrap:"wrap",marginBottom:6,fontFamily:"'Geist Mono',monospace"}}>
+              {!todosConImporte
+                ? <span style={{fontSize:12,color:C.t2,fontFamily:"'Geist',sans-serif"}}>{cart.length===0?"El total sale de los productos del carrito.":"El total sale cuando cada producto tenga su cantidad y su precio."}</span>
+                : <>
+                  {invoiceType==="factura" && <span style={{fontSize:11.5,color:C.t2}}>Subtotal {fmtPesos(subtotalCents/100)} · IVA 16% {fmtPesos(ivaCents/100)}</span>}
+                  <span style={{fontSize:15,fontWeight:800,color:C.tx,marginLeft:"auto"}}><span style={{fontFamily:"'Geist',sans-serif",fontSize:12.5,fontWeight:700,color:C.t2,marginRight:6}}>{invoiceType==="factura"?"Total factura":"Total remisión (sin IVA)"}</span>{fmtPesos(totalNum)}</span>
+                </>}
+            </div>
+            {/* v10.84.169 — decidir necesita con qué comparar (DESIGN.md, v10.84.70): la hecha por adelantado contra esta venta, con su fecha y cómo va de cobro */}
+            {ligarA && <div style={{fontSize:11.5,color:C.t2,marginBottom:8,lineHeight:1.4,overflowWrap:"anywhere"}}><b style={{color:C.tx}}>{ligarA.doc_number}</b>{" "}<span style={{fontFamily:"'Geist Mono',monospace",color:C.tx}}>{fmtPesos(ligarA.amount)}</span>{" = esta venta "}<span style={{fontFamily:"'Geist Mono',monospace",color:C.tx}}>{fmtPesos(totalNum)}</span>{fechaAd(ligarA)?" · emitida el "+fechaAd(ligarA):""}{" · "+cobroAd(ligarA)}</div>}
+            <button key={ligarA?"ligar-"+ligarA.doc_number:"vender-"+invoiceType} onClick={submit} disabled={!canSubmit} aria-describedby={!canSubmit && !busy ? "pf-venta-falta" : undefined} style={{...(canSubmit?bt(C.okInk):bt(C.sf,C.t2)),border:canSubmit?undefined:"0.5px solid "+C.bd,width:"100%",justifyContent:"center",padding:"12px",fontSize:13,cursor:canSubmit?"pointer":(busy?"wait":"not-allowed")}}>{busy?<><HourglassIcon size={14} weight="bold"/>Procesando...</>:<>{ligarA?<LinkIcon size={14} weight="bold"/>:<ShoppingCartIcon size={14} weight="bold"/>}{ligarA?"Vender y ligar "+ligarA.doc_number:invoiceType==="factura"?"Vender y facturar todo":"Vender con remisión"}</>}</button>
+            {/* v10.84.169 — el porqué del botón apagado, junto a él (el botón lo nombra con aria-describedby) */}
+            <div id="pf-venta-falta">
+            {faltaAd && <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:4,fontSize:11,color:faltaAd.mal?C.wnInk:C.t2,fontWeight:faltaAd.mal?600:500,marginTop:6,textAlign:"center"}}>{faltaAd.mal?<WarningIcon size={11} weight="fill" style={{flexShrink:0}}/>:<InfoIcon size={11} weight="bold" style={{flexShrink:0}}/>}{faltaAd.texto}</div>}
             {!ligarA && !folioOK && folio && <div style={{fontSize:11,color:C.dnInk,marginTop:6,textAlign:"center"}}>Folio inválido. Formato: {pref}NNNN</div>}
             {/* v10.84.167 — lo que falta y lo que está mal escrito, cada uno con su palabra (la vuelta 2: decía «Falta el precio» de uno sí escrito) */}
             {(()=>{const vacio=c=>String(c.precio==null?"":c.precio).trim()==="";const faltan=sinPrecio.filter(vacio),malos=sinPrecio.filter(c=>!vacio(c));const fila={display:"flex",alignItems:"center",justifyContent:"center",gap:4,fontSize:11,color:C.wnInk,fontWeight:600,marginTop:6,textAlign:"center"};return <>
@@ -6738,6 +6853,8 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
             {hasPooled && !destClientId && cart.length>0 && <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:4,fontSize:11,color:C.wnInk,marginTop:6}}><WarningIcon size={11} weight="fill"/>Selecciona el cliente destino del pool</div>}
             {!agentOK && cart.length>0 && <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:4,fontSize:11,color:C.wnInk,marginTop:6}}><WarningIcon size={11} weight="fill"/>Selecciona el vendedor — sin él la venta no genera comisión</div>}
             {totalOK && !ligarA && !validPayments && <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:4,fontSize:11,color:C.wnInk,marginTop:6}}><WarningIcon size={11} weight="fill"/>Revisa el estado de pago y los montos</div>}
+            </div>{/* fin de pf-venta-falta */}
+          </div>{/* fin del pie fijo */}
           </div>
         </div>
       </div>

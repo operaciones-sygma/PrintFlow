@@ -13,7 +13,8 @@
 // el mismo importe) · dos-iguales (F-234 y F-240, las dos por $47,560.00) · muchas (doce de MANUFACTURERA, ninguna del importe) · raras (F-234 con un
 // motivo larguísimo, comillas, «&» y emoji) · falla=adelantadas (la lectura falla) · falla=adelantadas1 (sólo la primera lectura falla: «Reintentar»)
 // · falla=ligar (la base rechaza el ligado) · falla=ya-ligada (otra persona la ligó con el carrito abierto: la base lo rechaza y la lectura ya no la
-// trae) · lentoAd=1 (la lectura tarda 1.5 s) · lentoAd=c-man (sólo la de MANUFACTURERA: su respuesta llega después
+// trae) · falla=red-ligar (sin conexión, pero la base sí la ligó) · falla=red-ligar-sin (sin conexión y no la ligó) · falla=ligar-y-lectura (sin conexión,
+// y la relectura también falla) · lentoAd=10 (la lectura tarda 10 s: pasa el tope de 8 s) · lentoAd=1 (la lectura tarda 1.5 s) · lentoAd=c-man (sólo la de MANUFACTURERA: su respuesta llega después
 // de la de otro cliente elegido luego)
 import fs from "node:fs";
 import path from "node:path";
@@ -39,6 +40,7 @@ const ROL = Q.get("rol") || "karla", FALLA = Q.get("falla") || "", EMISOR = Q.ge
 const RAROS = Q.get("nombres") === "raros", MUCHOS = Number(Q.get("muchos") || 0);
 const ADEL = Q.get("adelantadas") || "", LENTO_AD = Q.get("lentoAd") || "";
 let lecturasAd = 0, yaLigada = false;   // falla=ya-ligada: otra persona ligó F-234 con el carrito abierto (la base lo rechaza y ya no sale en la lectura)
+let lecturaRota = false;                 // falla=ligar-y-lectura: el ligado falla por red y la relectura también
 const espera = ms => new Promise(r => setTimeout(r, ms));
 const T = s => new Date(s).toISOString();
 const POOL = "pool-cuadra";
@@ -111,9 +113,10 @@ const db = {
   facturasPorAdelantadoParaVenta: async clientId => {
     lecturasAd++;
     const n = lecturasAd;
-    await espera(LENTO_AD === "1" || LENTO_AD === clientId ? 1500 : 60);
+    // lentoAd=10: tarda 10 s (pasa el tope de 8 s del carrito: «está tardando» y luego «Llegó la revisión que tardaba»)
+    await espera(LENTO_AD === "10" ? 10000 : LENTO_AD === "1" || LENTO_AD === clientId ? 1500 : 60);
     anota("db facturasPorAdelantado " + clientId);
-    if (FALLA === "adelantadas" || (FALLA === "adelantadas1" && n === 1)) throw new Error("Failed to fetch");
+    if (FALLA === "adelantadas" || (FALLA === "adelantadas1" && n === 1) || lecturaRota) throw new Error("Failed to fetch");
     const c = CLIENTES.find(x => x.id === clientId);
     if (yaLigada) return [];
     return ADELANTADAS.filter(f => f.client_id === clientId || (c && c.stock_pool_id === POOL)).map(f => ({ ...f, es_de_otro_cliente: f.client_id !== clientId }));
@@ -121,9 +124,13 @@ const db = {
   venderDeInventarioLigando: async args => {
     await espera(LENTO ? 1500 : 150);
     anota("db venderLigando " + JSON.stringify({ folio: args.folio, items: args.items, total_amount: args.total_amount, dest_client_id: args.dest_client_id,
-      agent: args.agent, pagos: args.payment_refs || null }));
+      agent: args.agent, pagos: args.payment_refs || null, notas: args.notes || null }));
     if (FALLA === "ligar") throw new Error("F-234 ya está ligada a OC-1080: no se liga dos veces.");
     if (FALLA === "ya-ligada") { yaLigada = true; throw new Error("F-234 ya está ligada a OC-1080: no se liga dos veces."); }
+    // sin conexión: la base SÍ la ligó y la respuesta se perdió (red-ligar), no la ligó (red-ligar-sin), o tampoco se puede volver a leer (ligar-y-lectura)
+    if (FALLA === "red-ligar") { yaLigada = true; throw new TypeError("Failed to fetch"); }
+    if (FALLA === "red-ligar-sin") throw new TypeError("Failed to fetch");
+    if (FALLA === "ligar-y-lectura") { lecturaRota = true; throw new TypeError("Failed to fetch"); }
     return { oc_id: "OC-1234", folio: args.folio, ligada: true, invoice_type: "factura", items_count: args.items.length, total_amount: args.total_amount };
   },
   guardarPrecioDeProducto: async (producto, cambios) => {
