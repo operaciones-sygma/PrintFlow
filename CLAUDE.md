@@ -124,7 +124,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2631 pruebas, ~18 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2687 pruebas, ~21 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Las tandas con banco van de a 7 a la vez (`PROBAR_PARALELO`; con 11 juntas,
@@ -203,7 +203,15 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.168 (31-oct, ~07:53, READY `dpl_FURbHuNRmehb5dVgVhiyKMDCuTiR`, commits `02705d8` (base), `494133e` (datos) y `6595110` (la app);
+- **LIVE:** v10.84.169 (31-oct, ~12:26, READY `dpl_6n5gZNf8vo1xawpVXZbasx2kZHfY`, commit `40a88c0`; vuelta atrás: `git revert 40a88c0` y subir (ensayada
+  en un worktree: deja `src` y `tests` como e31de36; la base no cambió, así que la pantalla de la 168 funciona igual); a la 167, `git revert 40a88c0 6595110`
+  en ese orden (ensayada: deja `src` y `tests` como 535827d, sin conflictos) y la base de la 168 después, con su archivo; candado 2687 de 2687 (30 nuevas),
+  de a 4, 1283 s, a la primera y sin inestables; revisado en producción sin escribir: los JS de los dos dominios traen lo nuevo y ya no el texto que se
+  quitó). 🔑 **El carrito con ligar, después de su crítica** (Marcelo, 31-oct: «hagamos una pasada de /impeccable critique a lo que hiciste»; 24/40, dos P1
+  y tres P2): el rechazo del ligado se queda dentro de la ventana, con lo que dijo la relectura (sin conexión, «No se sabe si se registró»), y no ofrece
+  emitir otra hasta saber cómo quedó; el pie fijo con el total, la comparación con la factura, el botón y su porqué; la lectura con tope de 8 s; los pagos
+  capturados con su monto, anotados en la OC; «de otro importe» con su causa («Cambiar a Remisión», sin IVA, la diferencia). Tanda `venta-inventario`.
+  v10.84.168 (31-oct, ~07:53, READY `dpl_FURbHuNRmehb5dVgVhiyKMDCuTiR`, commits `02705d8` (base), `494133e` (datos) y `6595110` (la app);
   vuelta atrás: `git revert 6595110` y subir (ensayada en un worktree: deja `src` y `tests` como 535827d) —el clic a `dpl_7J555Zq8z9B42cb3EYw6PSBruDYv`
   (el código de v10.84.167) ya no es de un paso: el commit de docs que anotó este renglón puso otro despliegue encima—; la base, DESPUÉS de la pantalla,
   con `docs/migrations/v10.84.168_venta_liga_factura_por_adelantado_vuelta_atras.sql` (editor SQL; con la base de antes «Vender y ligar» falla y vender

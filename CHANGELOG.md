@@ -76,7 +76,20 @@ Marcelo eligió los 2 P1 y los 3 P2, ligar por omisión con la comparación a la
 - **Detector de impeccable:** los mismos 227 de antes en toda la app; en el carrito, sólo el fondo `rgba(0,0,0,.6)` que ya tenían los 7 modales.
 - **A ojo:** miradas las capturas a 1366 y a 1920 (el caso común, el rechazo, la lectura caída, la remisión).
 
-**Vuelta atrás.** `git revert` del commit de v10.84.169 y subir: la base no cambió, así que con la de la 168 la pantalla de antes funciona igual.
+**En producción** (31-oct, ~12:26, READY `dpl_6n5gZNf8vo1xawpVXZbasx2kZHfY`, commit `40a88c0`). Candado **2687 de 2687** (30 nuevas), de a 4, 1283 s,
+a la primera y sin inestables. Arrancó a las 12:03, con el «TERMINÉ» de Almacén; a Almacén y a CobranzaFlow se les avisó antes y después. La base no
+cambió. **Revisado en producción sin escribir**:
+- `produccion.sygma.mx` y `print-flow-eosin.vercel.app` piden la contraseña de sitio (401 sin ella);
+- sus JS traen lo nuevo (`pf-venta-falta`, «Es otra venta: emitir», «No se sabe si se registró», la nota de los pagos en la OC) y ya no «revisa las
+  cantidades y los precios»;
+- la misma revisión, corrida antes contra la 168 publicada, sí notaba la diferencia.
+
+No se corrió `npm run recorrido`: el cambio es de un solo modal, que el banco prueba a fondo; que la app abra lo cuidan las tandas `hooks` y `sesion` del
+candado; y otras dos sesiones tenían pruebas con navegador.
+
+**Vuelta atrás.** `git revert 40a88c0` y subir (ensayada en un worktree: `src` y `tests` quedan como e31de36). La base no cambió, así que con la de la 168 la
+pantalla de antes funciona igual. A la 167: `git revert 40a88c0 6595110`, en ese orden (ensayada, sin conflictos: quedan como 535827d), y después la
+base de la 168 con su archivo de vuelta atrás. El clic de Vercel ya no sirve para esto: el commit de docs puso otro despliegue encima.
 
 ---
 
@@ -117,6 +130,12 @@ nuevo** (`bulk_sell_from_stock` no revisaba las facturas hechas por adelantado):
   endurecieron porque su sabotaje no caía: el doble clic, con los dos clics en el mismo turno, y la remisión, con una factura del importe sin IVA);
   **vuelta 3**, el dato que cambia con el carrito abierto (otra persona la liga): fallaba, arreglado. Corrida doble: con v10.84.167 63 pasan y 25 fallan
   (las nuevas); con v10.84.168, **88 de 88**; ninguna regresión. 🔧 vin-60 se corrigió en la vuelta 1: buscaba «Estado de pago» (sale en mayúsculas por el CSS).
+
+**En producción** (31-oct, ~07:53, READY `dpl_FURbHuNRmehb5dVgVhiyKMDCuTiR`, commits `02705d8` (base), `494133e` (datos) y `6595110` (la app)). Candado
+**2657 de 2657** (26 nuevas), de a 4, 1158 s, a la primera y sin inestables. La base, con el OK escrito de Marcelo («Sí, aplícala tú»): el 30-oct ~18:54,
+por la API (`v10_84_168_venta_liga_factura_por_adelantado` y su `_definiciones_vivas`). Los datos de F-234, también con su OK («Sí, regístrala ya»).
+Revisado en producción sin escribir: los JS publicados traen el carrito nuevo y `facturas_por_adelantado_para_venta` le contesta a Karla. (Desde la 169,
+la 168 tiene otra versión encima; para volver a la 167, ver la vuelta atrás de la 169.)
 
 **Vuelta atrás.** La pantalla: `git revert` del commit de v10.84.168 y subir (o promover el despliegue anterior en Vercel). La base:
 `docs/migrations/v10.84.168_venta_liga_factura_por_adelantado_vuelta_atras.sql` (el parche al revés y fuera las dos funciones; con la pantalla de antes
