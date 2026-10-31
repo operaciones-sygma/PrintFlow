@@ -74,8 +74,25 @@ de «No es de esta venta» fue su recomendación aceptada: Cuadra pide lo mismo 
   - Dos anclas se pusieron al día: s14, porque esa línea ahora también quita el freno, y s23, porque la caja del freno repite su renglón. Las anclas se
     comparan con LF, para que puedan llevar dos renglones.
 
-**Vuelta atrás.** PRIMERO la pantalla (`git revert` del commit de v10.84.170 y subir) y luego `docs/migrations/v10.84.170_vuelta_atras.sql` en el
-editor: quita el freno con las mismas anclas (ensayada: la huella regresa) y la función nueva. Lo vendido con «No es de esta venta» se queda.
+**En producción** (31-oct, ~14:58, READY `dpl_3YHkdSS1DVPQ6aqb169gv4M5627e`, commit `fc7780a`). Candado **2704 de 2704** (17 nuevas), de a 4, 1342 s,
+a la primera y sin inestables. Las otras sesiones se turnaron: Almacén y Sygma Central corrieron antes, y CobranzaFlow se pausó mientras.
+- **La base, con el OK escrito de Marcelo** («Sí, aplícalo tú»), en el orden que aprobó:
+  - la 170a a las 14:34 (`v10_84_170a_vender_aunque_haya`, 20261031203401);
+  - la pantalla a las 14:58;
+  - la 170b a las 14:59 (`v10_84_170b_freno_folio_nuevo` y su `_definiciones_vivas`). La huella de `bulk_sell_from_stock` pasó de `4f2fbf49…` a
+    `87d1920b…`.
+
+  Invariantes 91 de 91.
+- **Revisado en producción sin escribir:**
+  - los JS de los dos dominios traen la función nueva, el freno y sus textos (la misma revisión, contra la 169 publicada, no los encontraba);
+  - con la función viva, como Karla, tres ventas que se deshacen: sin adelantada vende, con una del mismo importe frena, y nombrándola vende.
+
+  No se corrió `npm run recorrido`: el cambio es de un solo modal, y que la app abra lo cuidan las tandas `hooks` y `sesion` del candado.
+
+**Vuelta atrás.** PRIMERO la pantalla: `git revert fc7780a` y subir (ensayada en un worktree, sin conflictos: deja `src` y `tests` como 18db43e).
+Luego `docs/migrations/v10.84.170_vuelta_atras.sql` en el editor: quita el freno con las mismas anclas (ensayada: la huella regresa a la de la 168) y la
+función nueva. Si sólo se regresa la pantalla, el freno sigue protegiendo: la 169 liga igual, y su «No es de esta venta» queda frenado con el aviso de
+la base. Lo vendido con «No es de esta venta» se queda.
 
 ---
 
