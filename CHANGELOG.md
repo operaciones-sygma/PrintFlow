@@ -12,6 +12,54 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.168 — El carrito de inventario liga la factura hecha por adelantado (F-234 de Cuadra) — 30-oct-2026
+
+**Qué pasaba.** Marcelo, 30-oct: *«la F234 queremos sacar un traslado con esa factura, pero no aparece. El problema fue que esa factura no se creó desde
+el carrito de Cuadra en PrintFlow, se creó como una factura sin orden de producción… da prioridad a esto»*. F-234 (MANUFACTURERA DE BOTAS CUADRA,
+$91,315.20, el pedido de cada semana: los 5 productos de F-186 y F-217) la hizo Karla en CobranzaFlow el 28-oct **por adelantado** («El cliente solicita
+la factura antes de entregar el pedido») y la timbró. Traslados (`cobranza.traslado_ocs_candidatas`) sólo busca entre órdenes de PrintFlow con OC, y
+F-234 no tenía ninguna. Y no había cómo dársela: la nota de la factura dice «Se liga en PrintFlow… la ofrece si el importe coincide al centavo», cierto en
+las otras puertas (asignar folio a la orden o a la OC, el plan matriz, la siguiente parte), pero **el carrito de inventario siempre acuñaba un folio
+nuevo** (`bulk_sell_from_stock` no revisaba las facturas hechas por adelantado): vender desde el carrito habría sacado otra factura de $91,315.20.
+
+**Qué se cambió.**
+- **La base** (`docs/migrations/v10.84.168_venta_liga_factura_por_adelantado.sql`, APLICADA el 30-oct ~18:54 con el OK de Marcelo, por la API):
+  `bulk_sell_from_stock` (misma firma) puede llevar el folio de una factura que ya existe: no acuña otro, el puente no crea factura (la ve y anota
+  `skip_invoice_duplicate`) y la factura sólo gana su OC (`source_order_id`), como en `link_invoice_to_oc`; su importe, su saldo, sus cobros y su CFDI no
+  se tocan. Revisa que esté viva, hecha por adelantado (sin orden), sin ligar, del MISMO cliente y por el mismo importe (±2 centavos), con candado sobre la
+  factura (dos ventas no se ligan a la misma). Lo pide `vender_de_inventario_ligando` (nueva: la venta de siempre, sin pagos, Dirección y Karla), la única
+  que pone `pf.venta_liga_folio`. Y `facturas_por_adelantado_para_venta` (nueva, sólo lee): las del cliente y las de su apartado. Las órdenes nacen como
+  siempre (`source 'stock'`, `order_type 'interna'`, `stage 'delivered'`: Almacén las lee así) y el inventario se descuenta igual.
+- **El carrito** (`BulkSellModal`): al elegir el cliente lee sus facturas hechas por adelantado. La del mismo tipo e importe se ofrece como en «Asignar
+  folio y entregar» («F-234 es del mismo importe: ¿es la factura de esta venta?», cuánto, cuándo y su motivo) y el botón es **«Vender y ligar F-234»**:
+  el folio es el de la factura (no se teclea ni se acuña), sin selector de pagos («Los cobros de F-234 se registran en CobranzaFlow»; los capturados antes
+  se dicen y se marcan) y «No es de esta venta: emitir factura nueva» con su regreso. Con dos del mismo importe se elige cuál. Las de otro importe se
+  avisan (tres y «y N más»), y la de otro cliente del apartado dice a quién cambiar el destino. Mientras lee no vende («Revisando…»); si la lectura falla,
+  no vende sin «Ya revisé en CobranzaFlow» (`SinRevisionSinOrden`, la regla 12) y tiene «Reintentar». Si la base rechaza el ligado, lo dice y vuelve a leer.
+- **Los datos** (`v10.84.168_datos_f234.sql`, con el OK de Marcelo, firmada como él): la venta de F-234 quedó como **OC-1074** (5 órdenes, el inventario
+  descontado, F-234 con su OC). En Traslados, buscar «F-234» trae OC-1074 con los 5 conceptos timbrados: Karla ya puede sacar el traslado.
+
+**Cómo se probó.**
+- Base: ensayo con rollback como Karla, **13 de 13** (los 7 frenos, el ligado completo, Traslados, el doble clic y el carrito de siempre sin cambio); la
+  vuelta atrás, ensayada: misma huella md5 que antes; aplicada, la huella del ensayo. Invariantes **91 de 91**.
+- Tanda `venta-inventario` (de dinero), **26 casos nuevos** (vin-59 a vin-83): **vuelta 1**, 7 escritos antes del arreglo, **los 7 fallaban** con
+  v10.84.167 (en vin-59 se ve el bug: vendía con folio nuevo aunque F-234 era del mismo importe); **vuelta 2**, 18 por donde no se diseñó (doble clic,
+  otra cantidad, remisión, la respuesta tarde de otro cliente, mientras lee, dos iguales, doce, motivo larguísimo, 1366 y 1920 con AA, pagos capturados
+  antes, Esc, emisor apagado, «No es» y regreso, «Reintentar», sin cliente, la remisión por adelantado); **13 sabotajes**, todos caen (dos pruebas se
+  endurecieron porque su sabotaje no caía: el doble clic, con los dos clics en el mismo turno, y la remisión, con una factura del importe sin IVA);
+  **vuelta 3**, el dato que cambia con el carrito abierto (otra persona la liga): fallaba, arreglado. Corrida doble: con v10.84.167 63 pasan y 25 fallan
+  (las nuevas); con v10.84.168, **88 de 88**; ninguna regresión. 🔧 vin-60 se corrigió en la vuelta 1: buscaba «Estado de pago» (sale en mayúsculas por el CSS).
+
+**Vuelta atrás.** La pantalla: `git revert` del commit de v10.84.168 y subir (o promover el despliegue anterior en Vercel). La base:
+`docs/migrations/v10.84.168_venta_liga_factura_por_adelantado_vuelta_atras.sql` (el parche al revés y fuera las dos funciones; con la pantalla de antes
+la venta de siempre funciona con las dos bases). Los datos de F-234 son buenos y se quedan.
+
+**Lo que queda (para decidir).** Que la base también frene en el carrito una factura NUEVA cuando el cliente tiene una hecha por adelantado del mismo
+importe sin ligar (como `assign_invoice`); hoy lo cuida la pantalla. En CobranzaFlow (su conversación): la nota de la factura sin orden de un cliente de
+inventario debería decir «al venderla desde el carrito», y la quinta puerta en `SPEC-facturar-por-partes.md`.
+
+---
+
 ## v10.84.167 — La venta de inventario lleva el precio de cada producto (y el nombre que pide el cliente) — 22-oct-2026
 
 **Qué pasaba.** Marcelo, 22-oct, al revisar las ventas de papel de china de Cuadra: *«me llamó la atención que PrintFlow infle el precio entonces por

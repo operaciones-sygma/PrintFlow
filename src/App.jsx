@@ -2535,6 +2535,23 @@ const db = {
     if (error) throw new Error(error.message);
     return data;
   },
+  // 🔗 v10.84.168 — las facturas hechas por adelantado (sin orden, vivas y sin ligar) del cliente al que se vende y de su apartado (Cuadra): el carrito
+  //   las revisa antes de vender (F-234, 30-oct). Un error se lanza: sin la lectura no se vende (regla 12), como en las otras puertas.
+  async facturasPorAdelantadoParaVenta(clientId) {
+    const {data, error} = await supabase.rpc("facturas_por_adelantado_para_venta", {p_client_id: clientId});
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+  // 🔗 v10.84.168 — la venta de inventario ligada a la factura que ya existe: el carrito de siempre (bulk_sell_from_stock) con ESE folio, sin acuñar otro
+  //   y sin pagos (los cobros de esa factura se registran en CobranzaFlow)
+  async venderDeInventarioLigando({folio, items, total_amount, dest_client_id, agent, notes, actor, client_agent}) {
+    const {data, error} = await supabase.rpc("vender_de_inventario_ligando", {
+      p_folio: folio, p_items: items, p_total_amount: total_amount, p_client_id: dest_client_id||null,
+      p_agent: agent||null, p_notes: notes||null, p_actor: actor, p_client_agent: client_agent||null
+    });
+    if (error) throw new Error(error.message);
+    return data;
+  },
   async loadStockMovements(productId=null, limit=50) {
     let q=supabase.from("stock_movements").select("*").order("created_at",{ascending:false}).limit(limit);
     if(productId)q=q.eq("client_product_id",productId);
@@ -6250,6 +6267,16 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
   const [clientAgents, setClientAgents] = useState([]);
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
+  // v10.84.168 — LA FACTURA HECHA POR ADELANTADO (F-234 de MANUFACTURERA DE BOTAS CUADRA, 30-oct-2026): Karla la hizo en CobranzaFlow antes de entregar y
+  //   este carrito sólo sabía acuñar otra (salía otra factura por lo mismo; sin venta no había OC y Traslados no la encontraba). Antes de vender se leen
+  //   las del cliente y de su apartado (facturas_por_adelantado_para_venta) y la del mismo importe se liga (vender_de_inventario_ligando: la venta de
+  //   siempre, con ESE folio). undefined = leyendo, null = no se pudo leer (no se vende sin «Ya revisé», como en las otras puertas), [] = ninguna.
+  const [adelantadas, setAdelantadas] = useState(undefined);
+  const [lecturaAd, setLecturaAd] = useState(0);            // «Reintentar»
+  const [revisoSinLeer, setRevisoSinLeer] = useState(false); // «Ya revisé en CobranzaFlow» cuando no se pudo leer
+  const [emitirOtra, setEmitirOtra] = useState(false);       // «No es de esta venta»: factura nueva aunque haya una del mismo importe
+  const [elegidaAd, setElegidaAd] = useState("");            // con dos del mismo importe, cuál se liga (si nadie elige, la más vieja)
+  const [pagosVistos, setPagosVistos] = useState(false);     // los pagos capturados no se registran al ligar: la persona lo dice
   // sync ref con state para que ESC handler lea el valor actual sin re-binding
   useEffect(()=>{ busyRef.current = busy; }, [busy]);
   // v10.84.167 — salir con algo en el carrito pregunta (Esc, el clic afuera o la ×); con el carrito vacío sale directo. Mientras vende, nada (v10.56.1 F-M1:
@@ -6348,6 +6375,19 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
     return ()=>{alive=false};
   }, [hasPooled, destClientId, cart[0]?.client_id, cart.length]);
 
+  // v10.84.168 — las facturas hechas por adelantado del cliente de la venta, cada vez que cambia (la respuesta de otro cliente que llega tarde no cuenta)
+  const idClienteVenta = hasPooled ? destClientId : (cart[0]?.client_id||null);
+  useEffect(()=>{
+    setEmitirOtra(false); setElegidaAd(""); setRevisoSinLeer(false);
+    if(!idClienteVenta){ setAdelantadas(undefined); return; }
+    let alive=true;
+    setAdelantadas(undefined);
+    Promise.resolve().then(()=>db.facturasPorAdelantadoParaVenta(idClienteVenta))   // un error, aun el que salta antes de la promesa, es «no se pudo leer»
+      .then(v=>{ if(alive) setAdelantadas(Array.isArray(v)?v:[]); })
+      .catch(()=>{ if(alive) setAdelantadas(null); });
+    return ()=>{alive=false};
+  }, [idClienteVenta, lecturaAd]);
+
   const addToCart = (p) => {
     if (cart.find(c=>c.client_product_id===p.id)) return;
     // 🆕 v10.73.3 — venta por KILOS (china blanco): si el producto trae specs.sell_unit='kg',
@@ -6409,8 +6449,23 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
   // v10.74.2 — el vendedor es OBLIGATORIO: las ventas de stock SÍ comisionan (decisión del dueño),
   // y sin agente la factura nace sin seller y la comisión se pierde en silencio.
   const agentOK = !!(agent && agent.trim());
-  const canSubmit = !busy && validCart && folioOK && validDest && totalOK && agentOK
-    && !mixedPools && !mixedClientsNoPool && !mixedPooledAndNonPooled && validPayments;
+  // v10.84.168 — la hecha por adelantado del mismo tipo e importe (al centavo, ±2 como la base) se liga; las de otro importe y las de otro cliente del
+  //   apartado se avisan. Sin la lectura (leyendo, o falló sin «Ya revisé») no se vende: un anticipo se facturaría dos veces.
+  const nombreCliente = (hasPooled ? poolClients.find(c=>c.id===destClientId)?.name : null) || "el cliente";
+  const listaAd = Array.isArray(adelantadas) ? adelantadas : [];
+  const delMismoImporte = f => f.doc_type===invoiceType && totalOK && Math.abs(Math.round(Number(f.amount)*100) - totalCents) <= 2;
+  const propiasAd = listaAd.filter(f=>!f.es_de_otro_cliente);
+  const paraLigar = propiasAd.filter(delMismoImporte);
+  const ligarA = emitirOtra ? null : (paraLigar.find(f=>f.doc_number===elegidaAd) || paraLigar[0] || null);
+  const otrasPropias = propiasAd.filter(f=>!delMismoImporte(f));
+  const deOtroClienteIgual = listaAd.filter(f=>f.es_de_otro_cliente && delMismoImporte(f));
+  const revisadoAd = !idClienteVenta || (adelantadas!==undefined && (adelantadas!==null || revisoSinLeer));
+  const pagosAlLigar = !!ligarA && paymentStatus!=="unpaid" && paymentRefs.length>0;
+  const haceDiasAd = d => { const n = Number(d)||0; return n<=0 ? "hoy" : n===1 ? "hace 1 día" : "hace "+n+" días"; };
+  const motivoAd = f => { const m = /Motivo:\s*([^.]+)/i.exec(f?.notas||""); if (!m) return null; const t = m[1].trim(); return t.length>120 ? t.slice(0,117).trimEnd()+"…" : t; };
+  const canSubmit = !busy && validCart && (!!ligarA || folioOK) && validDest && totalOK && agentOK
+    && !mixedPools && !mixedClientsNoPool && !mixedPooledAndNonPooled && (!!ligarA || validPayments)
+    && revisadoAd && (!pagosAlLigar || pagosVistos);
 
   const submit = async()=>{
     if (!canSubmit || busyRef.current) return;
@@ -6422,6 +6477,22 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
       // y Lucero ve "Sin folio (revisar)" siempre).
       const refsForBackend = paymentStatus==="unpaid" ? null
         : paymentRefs.map(toBackendRef);
+      if (ligarA) {
+        // v10.84.168 — la venta se liga a la factura hecha por adelantado: el carrito de siempre con su folio, sin pagos (sus cobros van en CobranzaFlow)
+        const result = await db.venderDeInventarioLigando({
+          folio: ligarA.doc_number,
+          items: cart.map(c=>({client_product_id:c.client_product_id, qty:c.qty, amount:centavosDe(c)/100})),
+          total_amount: totalNum,
+          dest_client_id: hasPooled ? destClientId : null,
+          agent: agent || null,
+          notes: notes.trim() || null,
+          actor: userLogin || "sistema",
+          client_agent: clientAgent.trim() || null
+        });
+        showToast(`✅ ${result.folio} ligada · OC ${result.oc_id} · ${result.items_count} productos · $${Number(result.total_amount).toLocaleString("es-MX",{minimumFractionDigits:2})}`);
+        onSuccess(result);
+        return;
+      }
       const result = await db.bulkSellFromStock({
         items: cart.map(c=>({client_product_id:c.client_product_id, qty:c.qty, amount:centavosDe(c)/100})),   // v10.84.167 — el importe de cada producto, sin IVA
         total_amount: totalNum,
@@ -6440,6 +6511,9 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
       onSuccess(result);
     } catch(e) {
       showToast("❌ "+(e?.message||"error desconocido"), "error");
+      // v10.84.168 — si no se pudo ligar (otra persona la ligó, la cancelaron o cambió su importe con el carrito abierto), se vuelve a leer: lo que se
+      //   ofrecía puede ya no ser cierto
+      if (ligarA) setLecturaAd(k=>k+1);
     } finally {
       busyRef.current = false;
       setBusy(false);
@@ -6559,6 +6633,32 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
                 </select>
               </div>
             )}
+            {/* v10.84.168 — las facturas hechas por adelantado del cliente (F-234 de Cuadra, 30-oct): leyendo, sin lectura, la del mismo importe (se liga), las
+                de otro importe y la de otro cliente del apartado. Las mismas palabras que «Asignar folio y entregar». */}
+            {idClienteVenta && adelantadas===undefined && <div role="status" style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5,color:C.t2,marginBottom:10,padding:"6px 10px",background:C.sf,borderRadius:8}}><HourglassIcon size={12} weight="bold" style={{flexShrink:0}}/>Revisando si {nombreCliente} ya tiene facturas hechas por adelantado…</div>}
+            {idClienteVenta && adelantadas===null && <SinRevisionSinOrden cliente={nombreCliente} onReintentar={()=>setLecturaAd(k=>k+1)} revisado={revisoSinLeer} onRevisado={setRevisoSinLeer} que="vender"/>}
+            {ligarA && <div role="group" aria-labelledby="pf-venta-liga" style={{background:C.fac+"0d",border:"1px solid "+C.fac+"40",borderRadius:10,padding:"10px 12px",marginBottom:10,fontSize:12,color:C.tx,lineHeight:1.45}}>
+              <div id="pf-venta-liga" style={{display:"flex",alignItems:"flex-start",gap:6,fontSize:12.5,fontWeight:700,marginBottom:4}}><LinkIcon size={14} weight="bold" color={C.fac} style={{flexShrink:0,marginTop:2}}/>{ligarA.doc_number} es del mismo importe: ¿es la {ligarA.doc_type==="remision"?"remisión":"factura"} de esta venta?</div>
+              <div style={{color:C.t2,overflowWrap:"anywhere"}}>{ligarA.doc_type==="remision"?"Remisión":"Factura"} por adelantado por <b style={{fontFamily:"'Geist Mono',monospace",color:C.tx}}>{fmtPesos(ligarA.amount)}</b>, emitida {haceDiasAd(ligarA.dias_sin_orden)}{motivoAd(ligarA)?" · «"+motivoAd(ligarA)+"»":""}.</div>
+              <div style={{color:C.t2,marginTop:4}}>Si es de esta venta, se liga: se descuenta el inventario, {ligarA.doc_number} queda con su OC (para el traslado) y no se emite otra. Los cobros de {ligarA.doc_number} se registran en CobranzaFlow.</div>
+              {paraLigar.length>1 && <label style={{display:"flex",alignItems:"center",flexWrap:"wrap",gap:8,marginTop:8,fontSize:11.5,fontWeight:600}}>Hay {paraLigar.length} del mismo importe; se liga
+                <select aria-label="Cuál factura hecha por adelantado se liga" style={{...inp,fontSize:11.5,width:"auto",padding:"4px 8px"}} value={ligarA.doc_number} onChange={e=>setElegidaAd(e.target.value)} disabled={busy}>{paraLigar.map(f=><option key={f.doc_number} value={f.doc_number}>{f.doc_number} · {haceDiasAd(f.dias_sin_orden)}</option>)}</select></label>}
+              {pagosAlLigar && <label style={{display:"flex",alignItems:"flex-start",gap:8,marginTop:8,padding:"8px 10px",background:C.wn+"10",border:"1px solid "+C.wn+"40",borderRadius:8,fontSize:11.5,fontWeight:600,cursor:"pointer"}}><input type="checkbox" checked={pagosVistos} onChange={e=>setPagosVistos(e.target.checked)} style={{marginTop:2,flexShrink:0}}/>Capturaste {paymentRefs.length===1?"un pago":paymentRefs.length+" pagos"}: al ligar no se registra{paymentRefs.length===1?"":"n"} aquí. Lo registro en CobranzaFlow, sobre {ligarA.doc_number}.</label>}
+              <button type="button" onClick={()=>{escudoDeClics(500);setEmitirOtra(true)}} disabled={busy} style={{...bt(C.bg,C.tx),border:"0.5px solid "+C.bdSt,fontSize:11.5,padding:"6px 12px",marginTop:8}}>No es de esta venta: emitir factura nueva</button>
+            </div>}
+            {emitirOtra && paraLigar.length>0 && <div role="status" style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",background:C.wn+"10",border:"1px solid "+C.wn+"40",borderRadius:10,padding:"8px 12px",marginBottom:10,fontSize:12,color:C.tx,lineHeight:1.45}}>
+              <span style={{flex:"1 1 220px"}}>Se emite una factura nueva: {paraLigar.map(f=>f.doc_number).join(", ")} (del mismo importe) sigue sin ligar.</span>
+              <button type="button" onClick={()=>{escudoDeClics(500);setEmitirOtra(false)}} disabled={busy} style={{...bt(C.bg,C.tx),border:"0.5px solid "+C.bdSt,fontSize:11.5,padding:"6px 12px"}}><LinkIcon size={12} weight="bold"/>Ligar {paraLigar[0].doc_number}</button>
+            </div>}
+            {!ligarA && !emitirOtra && otrasPropias.length>0 && <div role="status" style={{background:C.sf,border:"1px solid "+C.bd,borderRadius:10,padding:"8px 12px",marginBottom:10,fontSize:12,color:C.tx,lineHeight:1.45}}>
+              <div style={{fontWeight:700,marginBottom:3}}>{nombreCliente} tiene {otrasPropias.length===1?"una factura hecha por adelantado":otrasPropias.length+" facturas hechas por adelantado"} sin ligar, de otro importe</div>
+              <ul style={{margin:"0 0 4px",paddingLeft:18,overflowWrap:"anywhere"}}>{otrasPropias.slice(0,3).map(f=><li key={f.doc_number}><b>{f.doc_number}</b> por <span style={{fontFamily:"'Geist Mono',monospace"}}>{fmtPesos(f.amount)}</span>, {haceDiasAd(f.dias_sin_orden)}{motivoAd(f)?" · «"+motivoAd(f)+"»":""}</li>)}{otrasPropias.length>3&&<li>y {otrasPropias.length-3} más</li>}</ul>
+              <div style={{color:C.t2}}>Si una es de esta venta, revisa las cantidades y los precios: se liga cuando el importe es el mismo al centavo. Si no, sigue.</div>
+            </div>}
+            {!ligarA && deOtroClienteIgual.length>0 && <div role="status" style={{display:"flex",alignItems:"flex-start",gap:6,background:C.wn+"10",border:"1px solid "+C.wn+"40",borderRadius:10,padding:"8px 12px",marginBottom:10,fontSize:12,color:C.tx,lineHeight:1.45}}>
+              <WarningIcon size={13} weight="fill" color={C.wn} style={{flexShrink:0,marginTop:2}}/>
+              <span><b>{deOtroClienteIgual[0].cliente}</b> tiene {deOtroClienteIgual[0].doc_number} por {fmtPesos(deOtroClienteIgual[0].amount)}, hecha por adelantado y del mismo importe. Si es esta venta, el cliente destino es {deOtroClienteIgual[0].cliente}: cámbialo arriba y se ofrece ligarla.</span>
+            </div>}
             <div style={{display:"grid",gridTemplateColumns:"100px 1fr",gap:8,marginBottom:8}}>
               <div>
                 <label style={{...lbl,marginTop:0,fontSize:10}}>Tipo *</label>
@@ -6572,7 +6672,9 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
               </div>
               <div>
                 {/* F1: en modo emisor el folio nace del counter → se oculta el input */}
-                {folioAuto?<FolioAutoNote/>:<>
+                {/* v10.84.168 — la venta que se liga lleva el folio de su factura: no se acuña ni se teclea otro */}
+                {ligarA?<div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 12px",marginBottom:8,marginTop:4,background:C.fac+"0E",border:"1px solid "+C.fac+"33",borderRadius:10,fontSize:11,color:C.t2,lineHeight:1.4}}><LinkIcon size={16} weight="bold" color={C.fac} style={{flexShrink:0}}/><span><b style={{color:C.tx}}>Folio {ligarA.doc_number}</b> · ya existe: no se emite otro</span></div>
+                :folioAuto?<FolioAutoNote/>:<>
                 <label style={{...lbl,marginTop:0,fontSize:10}}>Folio fiscal * <span style={{color:C.t3,fontWeight:400}}>(sugerido — modificable)</span></label>
                 <input style={{...inp,fontSize:13,fontFamily:"'Geist Mono',monospace",fontWeight:700,letterSpacing:.5,border:"1.5px solid "+(folioOK?C.bd:C.dn+"40")}} value={folio} onChange={e=>{const v=e.target.value; setFolio(v); setFolioEdited(v.length>0);}} placeholder={pref+"XXXX"} disabled={busy}/>
                 </>}
@@ -6612,7 +6714,8 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
             </div>
 
             {/* MultiPaymentPicker: estado de pago + multi-pago */}
-            {totalOK && <div style={{marginBottom:10}}>
+            {/* v10.84.168 — al ligar no se capturan pagos: los cobros de esa factura se registran en CobranzaFlow (lo dice la caja de arriba) */}
+            {totalOK && !ligarA && <div style={{marginBottom:10}}>
               <MultiPaymentPicker
                 status={paymentStatus}
                 refs={paymentRefs}
@@ -6623,8 +6726,8 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
               />
             </div>}
 
-            <button onClick={submit} disabled={!canSubmit} style={{...bt(canSubmit?C.okInk:"#9ca3af"),width:"100%",justifyContent:"center",padding:"12px",fontSize:13,opacity:canSubmit?1:.6,cursor:canSubmit?"pointer":(busy?"wait":"not-allowed")}}>{busy?<><HourglassIcon size={14} weight="bold"/>Procesando...</>:<><ShoppingCartIcon size={14} weight="bold"/>{invoiceType==="factura"?"Vender y facturar todo":"Vender con remisión"}</>}</button>
-            {!folioOK && folio && <div style={{fontSize:11,color:C.dnInk,marginTop:6,textAlign:"center"}}>Folio inválido. Formato: {pref}NNNN</div>}
+            <button onClick={submit} disabled={!canSubmit} style={{...bt(canSubmit?C.okInk:"#9ca3af"),width:"100%",justifyContent:"center",padding:"12px",fontSize:13,opacity:canSubmit?1:.6,cursor:canSubmit?"pointer":(busy?"wait":"not-allowed")}}>{busy?<><HourglassIcon size={14} weight="bold"/>Procesando...</>:<>{ligarA?<LinkIcon size={14} weight="bold"/>:<ShoppingCartIcon size={14} weight="bold"/>}{ligarA?"Vender y ligar "+ligarA.doc_number:invoiceType==="factura"?"Vender y facturar todo":"Vender con remisión"}</>}</button>
+            {!ligarA && !folioOK && folio && <div style={{fontSize:11,color:C.dnInk,marginTop:6,textAlign:"center"}}>Folio inválido. Formato: {pref}NNNN</div>}
             {/* v10.84.167 — lo que falta y lo que está mal escrito, cada uno con su palabra (la vuelta 2: decía «Falta el precio» de uno sí escrito) */}
             {(()=>{const vacio=c=>String(c.precio==null?"":c.precio).trim()==="";const faltan=sinPrecio.filter(vacio),malos=sinPrecio.filter(c=>!vacio(c));const fila={display:"flex",alignItems:"center",justifyContent:"center",gap:4,fontSize:11,color:C.wnInk,fontWeight:600,marginTop:6,textAlign:"center"};return <>
               {faltan.length>0 && <div style={fila}><WarningIcon size={11} weight="fill" style={{flexShrink:0}}/>Falta el precio de {faltan.map(c=>c.name).join(", ")}</div>}
@@ -6634,7 +6737,7 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
             {cart.length>0 && cart.some(c=>!(c.qty>0 && c.qty<=c.stock_actual)) && <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:4,fontSize:11,color:C.wnInk,marginTop:6}}><WarningIcon size={11} weight="fill"/>Revisa las cantidades: cada producto, más de 0 y no más de lo disponible</div>}
             {hasPooled && !destClientId && cart.length>0 && <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:4,fontSize:11,color:C.wnInk,marginTop:6}}><WarningIcon size={11} weight="fill"/>Selecciona el cliente destino del pool</div>}
             {!agentOK && cart.length>0 && <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:4,fontSize:11,color:C.wnInk,marginTop:6}}><WarningIcon size={11} weight="fill"/>Selecciona el vendedor — sin él la venta no genera comisión</div>}
-            {totalOK && !validPayments && <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:4,fontSize:11,color:C.wnInk,marginTop:6}}><WarningIcon size={11} weight="fill"/>Revisa el estado de pago y los montos</div>}
+            {totalOK && !ligarA && !validPayments && <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:4,fontSize:11,color:C.wnInk,marginTop:6}}><WarningIcon size={11} weight="fill"/>Revisa el estado de pago y los montos</div>}
           </div>
         </div>
       </div>

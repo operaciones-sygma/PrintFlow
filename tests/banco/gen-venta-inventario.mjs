@@ -7,6 +7,14 @@
 // precio) · falla=cambiado (alguien más cambió el producto mientras se editaba) · emisor=0 (el folio se teclea, como antes del 1-sep) · lento=1 (la
 // venta y guardar el precio tardan 1.5 s: para el doble clic y Esc mientras trabaja) · nombres=raros (vuelta 2: nombres larguísimos, sin espacios, de una
 // letra, con acentos, emoji y de derecha a izquierda, del catálogo de break-ui) · muchos=1000 (mil productos más en el catálogo)
+// v10.84.168 (F-234 de Cuadra, 30-oct: la factura hecha por adelantado que el carrito no sabía ligar): adelantadas=igual (F-234 de MANUFACTURERA por
+// $47,560.00, lo que suma la «venta típica» de las pruebas) · otro-importe (F-234 por $50,000.00) · igual-sin-iva (F-234 por $41,000.00, lo de la venta
+// típica sin IVA) · remision (RS-41, remisión por adelantado de $41,000.00) · otro-cliente (F-234 de TIENDAS, del mismo apartado y
+// el mismo importe) · dos-iguales (F-234 y F-240, las dos por $47,560.00) · muchas (doce de MANUFACTURERA, ninguna del importe) · raras (F-234 con un
+// motivo larguísimo, comillas, «&» y emoji) · falla=adelantadas (la lectura falla) · falla=adelantadas1 (sólo la primera lectura falla: «Reintentar»)
+// · falla=ligar (la base rechaza el ligado) · falla=ya-ligada (otra persona la ligó con el carrito abierto: la base lo rechaza y la lectura ya no la
+// trae) · lentoAd=1 (la lectura tarda 1.5 s) · lentoAd=c-man (sólo la de MANUFACTURERA: su respuesta llega después
+// de la de otro cliente elegido luego)
 import fs from "node:fs";
 import path from "node:path";
 import { LIGA_FUENTES, copiarFuentes } from "./fuentes.mjs";
@@ -29,6 +37,8 @@ window.confirm = m => { anota("confirm: " + String(m).split("\\n")[0]); return t
 const Q = new URLSearchParams(location.search);
 const ROL = Q.get("rol") || "karla", FALLA = Q.get("falla") || "", EMISOR = Q.get("emisor") !== "0", LENTO = Q.get("lento") === "1";
 const RAROS = Q.get("nombres") === "raros", MUCHOS = Number(Q.get("muchos") || 0);
+const ADEL = Q.get("adelantadas") || "", LENTO_AD = Q.get("lentoAd") || "";
+let lecturasAd = 0, yaLigada = false;   // falla=ya-ligada: otra persona ligó F-234 con el carrito abierto (la base lo rechaza y ya no sale en la lectura)
 const espera = ms => new Promise(r => setTimeout(r, ms));
 const T = s => new Date(s).toISOString();
 const POOL = "pool-cuadra";
@@ -61,6 +71,25 @@ const CLIENTES = [
   { id: "c-tie", name: "TIENDAS CUADRA", stock_pool_id: POOL, pool_name: "Cuadra" },
   { id: "c-fac", name: "FABRICA DE ALTA CALIDAD", stock_pool_id: POOL, pool_name: "Cuadra" },
 ];
+// v10.84.168 — las facturas hechas por adelantado, como las contesta public.facturas_por_adelantado_para_venta: las del cliente y las de su apartado,
+//   cada una con es_de_otro_cliente según a quién se le pregunta
+const NOTA_ADELANTADA = "FACTURA POR ADELANTADO, sin orden de producción. Motivo: El cliente solicita la factura antes de entregar el pedido. Se liga en PrintFlow: si es todo el trabajo, al asignarle folio a su orden o a su OC.";
+const adelantada = (doc, cliente, amount, extra = {}) => ({ doc_number: doc, doc_type: "factura", amount, balance: amount, status: "pendiente", cfdi_status: "stamped",
+  issued_date: "2026-10-28", dias_sin_orden: 2, notas: NOTA_ADELANTADA, client_id: cliente.id, cliente: cliente.name, ...extra });
+const ADELANTADAS = (() => {
+  const [man, tie] = CLIENTES;
+  if (ADEL === "igual") return [adelantada("F-234", man, 47560)];
+  if (ADEL === "otro-importe") return [adelantada("F-234", man, 50000)];
+  // lo que suma la venta típica SIN IVA ($41,000.00): una factura así no es de una venta con remisión; una remisión así, sí
+  if (ADEL === "igual-sin-iva") return [adelantada("F-234", man, 41000)];
+  if (ADEL === "remision") return [adelantada("RS-41", man, 41000, { doc_type: "remision", cfdi_status: "none" })];
+  if (ADEL === "otro-cliente") return [adelantada("F-234", tie, 47560)];
+  if (ADEL === "dos-iguales") return [adelantada("F-234", man, 47560), adelantada("F-240", man, 47560, { issued_date: "2026-10-30", dias_sin_orden: 0 })];
+  if (ADEL === "muchas") return Array.from({ length: 12 }, (_, i) => adelantada("F-3" + String(i + 10), man, 1000 + i * 111.11));
+  if (ADEL === "raras") return [adelantada("F-234", man, 47560, { notas: "FACTURA POR ADELANTADO. Motivo: " +
+    "El cliente «Botas & Más 🎄» pide la factura YA porque su contador cierra el mes y no acepta remisiones ni facturas sin orden de compra firmada ".repeat(3) + ". Se liga en PrintFlow." })];
+  return [];
+})();
 const db = {
   loadClientProducts: async () => { await espera(40); anota("db loadClientProducts"); return PRODUCTOS.map(x => ({ ...x, specs: x.specs ? JSON.parse(JSON.stringify(x.specs)) : x.specs })); },
   loadStockMovements: async () => { await espera(40); return []; },
@@ -77,6 +106,25 @@ const db = {
       payment_status: args.payment_status, pagos: (args.payment_refs || []).map(r => Number(r.amount)) }));
     if (FALLA === "vender") throw new Error("Stock insuficiente para Etiqueta colgante: 50 disponible vs 10000 requerido");
     return { oc_id: "OC-1234", folio: EMISOR ? (args.invoice_type === "factura" ? "F-300" : "RS-40") : args.folio, invoice_type: args.invoice_type, items_count: args.items.length, total_amount: args.total_amount };
+  },
+  // v10.84.168 — lo que el carrito revisa antes de vender, y la venta que se liga a la factura que ya existe
+  facturasPorAdelantadoParaVenta: async clientId => {
+    lecturasAd++;
+    const n = lecturasAd;
+    await espera(LENTO_AD === "1" || LENTO_AD === clientId ? 1500 : 60);
+    anota("db facturasPorAdelantado " + clientId);
+    if (FALLA === "adelantadas" || (FALLA === "adelantadas1" && n === 1)) throw new Error("Failed to fetch");
+    const c = CLIENTES.find(x => x.id === clientId);
+    if (yaLigada) return [];
+    return ADELANTADAS.filter(f => f.client_id === clientId || (c && c.stock_pool_id === POOL)).map(f => ({ ...f, es_de_otro_cliente: f.client_id !== clientId }));
+  },
+  venderDeInventarioLigando: async args => {
+    await espera(LENTO ? 1500 : 150);
+    anota("db venderLigando " + JSON.stringify({ folio: args.folio, items: args.items, total_amount: args.total_amount, dest_client_id: args.dest_client_id,
+      agent: args.agent, pagos: args.payment_refs || null }));
+    if (FALLA === "ligar") throw new Error("F-234 ya está ligada a OC-1080: no se liga dos veces.");
+    if (FALLA === "ya-ligada") { yaLigada = true; throw new Error("F-234 ya está ligada a OC-1080: no se liga dos veces."); }
+    return { oc_id: "OC-1234", folio: args.folio, ligada: true, invoice_type: "factura", items_count: args.items.length, total_amount: args.total_amount };
   },
   guardarPrecioDeProducto: async (producto, cambios) => {
     await espera(LENTO ? 1500 : 80);
