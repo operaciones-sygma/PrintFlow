@@ -16,7 +16,8 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 **Qué pasaba.** Marcelo, 31-oct: *«hagamos una pasada de /impeccable critique a lo que hiciste»*. La crítica (dos agentes aislados: revisión de
 diseño, y detector + navegador; ~584 mil tokens) le dio **24/40** al carrito de v10.84.168, con dos P1 y tres P2. Snapshot:
-`.impeccable/critique/2026-10-31T17-16-32Z__ito-de-venta-ligar-factura-por-adelantado-77f76406.md`.
+`.impeccable/critique/2026-10-31T17-16-32Z__ito-de-venta-ligar-factura-por-adelantado-77f76406.md`. Los montos de esta entrada son los del banco
+(la venta típica de las pruebas, $47,560.00, con una F-234 del mismo importe); la F-234 de verdad es de $91,315.20.
 - **P1:** si la base rechazaba el ligado, salía un aviso de 7 s y el carrito quedaba en «Vender y facturar todo», habilitado. Si «ya está ligada» era
   ESTA venta (otra pestaña u otro clic), un segundo clic acuñaba otra factura y descontaba el inventario dos veces: el duplicado que la 168 vino a
   evitar. Venía de la vuelta 3 de la 168 («volver a leer»).
