@@ -203,7 +203,19 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.167 (22-oct, ~13:12, READY `dpl_3X47vLKZ3uS4VBaCapJpepSayHgV`, commits `b723f67`, `093748b` y `d179f6c`; vuelta atrás: PRIMERO
+- **LIVE:** v10.84.168 (31-oct, ~07:53, READY `dpl_FURbHuNRmehb5dVgVhiyKMDCuTiR`, commits `02705d8` (base), `494133e` (datos) y `6595110` (la app);
+  vuelta atrás: `git revert 6595110` y subir (ensayada en un worktree: deja `src` y `tests` como 535827d) —el clic a `dpl_7J555Zq8z9B42cb3EYw6PSBruDYv`
+  (el código de v10.84.167) ya no es de un paso: el commit de docs que anotó este renglón puso otro despliegue encima—; la base, DESPUÉS de la pantalla,
+  con `docs/migrations/v10.84.168_venta_liga_factura_por_adelantado_vuelta_atras.sql` (editor SQL; con la base de antes «Vender y ligar» falla y vender
+  como siempre no); candado 2657 de 2657 (26 nuevas), de a 4, 1158 s, a la primera y sin inestables; la base, con el OK escrito de Marcelo:
+  `v10_84_168_venta_liga_factura_por_adelantado` (+ `_definiciones_vivas`) el 30-oct ~18:54 por la API, ensayada 13 de 13, invariantes 91 de 91; revisado
+  en producción sin escribir: los JS publicados traen el carrito nuevo y `facturas_por_adelantado_para_venta` le contesta a Karla). 🔑 **El carrito de
+  inventario liga la factura hecha por adelantado** (Marcelo, 30-oct: F-234 de MANUFACTURERA DE BOTAS CUADRA, hecha en CobranzaFlow antes de entregar, no
+  salía en Traslados —busca órdenes con OC— y el carrito sólo sabía acuñar otra): al elegir el cliente, `BulkSellModal` lee sus facturas hechas por
+  adelantado y las de su apartado; la del mismo tipo e importe se ofrece («Vender y ligar F-…»: `vender_de_inventario_ligando`, la venta de siempre con
+  ese folio, sin folio nuevo ni pagos), las de otro importe y la de otro cliente del apartado se avisan, y sin la lectura no vende (regla 12). Las órdenes
+  nacen como siempre (`source 'stock'`, `order_type 'interna'`, `stage 'delivered'`). F-234 → OC-1074 (datos, firmada como Marcelo). Tanda `venta-inventario`.
+  v10.84.167 (22-oct, ~13:12, READY `dpl_3X47vLKZ3uS4VBaCapJpepSayHgV`, commits `b723f67`, `093748b` y `d179f6c`; vuelta atrás: PRIMERO
   `docs/migrations/v10.84.167_precio_por_renglon_vuelta_atras.sql` y luego promover `dpl_4jyCrywYxZymjNrUstiEgRatzugv` (la app de v10.84.166): con la base
   nueva la pantalla de antes no puede vender (pide actualizar); los datos tienen la suya, `v10.84.167_datos_vuelta_atras.sql`; candado 2631 de 2631 (62
   nuevas), de a 4, 1091 s, con una inestable de la red de Windows (pln-66, revisada); la base, con el OK escrito de Marcelo: `v10_84_167_datos` ~12:36 y
