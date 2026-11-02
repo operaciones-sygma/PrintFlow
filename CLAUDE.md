@@ -125,7 +125,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2704 pruebas, ~22 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2715 pruebas, ~23 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Las tandas con banco van de a 7 a la vez (`PROBAR_PARALELO`; con 11 juntas,
@@ -214,7 +214,16 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.170 (31-oct, ~14:58, READY `dpl_3YHkdSS1DVPQ6aqb169gv4M5627e`, commit `fc7780a`; la base, por la API con el OK escrito de Marcelo:
+- **LIVE:** v10.84.171 (2-nov, ~12:34, READY `dpl_Aug5R2YXh2TVDH2nxXb9wKH5qDD7`, commit `e1132da`; vuelta atrás: `git revert e1132da` y subir (ensayada:
+  deja `src` y `tests` como 076627b); la base no cambió; candado 2715 de 2715 (11 nuevas), de a 4, 1361 s, a la primera y sin inestables; revisado en
+  producción sin escribir). 🔑 **La orden cuya factura se canceló dice dónde se libera el folio** (F-236 de PORTLAND, 2-nov: Karla canceló la factura de la
+  OC-1060 y «las órdenes no se liberaron»). Junto al folio, el detalle lo dice. La de una OC con folio compartido se libera desde la OC (`order_folio_is_cancelled`
+  la deja a su OC): «Abrir la OC-…» la abre, aun en «Histórico», y en «Más» va «Liberar folio desde la OC-…». La sola, con «Liberar folio cancelado».
+  Lo decide `oc_shared_folio_is_cancelled`, sólo para Dirección y Karla. Tanda `detalle`. Y los datos **v10.84.170 (datos)** (2-nov 10:58, con su OK):
+  la OC-1060 pasó de F-236 (cancelada) a F-253 por `release_cancelled_oc_shared_folio` + `link_invoice_to_oc`, conservando la entrega del 29-oct.
+  🔑 Cancelar una factura nunca suelta sus órdenes; la que la reemplaza las adopta. Con una orden sola se usa «Ligar a P-…» de CobranzaFlow. Con
+  una OC, por ahora, se libera desde la OC y se liga; CobranzaFlow propone «Ligar a OC-…».
+  v10.84.170 (31-oct, ~14:58, READY `dpl_3YHkdSS1DVPQ6aqb169gv4M5627e`, commit `fc7780a`; la base, por la API con el OK escrito de Marcelo:
   `v10_84_170a_vender_aunque_haya` a las 14:34 y `v10_84_170b_freno_folio_nuevo` (+ `_definiciones_vivas`) a las 14:59, ensayadas 15 de 15, invariantes
   91 de 91; vuelta atrás: PRIMERO la pantalla, `git revert fc7780a` y subir (ensayada: deja `src` y `tests` como 18db43e), y luego
   `docs/migrations/v10.84.170_vuelta_atras.sql` en el editor (ensayada: la huella de `bulk_sell_from_stock` regresa a la de la 168); candado 2704 de 2704

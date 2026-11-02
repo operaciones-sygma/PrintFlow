@@ -59,7 +59,12 @@ El mismo texto se le pasó a CobranzaFlow para su «Ligar a OC-…».
   - el contraste.
 - **Lo que no ve el banco:** la navegación de App a la OC (el banco la anota en la bitácora); es la misma de «Asignar folio anticipado».
 
-**Vuelta atrás.** `git revert` del commit y subir; la base no cambió.
+**En producción** (2-nov, ~12:34, READY `dpl_Aug5R2YXh2TVDH2nxXb9wKH5qDD7`, commit `e1132da`). Candado **2715 de 2715** (11 nuevas), de a 4, 1361 s, a la
+primera y sin inestables. Se hizo después del de CobranzaFlow, que iba primero. La base no cambió.
+- **Revisado en producción sin escribir:** los JS de los dos dominios traen el aviso y la entrada nueva. La misma revisión, contra la 170 publicada, no
+  los encontraba.
+
+**Vuelta atrás.** `git revert e1132da` y subir: ensayada en un worktree, sin conflictos, deja `src` y `tests` como 076627b. La base no cambió.
 
 ---
 
