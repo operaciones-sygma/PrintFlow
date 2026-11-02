@@ -12,6 +12,47 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.170 (datos) — La OC-1060 de PORTLAND LEATHER pasa de F-236 (cancelada) a F-253 — 2-nov-2026
+
+**Qué pasaba.** Marcelo, 2-nov: *«me dice Karla que canceló la factura 236, pero las órdenes de producción ligadas a esa factura no se liberaron… ¿por qué
+pasó eso? Arréglalo e investígalo»*.
+- **F-236 (PORTLAND LEATHER, $26,680.00)** salió el 29-oct del folio compartido de la OC-1060 (P-0685 y P-0686, $11,500 + IVA cada una).
+- **Esa noche se canceló ante el SAT**, con motivo 03, sin sustituta y por fuera de la app: el barrido la registró como `cfdi_cancelado_fuera_de_la_app`.
+- **El 2-nov Karla hizo F-253** por lo mismo, como factura sin orden («SE CANCELO LA FACTURA Y NO SE LIBERO LA OP»).
+
+**Por qué no se soltaron.**
+- **Cancelar una factura nunca suelta sus órdenes.** Es la regla de CobranzaFlow desde v3.7.1033: la factura que la reemplaza las adopta.
+- **Con una sola orden**, eso lo hace «Ligar a P-…» (`pasar_orden_a_factura`). Con una OC de folio compartido, CobranzaFlow la manda a PrintFlow:
+  «La orden P-0685 va en una OC con folio compartido: se libera y se liga desde la OC, en PrintFlow».
+- **En PrintFlow ese camino existe**, y es para Dirección y Karla: «Liberar folio cancelado de la OC» (`release_cancelled_oc_shared_folio`) y luego
+  «Asignar folio», que liga la factura nueva. Pero está en el detalle de la OC, y la OC-1060 estaba en «Histórico» (completada). Desde las órdenes no se
+  ve: en el detalle de P-0685 nada decía que se liberaba desde la OC.
+- **Y aun por ese camino las órdenes regresan a Salidas** y ligar las da por entregadas HOY. Los $23,000 se habrían movido de octubre a noviembre.
+
+**Qué se hizo** (con el OK escrito de Marcelo, «Sí, aplícalo»; `docs/migrations/v10.84.170_datos_oc1060_f253.sql`, firmado como él). En una transacción,
+por las dos puertas de siempre y con sus candados, como hace `pasar_orden_a_factura` con una orden:
+1. Se soltó F-236 de la OC con `release_cancelled_oc_shared_folio`.
+2. Se ligó F-253 con `link_invoice_to_oc`.
+3. Las órdenes conservaron su entrega del 29-oct, y la OC volvió a quedar completada como estaba.
+
+Antes revisa que todo siga como se midió y después que quedó así; si algo no cuadra, no cambia nada. Queda en la bitácora
+(`oc_pasada_a_factura_nueva`). El CFDI y el importe de F-253 no se tocaron.
+
+**Cómo se probó.**
+- **Ensayo con rollback:** las órdenes quedan con F-253 y su entrega del 29-oct, la OC queda completada, F-253 queda ligada y F-236 queda sin OC.
+- **Aplicada el 2-nov a las 10:58** (`v10_84_170_datos_oc1060_f253`, 20261102165834).
+- **Revisada después**, sin escribir, y queda igual. Invariantes 91 de 91.
+- **CobranzaFlow avisada antes:** su candado no lee esos renglones en vivo.
+
+**Observación fiscal (para Dulce).** F-236 se canceló con motivo 03, «no se llevó a cabo la operación», aunque la venta sí se hizo y se volvió a facturar
+en F-253. Lo usual al re-facturar es 01, con la sustituta. Ya no se puede cambiar.
+
+**Lo que sigue** (Marcelo eligió «las dos cosas»):
+- **PrintFlow:** que la orden de una OC con folio cancelado diga que se libera desde la OC, con su liga.
+- **CobranzaFlow, su sesión, con el OK de Marcelo allá:** un «Ligar a OC-…» que pase la OC entera en un paso y conserve la entrega.
+
+---
+
 ## v10.84.170 — El carrito ya no acuña otra factura por una venta que se facturó por adelantado: el freno, en la base — 31-oct-2026
 
 **Qué pasaba.** Desde v10.84.168 el carrito ofrece ligar la factura hecha por adelantado del mismo importe, pero eso lo cuidaba sólo la pantalla.
