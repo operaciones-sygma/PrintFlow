@@ -73,7 +73,10 @@ primera y sin inestables. Se hizo después del de CobranzaFlow, que iba primero.
 **Qué pasaba.** Marcelo, 2-nov: *«me dice Karla que canceló la factura 236, pero las órdenes de producción ligadas a esa factura no se liberaron… ¿por qué
 pasó eso? Arréglalo e investígalo»*.
 - **F-236 (PORTLAND LEATHER, $26,680.00)** salió el 29-oct del folio compartido de la OC-1060 (P-0685 y P-0686, $11,500 + IVA cada una).
-- **Esa noche se canceló ante el SAT**, con motivo 03, sin sustituta y por fuera de la app: el barrido la registró como `cfdi_cancelado_fuera_de_la_app`.
+- **Karla la canceló desde CobranzaFlow esa tarde** (29-oct, 18:30), con motivo 03 y sin sustituta (la ventana abre en 02). Quién, el motivo y la
+  hora están en `cobranza.cfdi_documents` (`canceled_by`, `cancel_motive`, `cancel_requested_at`), que sólo escribe el botón «Cancelar». El barrido de
+  las 7:00 del 30-oct la encontró cancelada y la anotó como `cfdi_cancelado_fuera_de_la_app`: esa etiqueta dice que la app no la había visto aceptada,
+  no que se pidió por fuera. *(Corregido el 2-nov: este renglón decía «por fuera de la app».)*
 - **El 2-nov Karla hizo F-253** por lo mismo, como factura sin orden («SE CANCELO LA FACTURA Y NO SE LIBERO LA OP»).
 
 **Por qué no se soltaron.**
@@ -100,8 +103,12 @@ Antes revisa que todo siga como se midió y después que quedó así; si algo no
 - **Revisada después**, sin escribir, y queda igual. Invariantes 91 de 91.
 - **CobranzaFlow avisada antes:** su candado no lee esos renglones en vivo.
 
-**Observación fiscal (para Dulce).** F-236 se canceló con motivo 03, «no se llevó a cabo la operación», aunque la venta sí se hizo y se volvió a facturar
-en F-253. Lo usual al re-facturar es 01, con la sustituta. Ya no se puede cambiar.
+**Observación fiscal (para Dulce).** F-236 se canceló con motivo 03, «no se llevó a cabo la operación», y F-253 vuelve a facturar la misma OC por el
+mismo importe. Lo que cambió es el uso del CFDI: Portland salió con G03 del 15-oct al 2-nov (F-184, F-223, F-224, F-225, F-226, F-236 y F-251) y F-252
+y F-253 salieron con G01. Las órdenes se hicieron del 22 al 28-oct; su «entrega» del 29-oct es la hora en que se folió la OC, no prueba que salieron.
+Para «la venta sí se hizo y la factura salió mal», la ventana de cancelar de CobranzaFlow propone el 02 (el 01 está apagado ahí desde v3.7.745). La
+regla de la casa es de Dulce: la pregunta `cancelar-motivo-02-o-03` (CobranzaFlow, 29-oct) sigue abierta y ya nombra F-225, F-226 y F-236. El motivo
+ya no se puede cambiar. *(Corregido el 2-nov: decía que la venta sí se hizo, como hecho, y que lo usual era el 01.)*
 
 **Lo que sigue** (Marcelo eligió «las dos cosas»):
 - **PrintFlow:** que la orden de una OC con folio cancelado diga que se libera desde la OC, con su liga.

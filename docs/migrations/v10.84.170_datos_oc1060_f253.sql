@@ -1,7 +1,8 @@
 -- v10.84.170 (datos) — LA OC-1060 DE PORTLAND LEATHER PASA DE F-236 (CANCELADA) A F-253 (Marcelo, 2-nov-2026: «me dice Karla que canceló la factura 236,
 -- pero las órdenes ligadas a esa factura no se liberaron… puedes arreglarlo e investigarlo»).
--- F-236 ($26,680.00) salió el 29-oct del folio compartido de la OC-1060 (P-0685 y P-0686, $11,500 + IVA cada una) y se canceló ante el SAT esa noche,
--- motivo 03, sin sustituta y por fuera de la app (el barrido la registró como «cfdi_cancelado_fuera_de_la_app»). Cancelar NO suelta las órdenes (regla de
+-- F-236 ($26,680.00) salió el 29-oct del folio compartido de la OC-1060 (P-0685 y P-0686, $11,500 + IVA cada una) y Karla la canceló desde CobranzaFlow
+-- esa tarde, motivo 03, sin sustituta (el barrido del 30-oct la anotó como «cfdi_cancelado_fuera_de_la_app»: la app no la había visto aceptada; corregido
+-- el 2-nov, después de aplicar: decía «por fuera de la app»; quién la pidió está en cfdi_documents.canceled_by). Cancelar NO suelta las órdenes (regla de
 -- CobranzaFlow desde v3.7.1033: la factura que reemplaza las adopta). Hoy Karla hizo F-253 por lo mismo, sin orden. Pero el «Ligar a P-…» de CobranzaFlow
 -- no pasa órdenes de una OC con folio compartido («se libera y se liga desde la OC, en PrintFlow»), y en PrintFlow el camino («Liberar folio cancelado de
 -- la OC», en el detalle de la OC, en «Histórico») no se ve desde las órdenes. Además, liberar las regresa a Salidas y ligar las da por entregadas HOY.
