@@ -8,6 +8,8 @@
 // Variantes por URL: etapa=… · cliente=… · sinentrega=1 (sin fecha de entrega) ·caso=factura|partes|resto|espera|maquila|cancelada|borrador|salidas|remision|sinempaque|archivo (por defecto factura) ·
 //   rol=karla|admin|produccion|preprensa|german|secretaria|vendedor|visor (por defecto karla) · falla=storage|tabla (borrar el
 //   archivo: la base contesta con error) · falla=alias (la base rechaza agregar un nombre interno) · flujos=1 (los botones de flujo de todas las etapas y roles, como en el tablero) · login=… (otro usuario, p. ej. un vendedor que no es dueño) · abrir=1 (abre el detalle al cargar, para el detector)
+// v10.84.171: caso=ocfoliocancelado (P-0685 en la OC-1060, cuyo folio compartido F-236 se canceló ante el SAT) · ocfolio=… (el folio compartido de la OC, si
+//   no es el de la orden) · falla=oc (truena la lectura de oc_shared_folio_is_cancelled) · caso=foliocancelado (una orden sola con su folio cancelado)
 import fs from "node:fs";
 import path from "node:path";
 import { LIGA_FUENTES, copiarFuentes } from "./fuentes.mjs";   // (15-oct) las letras, del propio banco: ninguna página sale a Google Fonts
@@ -103,7 +105,11 @@ const supabase = {
 };
 // el historial de cambios: getOrderChangeLog LANZA si la base falla (falla=historial siempre; historial1, sólo la primera vez)
 let vecesHistorial = 0;
+// v10.84.171 — la OC con folio compartido cancelado (F-236 de PORTLAND, OC-1060, 2-nov): la base lo confirma sólo mientras el folio de la OC sea F-236
+//   (window.__folioOC lo cambia con el detalle abierto); falla=oc, la lectura truena
 const db = { orderFolioIsCancelled: async () => CASO === "foliocancelado",
+  ocSharedFolioIsCancelled: async ocId => { anotar("db:ocSharedFolioIsCancelled " + ocId); if (FALLA === "oc") throw new Error("oc_shared_folio_is_cancelled: 503");
+    return CASO === "ocfoliocancelado" && (window.__folioOC || Q.get("ocfolio") || "F-236") === "F-236"; },
   getOrderChangeLog: async () => { vecesHistorial++; anotar("db:getOrderChangeLog");
     if (FALLA === "historial" || (FALLA === "historial1" && vecesHistorial === 1)) throw new Error("getOrderChangeLog: 503 Service Unavailable");
     return [{ field: "price", field_label: "Precio", value_before: 5200, value_after: 5649, stage_at_change: "salidas", changed_by: "karla", changed_at: "2026-09-30T18:00:00Z" },
@@ -173,6 +179,9 @@ const CASOS = {
 CASOS.inventario = { ...BASE, production_number: "P-0656", client: "CUADRA BOOTS", stage: "delivered", product_type: "stock", product: "Caja bota alta", categoria: null,
   invoice_folio: "F-153", invoice_type: "factura", delivered_at: "2026-10-09T18:00:00Z" };
 CASOS.sinclasificar = { ...BASE, production_number: "P-0655", stage: "design", product_type: "SELLOS DE GOMA", categoria: null };
+// v10.84.171 — P-0685 de PORTLAND LEATHER, en la OC-1060 con folio compartido F-236, que se canceló ante el SAT (2-nov: «las órdenes no se liberaron»)
+CASOS.ocfoliocancelado = { ...BASE, production_number: "P-0685", client: "PORTLAND LEATHER", stage: "delivered", invoice_folio: "F-236", invoice_type: "factura",
+  purchase_order_id: "OC-1060", invoiced_by: "karla", invoiced_at: "2026-10-29T19:46:01Z", delivered_at: "2026-10-29T19:46:01Z", price: 11500, payment_status: "unpaid" };
 const categoriaDe = t => CATS.categoriaSugerida(t) ?? (String(t || "").trim() && !CATS.esVentaDeInventario(t) ? "otro" : null);
 Object.values(CASOS).forEach(o => { if (!("categoria" in o)) o.categoria = categoriaDe(o.product_type); });
 // etapa=… cambia la etapa del caso (para barrer etapas y roles); cliente=… cambia el nombre del cliente
@@ -204,7 +213,7 @@ function Banco() {
   const [, refresca] = useState(0);
   // el dato que cambia con el detalle abierto (como lo haría el tiempo real): window.__cambiar({ invoice_folio: "F-200" })
   const [orden, setOrden] = useState(ORDEN);
-  useEffect(() => { window.__cambiar = p => setOrden(o => ({ ...o, ...p })); }, []);
+  useEffect(() => { window.__cambiar = p => { if (p.invoice_folio) window.__folioOC = p.invoice_folio; setOrden(o => ({ ...o, ...p })); }; }, []);
   useEffect(() => { const f = () => refresca(n => n + 1); window.addEventListener("bitacora", f); return () => window.removeEventListener("bitacora", f); }, []);
   // pantoneinput=1: el campo de Pantones de la FORMA de la orden (PantoneInput), con el mismo «#HEX» que el detalle
   if (Q.get("pantoneinput") === "1") return <div style={{ padding: 20, background: C.canvas, minHeight: "100vh" }}>
@@ -224,6 +233,7 @@ function Banco() {
     <pre id="log">{bitacora.join("\\n")}</pre>
     </div>
     {abierto && <DetailModal order={orden} role={ROL} userLogin={LOGIN}
+      oc={orden.purchase_order_id ? { id: orden.purchase_order_id, shared_invoice_folio: Q.get("ocfolio") || orden.invoice_folio, status: "completed" } : null}
       onClose={() => { anotar("cerrado"); setAbierto(false); }} onPrint={() => anotar("imprimir")}
       onAction={(id, accion, arg) => { anotar("accion:" + accion + (arg ? " " + arg : "")); if (ENCIMA_BANCO.has(accion) && Q.get("ventana") !== "nunca") setVentana(accion);
         // la nota rápida como la hace App: aparece al instante; si la base la rechaza (falla=nota), la recarga la quita

@@ -4804,7 +4804,7 @@ const SeccionDelDetalle=({icono,children,mt=12})=><div style={{display:"flex",al
 //   a la vista, sin «Borrar» con folio, y menores.
 // v10.84.55: la tercera revisión independiente: cambiar de etapa pregunta antes (a cuál, de cuál y qué máquina deja, a quién
 //   avisa), la pregunta que se queda vieja se cierra, y «Seguir escribiendo» regresa al campo.
-function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
+function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction,oc=null}) {
   // v10.72.42 — /impeccable: foco al abrir + restaurar al cerrar (a11y de modal; antes el foco quedaba huérfano).
   const dialogRef=useRef(null);const prevFocusRef=useRef(null);
   // v10.84.54 — cerrar no tira lo escrito (la segunda revisión independiente: una nota escrita y un clic fuera cerraban sin
@@ -4823,7 +4823,15 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
   // ofrecer liberarlo para volver a facturar. Se consulta al RPC al abrir el detalle (solo admin/karla con folio).
   const [folioCancelado,setFolioCancelado]=useState(false);
   const canRefacturar=(role==="admin"||role==="karla")&&!!o.invoice_folio&&!o.stage.includes("cancelled");
-  useEffect(()=>{let alive=true;if(canRefacturar){db.orderFolioIsCancelled(o.id).then(v=>{if(alive)setFolioCancelado(v)}).catch(()=>{})}return ()=>{alive=false}},[o.id,canRefacturar]);
+  // v10.84.171 — también si el folio cambia con el detalle abierto (antes se quedaba con la respuesta del folio de antes)
+  useEffect(()=>{let alive=true;setFolioCancelado(false);if(canRefacturar){db.orderFolioIsCancelled(o.id).then(v=>{if(alive)setFolioCancelado(v)}).catch(()=>{})}return ()=>{alive=false}},[o.id,canRefacturar,o.invoice_folio]);
+  // v10.84.171 — LA ORDEN DE UNA OC CON FOLIO COMPARTIDO CANCELADO (F-236 de PORTLAND, OC-1060; Marcelo, 2-nov: «me dice Karla que canceló la factura 236,
+  //   pero las órdenes ligadas a esa factura no se liberaron»). Aquí no sale «Liberar folio cancelado» (order_folio_is_cancelled la deja a su OC) y el camino,
+  //   «Liberar folio de la OC», vivía sólo en el detalle de la OC, en «Histórico» si ya se completó. Se dice aquí y se lleva a la OC. Se pregunta a la base
+  //   sólo si el folio de la orden es el compartido de su OC; si la lectura falla, no se afirma nada.
+  const ocCompartida=!!oc&&!!oc.shared_invoice_folio&&oc.shared_invoice_folio===o.invoice_folio;
+  const [ocFolioCancelado,setOcFolioCancelado]=useState(false);
+  useEffect(()=>{let alive=true;setOcFolioCancelado(false);if(canRefacturar&&ocCompartida){db.ocSharedFolioIsCancelled(oc.id).then(v=>{if(alive)setOcFolioCancelado(!!v)}).catch(()=>{})}return ()=>{alive=false}},[o.id,canRefacturar,ocCompartida,oc?.id,o.invoice_folio]);
   // v10.84.93 — el detalle ya no borra el archivo de producción ni pregunta al descargarlo (desde v10.54.10, medio segundo después de
   //   «Descargar», a preprensa, Germán y admin: «¿Ya descargaste…? Bórralo del servidor»). Marcelo, 12-oct: «el archivo es el historial»;
   //   un clic en «Sí, borrar» perdía el archivo de impresión para siempre, y el espacio no apura (118 MB de 100 GB). Borrar uno a
@@ -4959,6 +4967,8 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
     canPorPartes&&{k:"split_invoice",icono:<FilesIcon size={14} weight="bold"/>,color:C.fac,t:"Facturar por partes",d:"Un anticipo y el resto después, o por entregas: cada parte con su folio."},
     canHistoricFolio&&{k:"apply_historic_folio",icono:<ReceiptIcon size={14} weight="bold"/>,color:C.fac,t:o.created_by==="import-historico"?"Aplicar folio":"Folio de Alpha",d:o.created_by==="import-historico"?"Registra el folio de una orden histórica.":"Registra un folio que Alpha ya emitió."},
     canRefacturar&&folioCancelado&&{k:"refacturar",icono:<ArrowsClockwiseIcon size={14} weight="bold"/>,color:C.ac,t:"Liberar folio cancelado",d:"La factura "+o.invoice_folio+" ya está cancelada: la orden vuelve a ser facturable (para sustituir una vigente, «Re-facturar» en CobranzaFlow)."},
+    // v10.84.171 — la de una OC con folio compartido: donde Karla busca «Liberar folio cancelado», lo que le toca, y la lleva a su OC
+    canRefacturar&&ocFolioCancelado&&{k:"liberar_folio_oc",icono:<ArrowsClockwiseIcon size={14} weight="bold"/>,color:C.ac,t:"Liberar folio desde la "+oc.id,d:"La factura "+o.invoice_folio+" ya está cancelada y es de toda la OC: se libera desde la OC, y ahí se liga la factura nueva."},
     canDevolverSaldo&&{k:"deshacer_saldo",icono:<ArrowUUpLeftIcon size={14} weight="bold"/>,color:C.dnInk,t:"Devolver saldo",d:"Regresa el saldo a la bolsa del cliente y deja la orden pendiente de facturar."},
     canDeshacerCancelacion&&{k:"deshacer_cancelacion",icono:<ArrowsClockwiseIcon size={14} weight="bold"/>,color:C.wnInk,t:"Deshacer cancelación",d:"Si se canceló por error: vuelve a "+vuelveAlDeshacer(o)+(o.invoice_folio?" con su folio "+o.invoice_folio:"")+". Si canceló una factura propia con cobros, lo ve Dirección."},
     // lo que no se deshace fácil, al final y separado por una línea
@@ -5101,6 +5111,13 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
         <Seccion icono={<FilesIcon size={12} weight="bold" color={o.invoice_folio?tintaFolio:C.t2}/>}>{o.invoice_folio?"Info Fiscal":"Cancelación"}</Seccion>
         {o.invoice_folio&&<>
           <Row l="Folio" v={<>{o.invoice_pre_assigned?<LightningIcon size={11} weight="fill" color={C.wnInk} style={{verticalAlign:"-1px",marginRight:3}}/>:null}{o.invoice_folio}{o.invoice_pre_assigned?" (anticipado)":""}</>}/>
+          {/* v10.84.171 — la factura del folio ya está cancelada: se dice junto al folio, con lo que sigue (antes sólo en «Más», y la de una OC ni ahí) */}
+          {canRefacturar&&(ocFolioCancelado||folioCancelado)&&<div style={{margin:"4px 0 6px",padding:"8px 10px",background:C.wn+"12",border:"1px solid "+C.wn+"40",borderRadius:8,fontSize:12,color:C.tx,lineHeight:1.45}}>
+            <div style={{display:"flex",alignItems:"flex-start",gap:6}}><WarningIcon size={13} weight="fill" color={C.wnInk} style={{flexShrink:0,marginTop:2}}/><span><b style={{color:C.wnInk}}>La factura {o.invoice_folio} ya está cancelada.</b>{" "}{ocFolioCancelado
+              ?<>Esta orden va en la {oc.id}, con folio compartido: el folio se libera desde la OC («Liberar folio de la OC») y ahí se liga la factura nueva.</>
+              :<>«Liberar folio cancelado», en «Más», deja la orden facturable otra vez.</>}</span></div>
+            {ocFolioCancelado&&<button type="button" onClick={()=>dispatch("liberar_folio_oc")} style={{...bt(C.bg,C.tx),border:"0.5px solid "+C.bdSt,fontSize:11.5,padding:"6px 12px",marginTop:7}}><ShoppingCartIcon size={12} weight="bold"/>Abrir la {oc.id}</button>}
+          </div>}
           <Row l="Tipo" v={o.invoice_type==="factura"?"Factura":(o.invoice_type==="remision"?"Remisión":null)}/>
           <Row l="Asignado por" v={o.invoiced_by?(AUTHOR_NAME[o.invoiced_by]||o.invoiced_by):null}/>
           <Row l="Fecha asignación" v={o.invoiced_at?fDT(o.invoiced_at):null}/>
@@ -23800,6 +23817,10 @@ export default function PrintFlow() {
       (async()=>{try{const r=await db.revertOrderCancellation(o.id,etapaPrevia,userLogin||user);showToast(r?.msg||"Cancelación deshecha","success");await reload();}catch(e){showToast(e.message||"No se pudo deshacer","error")}})();
       return;
     }
+    // v10.84.171 — la orden de una OC con folio compartido ya cancelado: su folio se libera desde la OC; se lleva ahí (a «Histórico» si ya se completó)
+    if(action==="liberar_folio_oc"){const o=orders.find(x=>x.id===id);if(!o||!o.purchase_order_id)return;
+      if(user!=="admin"&&user!=="karla"){showToast("❌ El folio de una OC lo liberan Dirección y Karla.","error");return}
+      setDetailModalId(null);setPendingOCNavId(o.purchase_order_id);setView("oc");return}
     if(action==="refacturar"){const o=orders.find(x=>x.id===id);if(!o)return;
       if(!canExecuteAction("refacturar",o,user,userLogin)){showToast(actionDeniedToast("refacturar",o,user,userLogin),"error");return}
       if(!o.invoice_folio){showToast("❌ Esta orden no tiene folio que liberar","error");return}
@@ -25256,7 +25277,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
       {printModal&&<PrintOrder order={printModal} role={user} userLogin={userLogin} onClose={()=>setPrintModal(null)} onPrintError={(msg)=>showToast(msg,"warning")}/>}
       {clientHistory&&<ClientHistory clientName={clientHistory} orders={viewOrders} role={user} userLogin={userLogin} onClose={()=>setClientHistory(null)}/>}
       {flowDiagram&&<FlowDiagram currentStage={flowDiagram.stage} orderType={flowDiagram.type} onClose={()=>setFlowDiagram(null)}/>}
-      {detailModalId&&orders.find(x=>x.id===detailModalId)&&<DetailModal order={orders.find(x=>x.id===detailModalId)} role={user} userLogin={userLogin} onClose={()=>setDetailModalId(null)} onPrint={o=>setPrintModal(o)} onAction={handleAction}/>}
+      {detailModalId&&orders.find(x=>x.id===detailModalId)&&<DetailModal order={orders.find(x=>x.id===detailModalId)} role={user} userLogin={userLogin} onClose={()=>setDetailModalId(null)} onPrint={o=>setPrintModal(o)} onAction={handleAction}
+        oc={(purchaseOrders||[]).find(p=>p.id===orders.find(x=>x.id===detailModalId)?.purchase_order_id)||null}/>}
       {/* ☀️ v10.58.51 — Despertador (encima de todo; solo se cierra con SI ENTIENDO) */}
       {/* v10.84.128 — al confirmar se abre la orden que se tocó en el Despertador */}
       {wakeupItems&&wakeupItems.length>0&&<WakeupModal user={user} userLogin={userLogin} items={wakeupItems} onAck={elegida=>{ackWakeup();if(elegida)handleAction(elegida,"detail")}}/>}

@@ -1389,6 +1389,74 @@ await caso("det-212-la-oficina-conserva-su-orden", "caso=factura&rol=secretaria"
   ok("det-212-la-oficina-conserva-su-orden", iC === 0 && iP >= 0 && iP < iE, `Lupita: ${r.orden.join(" → ")}`);
 });
 
+// ── v10.84.171 — LA ORDEN DE UNA OC CON FOLIO COMPARTIDO CANCELADO DICE DÓNDE SE LIBERA (Marcelo, 2-nov: «me dice Karla que canceló la factura 236, pero las
+//   órdenes ligadas a esa factura no se liberaron»). P-0685 va en la OC-1060, cuya F-236 se canceló ante el SAT: «Liberar folio cancelado» no sale en la orden
+//   (order_folio_is_cancelled la deja a su OC) y el camino («Liberar folio de la OC») vivía sólo en el detalle de la OC, en «Histórico». Vuelta 1: escritas
+//   antes del arreglo, contra v10.84.170.
+await caso("det-217-la-orden-de-una-oc-con-folio-cancelado-dice-donde-se-libera", "caso=ocfoliocancelado&rol=karla", async p => {
+  await espera(p, 400);
+  const t = (await textoDlg(p)).replace(/\s+/g, " ");
+  const dice = /F-236 ya está cancelada/.test(t) && /OC-1060/.test(t) && /se libera desde la OC/i.test(t);
+  const b = dlg(p).getByRole("button", { name: /Abrir la OC-1060/ }); const hay = await b.count();
+  if (hay) { await b.click(); await espera(p, 300); }
+  const lleva = /accion:liberar_folio_oc/.test(await log(p));
+  ok("det-217-la-orden-de-una-oc-con-folio-cancelado-dice-donde-se-libera", dice && !!hay && lleva,
+    `${dice ? "dice que F-236 está cancelada y que se libera desde la OC-1060" : "NO dice que F-236 está cancelada ni dónde se libera"}; ${hay ? (lleva ? "«Abrir la OC-1060» lleva a la OC" : "«Abrir la OC-1060» no hace nada") : "SIN «Abrir la OC-1060»"}`);
+});
+await caso("det-218-en-mas-esta-liberar-desde-la-oc", "caso=ocfoliocancelado&rol=karla", async p => {
+  await espera(p, 400);
+  const hay = await enMas(p, /Liberar folio desde la OC-1060/);
+  let lleva = false;
+  if (hay) { await p.getByRole("menuitem", { name: /Liberar folio desde la OC-1060/ }).click(); await espera(p, 300); lleva = /accion:liberar_folio_oc/.test(await log(p)); }
+  ok("det-218-en-mas-esta-liberar-desde-la-oc", hay && lleva, `en «Más» ${hay ? "está «Liberar folio desde la OC-1060»" + (lleva ? " y lleva a la OC" : " pero no hace nada") : "NO está «Liberar folio desde la OC-1060» (Karla lo busca donde vive «Liberar folio cancelado»)"}`);
+});
+await caso("det-222-la-orden-sola-con-folio-cancelado-tambien-lo-dice", "caso=foliocancelado&rol=karla", async p => {
+  await espera(p, 400);
+  const t = (await textoDlg(p)).replace(/\s+/g, " ");
+  const dice = /F-117 ya está cancelada/.test(t) && /Liberar folio cancelado/.test(t);
+  const enMasHay = await enMas(p, /Liberar folio cancelado/);
+  ok("det-222-la-orden-sola-con-folio-cancelado-tambien-lo-dice", dice && enMasHay,
+    `una orden sola con F-117 cancelada: ${dice ? "lo dice y dónde se libera" : "NO lo dice a la vista"}; en «Más» ${enMasHay ? "está «Liberar folio cancelado»" : "NO está «Liberar folio cancelado»"}`);
+});
+
+// ── v10.84.171, vuelta 2: por donde no se diseñó (escritas después del arreglo; las que cuidan una pieza se sabotean quitándola) ─────────────────────
+for (const rol of ["secretaria", "vendedor", "produccion"]) await caso(`det-219-solo-direccion-y-karla-${rol}`, `caso=ocfoliocancelado&rol=${rol}`, async p => {
+  await espera(p, 400);
+  const t = await textoDlg(p); const pregunto = /db:ocSharedFolioIsCancelled/.test(await log(p));
+  ok(`det-219-solo-direccion-y-karla-${rol}`, !/se libera desde la OC/i.test(t) && !pregunto,
+    `${rol}: ${/se libera desde la OC/i.test(t) ? "SÍ ve cómo liberar el folio (es de Dirección y Karla)" : "no lo ve"}${pregunto ? "; y le preguntó a la base" : ""}`);
+});
+await caso("det-220-con-la-lectura-caida-no-afirma-nada", "caso=ocfoliocancelado&rol=karla&falla=oc", async p => {
+  await espera(p, 500);
+  const t = await textoDlg(p);
+  ok("det-220-con-la-lectura-caida-no-afirma-nada", !/ya está cancelada/.test(t) && /F-236/.test(t),
+    `sin la lectura: ${/ya está cancelada/.test(t) ? "AFIRMA que está cancelada" : "no afirma nada"} (el folio F-236 ${/F-236/.test(t) ? "se sigue viendo" : "NO se ve"})`);
+});
+await caso("det-221-con-otro-folio-en-la-oc-no-se-confunde", "caso=ocfoliocancelado&rol=karla&ocfolio=F-999", async p => {
+  await espera(p, 400);
+  const t = await textoDlg(p); const pregunto = /db:ocSharedFolioIsCancelled/.test(await log(p));
+  ok("det-221-con-otro-folio-en-la-oc-no-se-confunde", !/se libera desde la OC/i.test(t) && !pregunto,
+    `la OC lleva otro folio (F-999) que la orden (F-236): ${/se libera desde la OC/i.test(t) ? "SÍ dice que se libera desde la OC" : "no lo dice"}${pregunto ? " y preguntó por la OC" : ""}`);
+});
+await caso("det-223-la-factura-viva-no-dice-nada", "caso=factura&rol=karla", async p => {
+  await espera(p, 400);
+  const t = await textoDlg(p);
+  ok("det-223-la-factura-viva-no-dice-nada", !/ya está cancelada/.test(t), `F-117 viva: ${/ya está cancelada/.test(t) ? "DICE que está cancelada" : "no dice nada"}`);
+});
+await caso("det-224-si-cambia-el-folio-con-el-detalle-abierto", "caso=ocfoliocancelado&rol=karla", async p => {
+  await espera(p, 400);
+  const antes = /F-236 ya está cancelada/.test(await textoDlg(p));
+  await p.evaluate(() => window.__cambiar({ invoice_folio: "F-253" })); await espera(p, 600);
+  const t = await textoDlg(p);
+  ok("det-224-si-cambia-el-folio-con-el-detalle-abierto", antes && !/ya está cancelada/.test(t) && /F-253/.test(t),
+    `con F-236 cancelada: ${antes ? "lo dice" : "NO lo dice"}; al pasar a F-253 (viva) con el detalle abierto: ${/ya está cancelada/.test(t) ? "SIGUE diciendo que está cancelada" : "ya no lo dice"}`);
+});
+await caso("det-225-el-aviso-se-lee", "caso=ocfoliocancelado&rol=karla", async p => {
+  await espera(p, 400);
+  const hay = /F-236 ya está cancelada/.test(await textoDlg(p)); const malos = await peoresContrastes(p);
+  ok("det-225-el-aviso-se-lee", hay && malos.length === 0, !hay ? "no hay aviso que medir" : malos.length ? "sin AA: " + malos.slice(0, 6).join(" | ") : "se lee");
+});
+
 await browser.close();
 for (const r of res) console.log(r);
 const fallan = res.filter(r => r.startsWith("FALLA")).length;

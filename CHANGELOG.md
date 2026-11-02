@@ -12,6 +12,57 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.171 — La orden cuya factura se canceló dice dónde se libera el folio (también la de una OC) — 2-nov-2026
+
+**Qué pasaba.** Lo destapó F-236 (abajo, v10.84.170 datos): Karla canceló la factura de la OC-1060 y «las órdenes no se liberaron». En el detalle de P-0685
+y P-0686 nada lo decía:
+- **«Liberar folio cancelado» no sale en una orden de una OC con folio compartido.** `order_folio_is_cancelled` la deja a su OC a propósito: el folio
+  es de toda la OC.
+- **El camino («Liberar folio cancelado de la OC») vivía sólo en el detalle de la OC**, que al completarse se va a «Histórico».
+- **CobranzaFlow manda esas órdenes «a liberar desde la OC, en PrintFlow».**
+
+Karla no tenía nada a la vista. Y la orden sola con su folio cancelado lo decía sólo dentro de «Más».
+
+**Qué se cambió** (sólo la pantalla; la base no cambió).
+- **En el detalle de la orden, junto al folio,** si su factura ya está cancelada se dice:
+  - **La de una OC con folio compartido:** «La factura F-236 ya está cancelada. Esta orden va en la OC-1060, con folio compartido: el folio se libera
+    desde la OC («Liberar folio de la OC») y ahí se liga la factura nueva.», con un botón «Abrir la OC-1060» que la abre (en «Histórico» si ya se
+    completó).
+  - **La orden sola:** «… «Liberar folio cancelado», en «Más», deja la orden facturable otra vez.»
+- **En «Más», «Liberar folio desde la OC-1060»,** donde Karla busca «Liberar folio cancelado».
+- **Quién lo decide:** la base, con `oc_shared_folio_is_cancelled`. Sólo si el folio de la orden es el compartido de su OC, y sólo para Dirección y Karla.
+  - Si la lectura falla, no se afirma nada.
+  - Si el folio cambia con el detalle abierto, se vuelve a preguntar. Lo mismo para la orden sola, que antes se quedaba con la respuesta del folio de
+    antes.
+- **App lleva a la OC** con lo mismo que «Asignar folio anticipado» (`setPendingOCNavId`).
+
+El mismo texto se le pasó a CobranzaFlow para su «Ligar a OC-…».
+
+**Cómo se probó** (tanda `detalle`, banco con `caso=ocfoliocancelado`):
+- **Vuelta 1**, 3 escritas antes del cambio (det-217, det-218, det-222): contra la 170 fallaban las 3.
+- **Vuelta 2**, 8 (det-219 en tres roles, det-220 a det-225):
+  - otros roles no lo ven ni le preguntan a la base;
+  - la lectura caída no afirma nada;
+  - la OC con otro folio no se confunde;
+  - la factura viva no dice nada;
+  - el folio que cambia con el detalle abierto;
+  - AA.
+- **Corrida doble:** con la 170, 231 pasan y 5 fallan (las nuevas que miden el aviso); con la 171, **236 de 236**; ninguna regresión.
+- **Sabotajes:** 8, y caen los 8. Cada uno quita una pieza:
+  - el aviso de la OC;
+  - la entrada en «Más»;
+  - que sólo cuente el folio compartido (cualquier folio de la OC);
+  - que pregunten sólo Dirección y Karla;
+  - releer si cambia el folio;
+  - atrapar la lectura que truena (sin eso sale como error de consola);
+  - el aviso de la orden sola;
+  - el contraste.
+- **Lo que no ve el banco:** la navegación de App a la OC (el banco la anota en la bitácora); es la misma de «Asignar folio anticipado».
+
+**Vuelta atrás.** `git revert` del commit y subir; la base no cambió.
+
+---
+
 ## v10.84.170 (datos) — La OC-1060 de PORTLAND LEATHER pasa de F-236 (cancelada) a F-253 — 2-nov-2026
 
 **Qué pasaba.** Marcelo, 2-nov: *«me dice Karla que canceló la factura 236, pero las órdenes de producción ligadas a esa factura no se liberaron… ¿por qué
