@@ -128,7 +128,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2715 pruebas, ~23 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2736 pruebas, ~23 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Las tandas con banco van de a 7 a la vez (`PROBAR_PARALELO`; con 11 juntas,
@@ -217,7 +217,16 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.171 (2-nov, ~12:34, READY `dpl_Aug5R2YXh2TVDH2nxXb9wKH5qDD7`, commit `e1132da`; vuelta atrás: `git revert e1132da` y subir (ensayada:
+- **LIVE:** v10.84.172 (3-nov, ~11:57, READY `dpl_6mbpJSvGTiyGvuFB5Mb6yGTmzLhw`, commit `8960930`; vuelta atrás: `git revert 8960930` y subir (ensayada en
+  un worktree: deja `src` y `tests` como f5303b0, el código de la 171), o promover `dpl_NnkYvdMpycAPebSfk1wbKAqwML8k` (el código de la 171); la base no
+  cambió; candado 2736 de 2736 (21 nuevas), de a 4, 1363 s, a la primera y sin inestables; revisado en producción sin escribir). 🔑 **Lo facturado en el
+  plan de su OC se entrega** (Karla, 3-nov: P-0621 y P-0623 de Hotsson, OC-0966, con sus 11 facturas ligadas en el plan por adelantado, llegaron a Salidas
+  y «Marcar como Entregada» decía «no tiene folio fiscal»): el guardia de `deliver_only` con las cuatro patas (`fiscalOk`), y `sinFacturar` (nada
+  facturado, cerrando en la duda) en cada puerta de foliar y de «El cliente no pide factura» (regla 17): la ficha, el «Más» del detalle, la cola de Karla,
+  el encabezado y la ventana «Asignar folio» de la OC, el chip «OC pendiente folio» y el aviso al pasar a Salidas. La ventana de entrega dice con qué
+  facturas va (`facturacionDeLaEntrega`); la bitácora y los avisos ya no dicen «folio null» ni «undefined» (lo de partes y agrupada). Tandas `sesion`
+  (ses-120 a ses-139, con los datos de producción de la OC-0966) y `chips` (ch-15).
+  v10.84.171 (2-nov, ~12:34, READY `dpl_Aug5R2YXh2TVDH2nxXb9wKH5qDD7`, commit `e1132da`; vuelta atrás: `git revert e1132da` y subir (ensayada:
   deja `src` y `tests` como 076627b); la base no cambió; candado 2715 de 2715 (11 nuevas), de a 4, 1361 s, a la primera y sin inestables; revisado en
   producción sin escribir). 🔑 **La orden cuya factura se canceló dice dónde se libera el folio** (F-236 de PORTLAND, 2-nov: Karla canceló la factura de la
   OC-1060 y «las órdenes no se liberaron»). Junto al folio, el detalle lo dice. La de una OC con folio compartido se libera desde la OC (`order_folio_is_cancelled`

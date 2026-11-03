@@ -55,6 +55,17 @@ OC-0966: sus 11 facturas, piezas y montos, F-169 por cobrar), y en `chips`, ch-1
   `sesion`, `chips`, `hooks`): 1007 de 1007, de a 4, 703 s, sin regresiones.
 - Los bancos hechos a mano traen lo nuevo si el App.jsx lo trae: `gen-detalle` (`sinFacturar`) y `gen-oc` (`fiscalOk` y `sinFacturar`).
 
+**En producción** (3-nov, ~11:57, READY `dpl_6mbpJSvGTiyGvuFB5Mb6yGTmzLhw`, commit `8960930`). Candado **2736 de 2736** (21 nuevas), de a 4, 1363 s, a
+la primera y sin inestables. Corrió después de Sygma Central y antes de Almacén, en el orden que puso Central. La base no cambió.
+- **Revisado en producción sin escribir:** los JS de los dos dominios traen la ventana nueva (5 de 5 textos). La misma revisión, contra la 171
+  publicada, no encontraba ninguno. En la base, P-0621 y P-0623 siguen en Salidas y `orden_ya_facturada` dice que sí a las dos: `deliver_only` las
+  acepta.
+- **Para Karla:** en la OC-0966, «Marcar como Entregada» en cada una; la ventana dice sus 11 facturas (F-169, $3,221.14 sin IVA, sigue por cobrar).
+
+**Vuelta atrás.** `git revert 8960930` y subir: ensayada en un worktree, sin conflictos, deja `src` y `tests` como f5303b0 (el código de v10.84.171).
+Mientras sea el despliegue anterior, también promover `dpl_NnkYvdMpycAPebSfk1wbKAqwML8k` (el código de v10.84.171); el commit de docs de esta entrada
+pone otro despliegue encima. La base no cambió.
+
 ## v10.84.171 — La orden cuya factura se canceló dice dónde se libera el folio (también la de una OC) — 2-nov-2026
 
 **Qué pasaba.** Lo destapó F-236 (abajo, v10.84.170 datos): Karla canceló la factura de la OC-1060 y «las órdenes no se liberaron». En el detalle de P-0685
