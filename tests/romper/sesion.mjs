@@ -77,6 +77,7 @@ function simulada() {
     retraso: {},       // v10.84.95 — { tabla: ms }: la base tarda en contestar esa tabla (la primera lectura lenta)
     rpcRespuestas: {}, // v10.84.96 — { rpc: valor }: lo que contesta esa RPC (por omisión, null)
     escrituraFalla: null, // v10.84.150 — una tabla cuyas escrituras (PATCH, POST) contestan 503: la base que no guarda
+    ordenesSeMueven: false, // v10.84.172 — un PATCH a una orden contesta su id (sin esto, vacío: «cambió de etapa en otra sesión»)
   };
 }
 const b64u = o => Buffer.from(JSON.stringify(o)).toString("base64url");
@@ -154,7 +155,7 @@ async function rutear(ctx, s) {
       return route.fulfill({ status: 204, headers: cors, body: "" });
     }
     if (ruta.startsWith("/rest/v1/")) {
-      s.peticiones.push({ t: Date.now(), m, ruta, quien, viva });
+      s.peticiones.push({ t: Date.now(), m, ruta, quien, viva, cuerpo });   // v10.84.172 — con su cuerpo: lo que se escribe en la bitácora y en los avisos
       if (ruta === "/rest/v1/rpc/get_user_session") {
         s.perfiles++;
         if (s.alPedirPerfil) { const f = s.alPedirPerfil; s.alPedirPerfil = null; await f(req.frame().page()); }
@@ -180,6 +181,8 @@ async function rutear(ctx, s) {
       }
       if (s.rpcFalla && ruta === "/rest/v1/rpc/" + s.rpcFalla) return J(500, { code: "XX000", message: "falla de prueba en " + s.rpcFalla });
       if (ruta.startsWith("/rest/v1/rpc/") && Object.prototype.hasOwnProperty.call(s.rpcRespuestas, ruta.slice(13))) return J(200, s.rpcRespuestas[ruta.slice(13)]);
+      // v10.84.172 — con `ordenesSeMueven`, mover una orden contesta su id: la app pide de vuelta el renglón movido, y vacío es «cambió en otra sesión»
+      if (s.ordenesSeMueven && m === "PATCH" && ruta === "/rest/v1/orders") { const id = (url.searchParams.get("id") || "").replace(/^eq\./, ""); return J(200, id ? [{ id }] : []); }
       return J(200, ruta.startsWith("/rest/v1/rpc/") ? null : []);
     }
     if (ruta.startsWith("/functions/v1/")) return J(200, {});
@@ -1838,6 +1841,311 @@ await caso("ses-119-si-la-primera-lectura-falla-se-arregla-al-volver", async ({ 
   const despues = await masDeLaOrden(p, "P-0951");
   ok("ses-119-si-la-primera-lectura-falla-se-arregla-al-volver", !conFolioDeAlpha(antes) && pregunto && conFolioDeAlpha(despues),
     `con la lectura del emisor fallando al entrar, «Folio de Alpha» ${conFolioDeAlpha(antes) ? "SALE (sin saber si el sistema emite)" : "no sale"}; al regresar a la pestaña con la base de vuelta ${pregunto ? "pregunta" : "NO pregunta"} y ${conFolioDeAlpha(despues) ? "ya sale" : "SIGUE SIN SALIR"}`);
+});
+
+// ════════════════════════ Hotsson: facturada en su plan POR ADELANTADO, llega a Salidas (v10.84.172) ════════════════════════
+// Karla, 3-nov 10:27 (WhatsApp, con dos capturas): «¿Cómo puedo cerrar ya estas órdenes de producción con esas facturas? ¿Por qué me dice esto?».
+// OC-0966 de INMOBILIARIA HOTSSON: sus 11 facturas (F-159 a F-169, hechas sin orden en CobranzaFlow) se ligaron en el plan matriz el 14-oct con
+// P-0621 y P-0623 todavía en la planta, y llegaron a Salidas el 2-nov. Su ficha ofrece «Marcar como Entregada» (v10.80.19 la abrió con las cuatro
+// patas) y al tocarla: «Esta orden no tiene folio fiscal. Usa "Asignar Folio y Entregar"», un botón que ella no tiene; el guardia de la acción se
+// quedó con tres (v10.80.13, sin el plan matriz). La base sí la deja (`deliver_only` → `orden_ya_facturada`, las cuatro). Atoradas en Salidas.
+// En la misma pantalla, la ficha le ofrecía «El cliente no pide factura», su guía decía «Asigna el folio fiscal… y marca entregada», y la OC
+// «Asignar folio» y «Pre-asignar folio» (la base los rechaza: «OC no tiene productos pendientes de facturar»). Lo que DEBE vivir Karla: la ficha la
+// entrega, la ventana dice con qué facturas va (sin «folio anticipado» vacío ni «estado de pago no registrado»), la bitácora y los avisos dicen
+// su plan (no «folio null»), y nada le ofrece foliar otra vez lo que ya está facturado. Los datos, como en producción el 3-nov.
+// Vuelta 1: escritas antes del cambio.
+const PLAN_HOTSSON = [   // [folio, piezas y monto sin IVA de P-0621, de P-0623, pago]
+  ["F-159", 110, 13435.71, 50, 3958.92, "paid"], ["F-160", 60, 7328.57, 40, 3167.14, "paid"], ["F-161", 50, 6107.14, 30, 2375.35, "paid"],
+  ["F-162", 60, 7328.57, 30, 2375.35, "paid"], ["F-163", 92, 11237.14, 30, 2375.35, "paid"], ["F-164", 50, 6107.14, 50, 3958.92, "paid"],
+  ["F-165", 50, 6107.14, 50, 3958.92, "paid"], ["F-166", 70, 8550, 30, 2375.35, "paid"], ["F-167", 50, 6107.14, 50, 3958.92, "paid"],
+  ["F-168", 50, 6107.14, 50, 3958.92, "paid"], ["F-169", 16, 1954.29, 16, 1266.85, "unpaid"]];
+const LIGADO = "2026-10-14T21:26:00Z";
+// `etapa`: la de las dos (o { "P-0623": "packaging" }); `sinPlan`: las que NO van en el plan (la OC queda mixta); `extra`: campos por orden
+const HOTSSON_PLAN = ({ etapa = "salidas", sinPlan = [], extra = {}, plan = PLAN_HOTSSON } = {}) => {
+  const st = pn => typeof etapa === "string" ? etapa : (etapa[pn] || "salidas");
+  const o = (pn, x) => ordenK(pn, { stage: st(pn), client: "INMOBILIARIA HOTSSON", client_company: "INMOBILIARIA HOTSSON", client_id: "c3", purchase_order_id: "OC-0966",
+    created_by: "genaro", agent: "Genaro", due_date: "2026-11-16", created_at: "2026-10-09T16:00:00Z", ...x, ...(extra[pn] || {}) });
+  const orders = [o("P-0621", { product: "AGENDAS 2027 PORTADAS MEDIDA 18.5 X 23 PASTA DURA", product_type: "Agendas", categoria: "libros", price: 80370, quantity: 658 }),
+    o("P-0623", { product: "CALENDARIOS 2027 BASE MEDIDA EXT. 41 X 21", product_type: "Calendarios", categoria: "calendarios", price: 33730, quantity: 426 })];
+  const enPlan = pn => !sinPlan.includes(pn);
+  const groups = plan.map(([folio, , m1, , m2, pago], i) => ({ id: "g-" + (i + 1), purchase_order_id: "OC-0966", position: i + 1, label: null, folio, doc_type: "factura",
+    total_amount: Math.round(((enPlan("P-0621") ? m1 : 0) + (enPlan("P-0623") ? m2 : 0)) * 100) / 100, invoice_pre_assigned: false, invoice_reason: null, payment_status: pago,
+    invoiced_at: LIGADO, invoiced_by: "karla", cancelled_at: null, cancellation_reason: null, cancelled_by: null, created_at: LIGADO }));
+  const lines = plan.flatMap(([, q1, m1, q2, m2], i) => [
+    enPlan("P-0621") && { id: "l-" + (i + 1) + "a", oc_invoice_split_group_id: "g-" + (i + 1), order_id: "OP-P-0621", qty_portion: q1, amount_portion: m1, cancelled_at: null, created_at: LIGADO },
+    enPlan("P-0623") && { id: "l-" + (i + 1) + "b", oc_invoice_split_group_id: "g-" + (i + 1), order_id: "OP-P-0623", qty_portion: q2, amount_portion: m2, cancelled_at: null, created_at: LIGADO }]).filter(Boolean);
+  return { orders, oc_invoice_split_groups: groups, oc_invoice_split_lines: lines,
+    purchase_orders: [{ id: "OC-0966", client: "INMOBILIARIA HOTSSON", client_id: "c3", status: "open", total: 114100, is_simple_oc: false, is_web_oc: false,
+      created_at: "2026-10-09T16:00:00Z", created_by: "karla", vendedor: "Genaro" }] };
+};
+const abrirHotsson = async (p, s, quien = "karla") => {
+  await abrirYEntrar(p, s, quien);
+  await esperarMenu(p, /^Pendientes/); await despertar(p);
+  await p.locator('button[title^="Órdenes de Compra"]').first().click(); await p.waitForTimeout(800);
+  await p.getByText("OC-0966", { exact: false }).first().click(); await p.waitForTimeout(1500);
+};
+const fichaDe = (p, pn) => p.locator(`[role="button"][aria-label^="Orden ${pn},"]`).first();
+const entregaDe = (p, pn) => fichaDe(p, pn).getByRole("button", { name: "Marcar como Entregada", exact: true });
+const ventanaDeEntrega = p => p.getByRole("dialog", { name: /Marcar como Entregada/ });
+const textoDe = async loc => ((await loc.innerText().catch(() => "")) || "").replace(/\s+/g, " ").trim();
+// lo que la app escribió (POST) en esa ruta desde t0, renglón por renglón
+const escrito = (s, ruta, t0 = 0) => s.peticiones.filter(x => x.t >= t0 && x.m === "POST" && x.ruta === ruta).flatMap(x => Array.isArray(x.cuerpo) ? x.cuerpo : [x.cuerpo || {}]);
+const ENTREGA = "/rest/v1/rpc/deliver_only";
+// abre la ventana de entrega desde la ficha y confirma (si sale); devuelve lo que dijo la pantalla
+const entregarDesdeLaFicha = async (p, s, pn, { confirmar = true } = {}) => {
+  const b = entregaDe(p, pn), hay = await b.count();
+  if (hay) { await b.click(); await p.waitForTimeout(700); }
+  const tras = await texto(p), ventana = await ventanaDeEntrega(p).count(), dice = ventana ? await textoDe(ventanaDeEntrega(p)) : "";
+  if (ventana && confirmar) {
+    const n0 = escrito(s, ENTREGA).length;
+    await ventanaDeEntrega(p).getByRole("button", { name: /Confirmar Entrega/ }).click().catch(() => {});
+    await esperarQue(() => escrito(s, ENTREGA).length > n0, 6000); await p.waitForTimeout(1200);
+  }
+  return { hay, ventana, dice, tras };
+};
+
+await caso("ses-120-hotsson-la-ficha-entrega-lo-facturado-en-su-plan", async ({ p, s }) => {
+  s.filas = HOTSSON_PLAN();
+  await abrirHotsson(p, s);
+  const r = await entregarDesdeLaFicha(p, s, "P-0621");
+  const rpc = escrito(s, ENTREGA);
+  ok("ses-120-hotsson-la-ficha-entrega-lo-facturado-en-su-plan", r.hay === 1 && r.ventana === 1 && !/no tiene folio fiscal/i.test(r.tras) && rpc.length === 1 && rpc[0].p_order_id === "OP-P-0621",
+    `«Marcar como Entregada» de P-0621: ${r.hay ? "está" : "NO está"}; al tocarla ${r.ventana ? "abre la ventana de entrega" : /no tiene folio fiscal/i.test(r.tras) ? "dice «" + (r.tras.match(/[^.]*no tiene folio fiscal[^.]*\.[^.]*\./i) || [""])[0].trim() + "» (lo que vio Karla)" : "no abre nada"}; deliver_only: ${rpc.length} vez(es)${rpc[0] ? " con " + rpc[0].p_order_id : ""}`);
+});
+await caso("ses-121-hotsson-la-ventana-dice-con-que-facturas", async ({ p, s }) => {
+  s.filas = HOTSSON_PLAN();
+  await abrirHotsson(p, s);
+  const r = await entregarDesdeLaFicha(p, s, "P-0621", { confirmar: false });
+  const v = r.dice;
+  ok("ses-121-hotsson-la-ventana-dice-con-que-facturas", r.ventana === 1 && /plan de la OC-0966/.test(v) && /F-159/.test(v) && /F-169/.test(v) && /658 de 658/.test(v) && /por cobrar/i.test(v)
+    && !/Folio anticipado/i.test(v) && !/Estado de pago no registrado/i.test(v) && !/null|undefined|NaN/.test(v),
+    `la ventana de P-0621: «${v.slice(0, 420)}»`);
+});
+await caso("ses-122-hotsson-la-bitacora-y-los-avisos-dicen-su-plan", async ({ p, s }) => {
+  s.filas = HOTSSON_PLAN();
+  await abrirHotsson(p, s);
+  const t0 = Date.now();
+  await entregarDesdeLaFicha(p, s, "P-0621");
+  await esperarQue(() => escrito(s, "/rest/v1/notifications", t0).length > 0, 6000); await p.waitForTimeout(500);
+  const tl = escrito(s, "/rest/v1/order_timeline", t0).map(x => String(x.action || "")).filter(a => /Entregada/.test(a));
+  const av = [...new Set(escrito(s, "/rest/v1/notifications", t0).map(x => String(x.message || "")))];
+  ok("ses-122-hotsson-la-bitacora-y-los-avisos-dicen-su-plan", tl.length === 1 && /plan de la OC-0966/.test(tl[0]) && !/null|undefined/.test(tl[0])
+    && av.length === 1 && /P-0621 entregada/.test(av[0]) && /plan de la OC-0966/.test(av[0]) && !/null|undefined/.test(av[0]),
+    `la bitácora: ${JSON.stringify(tl)}; los avisos: ${JSON.stringify(av)}`);
+});
+await caso("ses-123-hotsson-la-ficha-no-ofrece-no-pide-factura-ni-asignar-folio", async ({ p, s }) => {
+  s.filas = HOTSSON_PLAN();
+  await abrirHotsson(p, s);
+  const f = fichaDe(p, "P-0621");
+  const noPide = await f.getByRole("button", { name: /no pide factura/i }).count();
+  const asignar = await f.getByRole("button", { name: /Asignar Folio y Entregar/i }).count();
+  const guias = await f.locator("[title]").evaluateAll(els => els.map(e => e.getAttribute("title")).filter(t => /folio fiscal|entregada/i.test(t || "")));
+  const mas = f.getByRole("button", { name: "Más acciones", exact: true });
+  let menu = [];
+  if (await mas.count()) { await mas.click(); await p.waitForTimeout(300); menu = (await f.getByRole("menuitem").allInnerTexts().catch(() => [])).map(x => x.replace(/\s+/g, " ").trim()); await p.keyboard.press("Escape"); }
+  ok("ses-123-hotsson-la-ficha-no-ofrece-no-pide-factura-ni-asignar-folio", noPide === 0 && asignar === 0 && !menu.some(x => /no pide factura/i.test(x)) && !guias.some(t => /Asigna el folio/i.test(t)),
+    `en la ficha de P-0621 (11 facturas en su plan): «El cliente no pide factura» ${noPide}, «Asignar Folio y Entregar» ${asignar}; su «Más»: ${JSON.stringify(menu)}; la guía: ${JSON.stringify(guias)}`);
+});
+await caso("ses-124-hotsson-el-mas-del-detalle-sin-no-pide-factura", async ({ p, s }) => {
+  s.filas = HOTSSON_PLAN();
+  await abrirYEntrar(p, s, "karla");
+  await esperarMenu(p, /^Pendientes/); await despertar(p);
+  const menu = await masDeLaOrden(p, "P-0621");
+  ok("ses-124-hotsson-el-mas-del-detalle-sin-no-pide-factura", menu.length > 0 && !menu.some(x => /no pide factura/i.test(x)),
+    `«Más» del detalle de P-0621: ${JSON.stringify(menu).slice(0, 260)}`);
+});
+await caso("ses-125-hotsson-la-oc-no-ofrece-foliar-lo-ya-facturado", async ({ p, s }) => {
+  s.filas = HOTSSON_PLAN(); s.rpcRespuestas = { list_linkable_invoices_for_oc: [] };
+  await abrirHotsson(p, s);
+  const asignar = await p.getByRole("button", { name: "Asignar folio", exact: true }).count(), pre = await p.getByRole("button", { name: /Pre-asignar folio/ }).count();
+  const t = await texto(p), lecturas = s.peticiones.filter(x => x.ruta === "/rest/v1/rpc/list_linkable_invoices_for_oc").length;
+  ok("ses-125-hotsson-la-oc-no-ofrece-foliar-lo-ya-facturado", asignar === 0 && pre === 0 && /Productos 2 · 2 facturad/.test(t) && lecturas === 0,
+    `OC-0966 con sus 2 órdenes en el plan: «Asignar folio» ${asignar}, «Pre-asignar folio» ${pre}; «${(t.match(/Productos[^A-Z]{0,40}/) || [""])[0].trim()}»; lecturas de facturas sin orden: ${lecturas}`);
+});
+// la OC mixta: P-0621 en el plan, P-0623 no. La base folia sólo lo que no está facturado (`NOT orden_ya_facturada`): la ventana de la OC lo dice así
+await caso("ses-126-oc-mixta-asignar-folio-cuenta-solo-lo-que-falta", async ({ p, s }) => {
+  s.filas = HOTSSON_PLAN({ sinPlan: ["P-0623"] }); s.rpcRespuestas = { list_linkable_invoices_for_oc: [], get_folio_emitter_enabled: true };
+  await abrirHotsson(p, s);
+  const b = p.getByRole("button", { name: "Asignar folio", exact: true }), hay = await b.count();
+  if (hay) { await b.first().click(); await p.waitForTimeout(1200); }
+  const v = await textoDe(p.getByRole("dialog").last());
+  ok("ses-126-oc-mixta-asignar-folio-cuenta-solo-lo-que-falta", hay === 1 && /\b1 por facturar/.test(v) && /33,730\.00/.test(v) && !/114,100\.00/.test(v) && !/2 por facturar/.test(v)
+    && /1 ya está facturada: P-0621 en el plan de la OC/.test(v),
+    `OC-0966 con P-0621 en el plan y P-0623 sin: «Asignar folio» ${hay}; la ventana: «${v.slice(0, 300)}»`);
+});
+// pasar a Salidas la última de una OC ya facturada en su plan: no le dice «ya puedes asignar folio a la OC»
+await caso("ses-127-hotsson-pasar-a-salidas-no-manda-a-foliar-la-oc", async ({ p, s }) => {
+  s.filas = HOTSSON_PLAN({ etapa: { "P-0623": "packaging" } }); s.ordenesSeMueven = true;
+  await abrirYEntrar(p, s, "karla");
+  await esperarMenu(p, /^Pendientes/); await despertar(p);
+  await p.locator('button[title^="Pendientes"]').first().click(); await p.waitForTimeout(800);
+  await p.getByRole("tab", { name: /En la planta/ }).first().click().catch(() => {}); await p.waitForTimeout(600);
+  const b = p.locator('[data-orden="OP-P-0623"] button').filter({ hasText: /Pasar/ }), hay = await b.count();
+  if (hay) { await b.first().click(); await p.waitForTimeout(500); }
+  const pregunta = p.locator('[aria-labelledby="dlg-confirm-titulo"]');
+  if (await pregunta.count()) { await pregunta.getByRole("button", { name: /^Sí/ }).first().click().catch(() => {}); }
+  const dijo = await p.waitForFunction(() => /ya está en Salidas/.test(document.body.innerText), null, { timeout: 8000, polling: 100 }).then(() => true, () => false);
+  const t = await texto(p);
+  ok("ses-127-hotsson-pasar-a-salidas-no-manda-a-foliar-la-oc", hay === 1 && dijo && !/asignar folio a OC-0966/i.test(t),
+    `«Pasar a Salidas» de P-0623: ${hay}; lo que dijo: «${(t.match(/P-0623[^.]*ya está en Salidas[^.]*\./) || [""])[0]}»`);
+});
+
+// ── vuelta 2, por donde no se diseñó: lo de antes sigue igual (folio propio, partes, agrupada), la lectura del plan que falla, la base que rechaza,
+//    el doble clic, Esc y el clic afuera, el plan que se cancela con la ventana abierta, 30 facturas (el tope del plan) con un cliente de nombre
+//    larguísimo en las dos pantallas de Marcelo, la maquila recibida, otro rol y la OC mixta ──
+// tres que se entregan sin folio nuevo, una por cada pata que no es el plan, en la cola de Karla («Pendientes de Folio»)
+const TRES_PATAS = () => ({
+  orders: [ordenK("P-0960", { stage: "salidas", invoice_folio: "F-9904", invoice_pre_assigned: true, invoice_type: "factura", payment_status: "unpaid", invoiced_by: "karla", invoiced_at: haceH(30) }),
+    ordenK("P-0961", { stage: "salidas", price: 5000, quantity: 500 }),
+    ordenK("P-0962", { stage: "salidas", grouped_invoice_folio: "F-180" })],
+  order_invoice_splits: [
+    { id: "sp-1", order_id: "OP-P-0961", position: 1, qty_portion: 300, amount_portion: 3000, doc_type: "factura", invoice_folio: "F-170", invoice_pre_assigned: true, payment_status: "unpaid", cancelled_at: null, cancellation_reason: null, cancelled_by: null, created_at: haceH(40) },
+    { id: "sp-2", order_id: "OP-P-0961", position: 2, qty_portion: 200, amount_portion: 2000, doc_type: "por_facturar", invoice_folio: null, invoice_pre_assigned: false, payment_status: null, cancelled_at: null, cancellation_reason: null, cancelled_by: null, created_at: haceH(40) }] });
+const entregaEnLaCola = (p, pn) => p.getByRole("button", { name: new RegExp("^Marcar como Entregada · " + pn + "\\b") });
+const entregarDesdeLaCola = async (p, s, pn) => {
+  await entregaEnLaCola(p, pn).first().click().catch(() => {}); await p.waitForTimeout(700);
+  const dice = await textoDe(ventanaDeEntrega(p)), t0 = Date.now();
+  await ventanaDeEntrega(p).getByRole("button", { name: /Confirmar Entrega/ }).click().catch(() => {});
+  await esperarQue(() => escrito(s, "/rest/v1/notifications", t0).length > 0, 6000); await p.waitForTimeout(400);
+  return { dice, tl: escrito(s, "/rest/v1/order_timeline", t0).map(x => String(x.action || "")).filter(a => /Entregada/.test(a)),
+    av: [...new Set(escrito(s, "/rest/v1/notifications", t0).map(x => String(x.message || "")))], rpc: escrito(s, ENTREGA, t0).map(x => x.p_order_id) };
+};
+await caso("ses-128-el-folio-anticipado-se-entrega-como-siempre", async ({ p, s }) => {
+  s.filas = TRES_PATAS();
+  await abrirYEntrar(p, s, "karla"); await esperarMenu(p, /^Pendientes/); await despertar(p);
+  const r = await entregarDesdeLaCola(p, s, "P-0960");
+  ok("ses-128-el-folio-anticipado-se-entrega-como-siempre", /Folio anticipado ya asignado/i.test(r.dice) && /F-9904/.test(r.dice) && /Estado de pago: No pagada/.test(r.dice)
+    && JSON.stringify(r.rpc) === '["OP-P-0960"]' && r.tl.length === 1 && r.tl[0] === "✅ Entregada (folio F-9904 ya asignado)" && r.av.length === 1 && /folio F-9904 \(anticipado\)/.test(r.av[0]),
+    `la ventana: «${r.dice.slice(0, 200)}»; deliver_only ${JSON.stringify(r.rpc)}; la bitácora ${JSON.stringify(r.tl)}; el aviso ${JSON.stringify(r.av)}`);
+});
+await caso("ses-129-por-partes-dice-sus-partes-y-lo-que-falta", async ({ p, s }) => {
+  s.filas = TRES_PATAS();
+  await abrirYEntrar(p, s, "karla"); await esperarMenu(p, /^Pendientes/); await despertar(p);
+  const r = await entregarDesdeLaCola(p, s, "P-0961");
+  ok("ses-129-por-partes-dice-sus-partes-y-lo-que-falta", /Facturada por partes/.test(r.dice) && /F-170/.test(r.dice) && /300 de 500 piezas/.test(r.dice) && /Facturar siguiente parte/.test(r.dice)
+    && !/Folio anticipado/i.test(r.dice) && !/null|undefined|NaN/.test(r.dice) && JSON.stringify(r.rpc) === '["OP-P-0961"]'
+    && r.tl.length === 1 && /por partes: F-170/.test(r.tl[0]) && r.av.length === 1 && /por partes: F-170/.test(r.av[0]) && !/null/.test(r.tl[0] + r.av[0]),
+    `la ventana: «${r.dice.slice(0, 260)}»; la bitácora ${JSON.stringify(r.tl)}; el aviso ${JSON.stringify(r.av)}`);
+});
+await caso("ses-130-la-agrupada-dice-su-factura", async ({ p, s }) => {
+  s.filas = TRES_PATAS();
+  await abrirYEntrar(p, s, "karla"); await esperarMenu(p, /^Pendientes/); await despertar(p);
+  const r = await entregarDesdeLaCola(p, s, "P-0962");
+  ok("ses-130-la-agrupada-dice-su-factura", /factura agrupada F-180/.test(r.dice) && !/Folio anticipado/i.test(r.dice) && !/Estado de pago/.test(r.dice) && !/null|undefined|NaN/.test(r.dice)
+    && JSON.stringify(r.rpc) === '["OP-P-0962"]' && r.tl.length === 1 && /factura agrupada F-180/.test(r.tl[0]) && r.av.length === 1 && /factura agrupada F-180/.test(r.av[0]),
+    `la ventana: «${r.dice.slice(0, 220)}»; la bitácora ${JSON.stringify(r.tl)}; el aviso ${JSON.stringify(r.av)}`);
+});
+await caso("ses-131-sin-la-lectura-del-plan-no-ofrece-nada-de-folio", async ({ p, s }) => {
+  s.filas = { ...HOTSSON_PLAN(), oc_invoice_split_lines: "falla" }; s.rpcRespuestas = { list_linkable_invoices_for_oc: [] };
+  await abrirYEntrar(p, s, "karla"); await esperarMenu(p, /^Pendientes/);
+  const aviso = await p.waitForFunction(() => /No se pudo verificar la facturación/.test(document.body.innerText), null, { timeout: 30000, polling: 200 }).then(() => true, () => false);
+  await despertar(p);
+  await p.locator('button[title^="Órdenes de Compra"]').first().click(); await p.waitForTimeout(800);
+  await p.getByText("OC-0966", { exact: false }).first().click(); await p.waitForTimeout(1500);
+  const f = fichaDe(p, "P-0621");
+  const n = { entregar: await f.getByRole("button", { name: "Marcar como Entregada", exact: true }).count(), foliar: await f.getByRole("button", { name: /Asignar Folio y Entregar/ }).count(),
+    noPide: await f.getByRole("button", { name: /no pide factura/i }).count(), oc: await p.getByRole("button", { name: "Asignar folio", exact: true }).count() };
+  ok("ses-131-sin-la-lectura-del-plan-no-ofrece-nada-de-folio", aviso && n.entregar === 0 && n.foliar === 0 && n.noPide === 0 && n.oc === 0,
+    `con el plan sin leer (aviso: ${aviso ? "sí" : "NO"}), en P-0621 y su OC: ${JSON.stringify(n)} (todo en 0: no se sabe)`);
+});
+await caso("ses-132-la-base-rechaza-la-entrega", async ({ p, s }) => {
+  s.filas = HOTSSON_PLAN(); s.rpcFalla = "deliver_only";
+  await abrirHotsson(p, s);
+  const t0 = Date.now();
+  await entregarDesdeLaFicha(p, s, "P-0621");
+  await p.waitForTimeout(800);
+  const t = await texto(p), tl = escrito(s, "/rest/v1/order_timeline", t0).filter(x => /Entregada/.test(String(x.action || ""))).length;
+  const sigue = await entregaDe(p, "P-0621").count() + (await ventanaDeEntrega(p).count());
+  ok("ses-132-la-base-rechaza-la-entrega", /falla de prueba en deliver_only/.test(t) && tl === 0 && sigue > 0 && escrito(s, "/rest/v1/notifications", t0).length === 0,
+    `la base rechaza: ${/falla de prueba/.test(t) ? "lo dice" : "NO lo dice"}; bitácora «Entregada» ${tl}; avisos ${escrito(s, "/rest/v1/notifications", t0).length}; P-0621 ${sigue ? "sigue por entregar" : "YA NO SE VE"}`);
+});
+await caso("ses-133-doble-clic-en-confirmar-entrega-una-vez", async ({ p, s }) => {
+  s.filas = HOTSSON_PLAN();
+  await abrirHotsson(p, s);
+  await entregaDe(p, "P-0621").click().catch(() => {}); await p.waitForTimeout(700);
+  // los dos clics en el mismo instante, al mismo botón (el de Playwright pega el segundo donde estaba, y el botón cambia a «Procesando…»)
+  await ventanaDeEntrega(p).getByRole("button", { name: /Confirmar Entrega/ }).evaluate(b => { b.click(); b.click(); }).catch(() => {});
+  await esperarQuieto(() => escrito(s, ENTREGA).length, 2500, 10000);
+  const n = escrito(s, ENTREGA).length, tl = escrito(s, "/rest/v1/order_timeline").filter(x => /Entregada/.test(String(x.action || ""))).length;
+  ok("ses-133-doble-clic-en-confirmar-entrega-una-vez", n === 1 && tl === 1, `dos clics en «Confirmar Entrega»: deliver_only ${n} vez(es), bitácora «Entregada» ${tl}`);
+});
+await caso("ses-134-esc-y-clic-afuera-no-entregan", async ({ p, s }) => {
+  s.filas = HOTSSON_PLAN();
+  await abrirHotsson(p, s);
+  await entregaDe(p, "P-0621").click().catch(() => {}); await p.waitForTimeout(600);
+  const abrio1 = await ventanaDeEntrega(p).count();
+  await p.keyboard.press("Escape"); await p.waitForTimeout(500);
+  const tras1 = await ventanaDeEntrega(p).count();
+  await entregaDe(p, "P-0621").click().catch(() => {}); await p.waitForTimeout(600);
+  const abrio2 = await ventanaDeEntrega(p).count();
+  await p.mouse.click(8, 8); await p.waitForTimeout(500);
+  const tras2 = await ventanaDeEntrega(p).count();
+  ok("ses-134-esc-y-clic-afuera-no-entregan", abrio1 === 1 && tras1 === 0 && abrio2 === 1 && tras2 === 0 && escrito(s, ENTREGA).length === 0,
+    `Esc: abrió ${abrio1}, quedó ${tras1}; clic afuera: abrió ${abrio2}, quedó ${tras2}; deliver_only ${escrito(s, ENTREGA).length}`);
+});
+await caso("ses-135-el-plan-se-cancela-con-la-ventana-abierta", async ({ p, s }) => {
+  s.filas = HOTSSON_PLAN();
+  await abrirHotsson(p, s);
+  await entregaDe(p, "P-0621").click().catch(() => {}); await p.waitForTimeout(700);
+  const antes = await textoDe(ventanaDeEntrega(p));
+  // en otra sesión cancelan el plan entero: la recarga trae sus facturas y sus líneas canceladas
+  const ya = "2026-11-03T17:00:00Z";
+  s.filas = { ...s.filas, oc_invoice_split_groups: s.filas.oc_invoice_split_groups.map(g => ({ ...g, cancelled_at: ya })), oc_invoice_split_lines: s.filas.oc_invoice_split_lines.map(l => ({ ...l, cancelled_at: ya })) };
+  await regresaALaPestana(p);
+  const dice = await p.waitForFunction(() => /Ya no está facturada/.test(document.body.innerText), null, { timeout: 10000, polling: 200 }).then(() => true, () => false);
+  const b = ventanaDeEntrega(p).getByRole("button", { name: /Confirmar Entrega/ });
+  const apagado = await b.isDisabled().catch(() => false);
+  await b.click({ force: true, timeout: 2000 }).catch(() => {}); await p.waitForTimeout(800);
+  ok("ses-135-el-plan-se-cancela-con-la-ventana-abierta", /plan de la OC-0966/.test(antes) && dice && apagado && escrito(s, ENTREGA).length === 0,
+    `al abrir: ${/plan de la OC-0966/.test(antes) ? "su plan" : "«" + antes.slice(0, 80) + "»"}; cancelado el plan, la ventana ${dice ? "dice «Ya no está facturada»" : "NO lo dice"}; «Confirmar Entrega» ${apagado ? "apagado" : "PRENDIDO"}; deliver_only ${escrito(s, ENTREGA).length}`);
+});
+// 30 facturas, el tope del plan (v10.84.107), y el cliente de nombre más largo: la ventana cabe y su botón se ve, a 1366 y a 1920
+const PLAN_30 = Array.from({ length: 30 }, (_, i) => ["F-" + (300 + i), i < 28 ? 22 : 21, i < 28 ? 2687.14 : 2565.04, i < 6 ? 15 : 14, i < 6 ? 1187.68 : 1108.46, i % 3 ? "paid" : "unpaid"]);
+await caso("ses-136-treinta-facturas-y-nombre-largo-en-las-dos-pantallas", async ({ p, s }) => {
+  s.filas = HOTSSON_PLAN({ plan: PLAN_30, extra: { "P-0621": { client: LARGO } } });
+  await abrirHotsson(p, s);
+  const medir = () => p.evaluate(() => {
+    const d = [...document.querySelectorAll('[role="dialog"]')].find(x => /Marcar como Entregada/.test(x.textContent || ""));
+    if (!d) return null;
+    const b = [...d.querySelectorAll("button")].find(x => /Confirmar Entrega/.test(x.textContent || "")), r = b ? b.getBoundingClientRect() : null;
+    return { boton: !!r && r.top >= 0 && r.bottom <= innerHeight && r.right <= innerWidth, ancho: d.scrollWidth <= d.clientWidth + 1, pagina: document.documentElement.scrollWidth <= innerWidth + 1,
+      facturas: d.querySelectorAll('[role="listitem"]').length };
+  });
+  await entregaDe(p, "P-0621").click().catch(() => {}); await p.waitForTimeout(700);
+  const a1366 = await medir(), dice = await textoDe(ventanaDeEntrega(p));
+  await p.setViewportSize({ width: 1920, height: 1080 }); await p.waitForTimeout(500);
+  const a1920 = await medir();
+  const bien = m => !!m && m.boton && m.ancho && m.pagina && m.facturas === 30;
+  ok("ses-136-treinta-facturas-y-nombre-largo-en-las-dos-pantallas", bien(a1366) && bien(a1920) && /30 facturas/.test(dice) && /658 de 658/.test(dice) && /10 por cobrar/.test(dice),
+    `a 1366: ${JSON.stringify(a1366)}; a 1920: ${JSON.stringify(a1920)}; «${dice.slice(0, 160)}»`);
+});
+await caso("ses-137-la-maquila-recibida-del-plan-se-entrega", async ({ p, s }) => {
+  s.filas = HOTSSON_PLAN({ etapa: { "P-0623": "maq_received" }, extra: { "P-0623": { order_type: "maquila", maq_price: 33730, maq_cost: 21000, maquila_provider: "SERIGRAFÍA LÓPEZ" } } });
+  await abrirHotsson(p, s);
+  const r = await entregarDesdeLaFicha(p, s, "P-0623");
+  const rpc = escrito(s, ENTREGA);
+  ok("ses-137-la-maquila-recibida-del-plan-se-entrega", r.hay === 1 && r.ventana === 1 && /plan de la OC-0966/.test(r.dice) && /426 de 426/.test(r.dice) && rpc.length === 1 && rpc[0].p_order_id === "OP-P-0623",
+    `P-0623 (maquila recibida): «Marcar como Entregada» ${r.hay}; ventana ${r.ventana} «${r.dice.slice(0, 140)}»; deliver_only ${rpc.length}`);
+});
+await caso("ses-138-lupita-no-entrega-lo-del-plan", async ({ p, s }) => {
+  s.filas = HOTSSON_PLAN(); s.rpcRespuestas = { list_linkable_invoices_for_oc: [] };
+  await abrirHotsson(p, s, "lupita");
+  const n = { entregar: await p.getByRole("button", { name: "Marcar como Entregada", exact: true }).count(), foliar: await p.getByRole("button", { name: /Asignar Folio y Entregar/ }).count(),
+    noPide: await p.getByRole("button", { name: /no pide factura/i }).count() };
+  ok("ses-138-lupita-no-entrega-lo-del-plan", n.entregar === 0 && n.foliar === 0 && n.noPide === 0, `Lupita en OC-0966: ${JSON.stringify(n)} (es de Karla y Dirección)`);
+});
+// la OC mixta: P-0621 en el plan, P-0623 no. Lo que falta es P-0623 (con IVA, $39,126.80): el aviso de las facturas sin orden lo compara con eso, y cada
+//   ficha ofrece lo suyo (P-0623 se folia y puede esperar al cliente; P-0621 sólo se entrega)
+await caso("ses-139-oc-mixta-cada-ficha-lo-suyo-y-lo-que-falta", async ({ p, s }) => {
+  s.filas = HOTSSON_PLAN({ sinPlan: ["P-0623"] });
+  s.rpcRespuestas = { list_linkable_invoices_for_oc: [{ doc_number: "F-171", doc_type: "factura", amount: 39126.80, issued_date: "2026-11-01", dias_sin_orden: 2, monto_cuadra: false }] };
+  await abrirHotsson(p, s);
+  const aviso = ((await p.locator("[data-sin-orden-de-la-oc]").first().innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  const f1 = fichaDe(p, "P-0621"), f3 = fichaDe(p, "P-0623");
+  const n = { p0621: { entregar: await f1.getByRole("button", { name: "Marcar como Entregada", exact: true }).count(), noPide: await f1.getByRole("button", { name: /no pide factura/i }).count() },
+    p0623: { foliar: await f3.getByRole("button", { name: /Asignar Folio y Entregar/ }).count(), noPide: await f3.getByRole("button", { name: /no pide factura/i }).count() } };
+  ok("ses-139-oc-mixta-cada-ficha-lo-suyo-y-lo-que-falta", /F-171/.test(aviso) && /justo lo que falta/.test(aviso) && n.p0621.entregar === 1 && n.p0621.noPide === 0 && n.p0623.foliar === 1 && n.p0623.noPide === 1,
+    `el aviso: «${aviso.slice(0, 200)}»; las fichas: ${JSON.stringify(n)}`);
 });
 
 await browser.close();

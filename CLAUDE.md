@@ -106,6 +106,9 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
     `reload()` cruzando `order_invoice_splits`. No van en `.or()` de PostgREST.
 17. **Las 4 patas fiscales**: «ya está facturada» = `invoice_folio || grouped_invoice_folio ||
     has_splits || has_matrix_lines` (helper `fiscalOk`). Todo predicado de foliar/entregar/snooze las usa.
+    🔑 Y «nada facturado» = ninguna de las cuatro (helper `sinFacturar`, v10.84.172): cierra en la duda (con `fiscal_desconocido` las banderas de
+    partes y plan llegan en true), así que es el que abre foliar y «El cliente no pide factura»; `!fiscalOk` abriría en la duda. Una sola pata o
+    tres atoraron a Hotsson (OC-0966, 3-nov): «Marcar como Entregada» decía «no tiene folio fiscal» a lo facturado en el plan de su OC.
 18. `isSec(role)` / `secOwns` / `vOwns` / `userLogin` / `notifKey` — gates de siempre; `created_by`
     guarda username, no rol.
 19. Prefijo `// vX.Y.Z — ` en cada cambio, con el **porqué** (los comentarios son el historial que sí

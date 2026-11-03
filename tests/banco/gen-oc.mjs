@@ -78,6 +78,8 @@ function BillToSection({ onChange }) { return <div style={{ padding: 8, fontSize
   ...opcional(L.some(l => l.startsWith("function ConfirmModal(")), () => fnBlock("ConfirmModal")),
   fnBlock("FolioAutoNote"), fnBlock("SaldoFavorAmarreBanner"), fnBlock("MultiPaymentPicker"),
   ...opcional(L.some(l => l.startsWith("function SinRevisionSinOrden(")), () => fnBlock("SinRevisionSinOrden")),   // v10.84.96
+  // v10.84.172 — lo por facturar y lo ya facturado, con las cuatro patas (si el App.jsx las trae)
+  ...opcional(L.some(l => /^const sinFacturar = /.test(l)), () => [line(/^const fiscalOk = /, "fiscalOk"), line(/^const sinFacturar = /, "sinFacturar")].join("\n")),
   fnBlock("AssignOCFolioModal"),
   `const CLIENTES = { normal: "PORTLAND STUDIO", corona: "CERVECERIA MODELO DE MEXICO", cuadra: "CUADRA SA DE CV", saldo: "IMPRENTA LEON" };
 const OC = { id: "OC-1003", client: CLIENTES[CLIENTE] || CLIENTES.normal, client_id: "c1" };

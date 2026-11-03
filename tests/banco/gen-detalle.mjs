@@ -70,6 +70,8 @@ const partes = [
   ...(L.some(l => /^const puedeCorregirPrecio = /.test(l)) ? [multi(/^const puedeCorregirPrecio = /, "puedeCorregirPrecio")] : []),
   // v10.84.113 — lo que Lupita puede cancelar (si el App.jsx lo trae)
   ...(L.some(l => /^const cancelaLaSecretaria = /.test(l)) ? [multi(/^const cancelaLaSecretaria = /, "cancelaLaSecretaria")] : []),
+  // v10.84.172 — lo que no tiene nada facturado (las cuatro patas): «El cliente no pide factura» de la ficha y del «Más» (si el App.jsx lo trae)
+  ...(L.some(l => /^const sinFacturar = /.test(l)) ? [multi(/^const sinFacturar = /, "sinFacturar")] : []),
   // v10.84.112 — «Reimprimir» es para producción: la regla de la ficha y del botón (si el App.jsx la trae)
   ...(L.some(l => /^const pideReimprimir = /.test(l)) ? [multi(/^const pideReimprimir = /, "pideReimprimir")] : []),
   line(/^const recProof=/, "recProof"), multi(/^const STAGE_SEQUENCE/, "STAGE_SEQUENCE"), multi(/^const ROLE_AREAS=\{/, "ROLE_AREAS"), fnBlock("getRevertOptions"), fnBlock("StageFlowButtons"),

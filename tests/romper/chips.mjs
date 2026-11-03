@@ -79,6 +79,17 @@ caso("ch-11-genaro-lo-suyo", "vendedor", [[{ stage: "maq_sent", created_by: "lup
 caso("ch-12-karla-sus-salidas", "karla", [[{ stage: "salidas" }, "toca"], [{ stage: "maq_received" }, "toca"], [{ stage: "in_production" }, "espera"]]);
 caso("ch-13-admin-todo", "admin", ["draft", "ready", "ctp", "salidas", "maq_sent", "in_production"].map(st => [{ stage: st }, "toca"]));
 
+// ── v10.84.172 — «OC pendiente folio» de Karla con las cuatro patas (Hotsson, OC-0966, 3-nov: sus dos órdenes, facturadas en el plan de su OC por
+//   adelantado, llegaron a Salidas y contaban como «pendientes de folio»): ni lo del plan, ni lo de partes, ni lo agrupado, ni lo de folio propio; y
+//   en la duda (`fiscal_desconocido`: reload pone las banderas de partes y plan en true) tampoco. Vuelta 1: escrita antes del cambio ──
+const ocPendiente = getTaskFilters("karla").find(f => f.key === "oc_pending")?.predicate;
+const enSalidasDeOC = x => ({ stage: "salidas", purchase_order_id: "OC-0966", invoice_folio: null, ...x });
+const ocCasos = [[{}, true], [{ has_matrix_lines: true }, false], [{ has_splits: true }, false], [{ grouped_invoice_folio: "F-150" }, false], [{ invoice_folio: "F-151" }, false],
+  [{ has_matrix_lines: true, has_splits: true, fiscal_desconocido: true }, false], [{ purchase_order_id: null }, false]];
+const ocMal = ocCasos.filter(([x, e]) => !ocPendiente || !!ocPendiente(enSalidasDeOC(x)) !== e);
+ok("ch-15-oc-pendiente-folio-sin-lo-ya-facturado", !!ocPendiente && ocMal.length === 0,
+  `cuenta mal: [${ocMal.map(([x, e]) => JSON.stringify(x) + " → " + (e ? "debía contar" : "NO debía contar")).join(" · ") || "nada"}]`);
+
 for (const r of res) console.log(r);
 const fallan = res.filter(r => r.startsWith("FALLA")).length;
 console.log(`\nchips: ${res.length - fallan} pasan, ${fallan} fallan`);

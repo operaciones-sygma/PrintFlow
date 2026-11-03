@@ -12,6 +12,49 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.172 — Lo facturado en el plan de su OC se entrega (Hotsson, OC-0966) — 3-nov-2026
+
+**Qué pasaba.** Karla, 3-nov 10:27 (WhatsApp, con dos capturas): «¿Cómo puedo cerrar ya estas órdenes de producción con esas facturas? ¿Por qué me
+dice esto?». La OC-0966 de INMOBILIARIA HOTSSON tiene sus 11 facturas (F-159 a F-169, hechas sin orden en CobranzaFlow) ligadas en el plan matriz
+desde el 14-oct. Ese día P-0621 y P-0623 estaban en la planta, así que el plan no las entregó (la que ya está en Salidas se entrega al ligar: así se
+cerró la OC-0960 de PORTLAND). Llegaron a Salidas el 2-nov a las 13:49. Su ficha ofrecía «Marcar como Entregada», y al tocarlo: «Esta orden no tiene
+folio fiscal. Usa "Asignar Folio y Entregar"», un botón que esas órdenes no tienen.
+- **El guardia de la acción (`deliver_only`) revisaba tres de las cuatro patas** (folio propio, partes, agrupada; v10.80.13). v10.80.19 le agregó el
+  plan matriz al botón, no a la acción. La base sí la deja (`deliver_only` → `orden_ya_facturada`, las cuatro). De las 12 órdenes facturadas sólo
+  por plan matriz, éstas son las primeras que llegan a Salidas después de ligar: atoradas.
+- **En la misma pantalla, lo mismo con una sola pata:** la ficha ofrecía «El cliente no pide factura» (también en «Más» del detalle) y su guía decía
+  «Asigna el folio fiscal… y marca entregada»; la OC, «Asignar folio» y «Pre-asignar folio» (la base los rechaza: «OC no tiene productos pendientes
+  de facturar»), sin decir «2 facturados»; el chip «OC pendiente folio» las contaba; al pasar la última a Salidas decía «ya puedes asignar folio a
+  OC-0966»; y en una OC mixta (una orden en el plan y otra no) la ventana «Asignar folio» contaba las dos «por facturar» y su importe ($114,100.00)
+  cuando la base folia sólo la otra ($33,730.00), y el aviso de las facturas sin orden comparaba contra los $114,100.00.
+- **La ventana de entrega no sabía de lo que no tiene folio propio.** Lo destapó la vuelta 2: a una orden por partes o en una factura agrupada (ésas
+  sí llegaban, desde v10.80.13) le decía «Folio anticipado ya asignado» vacío y «Estado de pago no registrado… El saldo de $… queda pendiente en
+  CobranzaFlow», y su bitácora y sus avisos decían «folio undefined (anticipado)».
+
+**Qué se cambió** (sólo la pantalla; la base no cambió).
+- **Las cuatro patas en cada puerta.** `fiscalOk` (ya facturada) y uno nuevo, `sinFacturar` (nada facturado, cerrando en la duda: con
+  `fiscal_desconocido`, reload pone en true las banderas de partes y plan, y ahí `!fiscalOk` abriría). Van en `deliver_only`, «El cliente no pide
+  factura» (ficha, «Más» del detalle y la cola de Karla), la guía de la ficha, el encabezado de la OC («Asignar folio», «Pre-asignar folio»,
+  «N facturados», la lectura de facturas sin orden y lo que falta), la ventana «Asignar folio» de la OC (lo por facturar; lo ya facturado sin folio
+  propio dice «ya está facturada: P-0621 en el plan de la OC»), el chip «OC pendiente folio» y el aviso después de pasar a Salidas.
+- **La ventana «Marcar como Entregada» dice con qué va facturada**, sobre la orden viva (`key`, regla 14) y con `facturacionDeLaEntrega`: en el
+  plan de la OC, las facturas que la llevan (folio, piezas, monto, pagada o por cobrar) y «11 facturas · 658 de 658 piezas · $80,369.98 sin IVA»; por
+  partes, sus partes y que el resto se factura después con «Facturar siguiente parte»; agrupada, su factura. El «estado de pago» sale sólo con folio
+  propio, que es el suyo. Si la facturación se cancela con la ventana abierta, dice «Ya no está facturada» y no deja confirmar.
+- **La bitácora y los avisos:** «✅ Entregada (facturada en el plan de la OC-0966: 11 facturas)», «✅ Entregada (facturada por partes: F-170)»,
+  «✅ Entregada (en la factura agrupada F-180)»; la de folio propio, como siempre («✅ Entregada (folio F-… ya asignado)»).
+
+**Cómo se probó.** 21 pruebas nuevas, escritas antes del arreglo: en `sesion`, ses-120 a ses-139 (la app real, con los datos de producción de la
+OC-0966: sus 11 facturas, piezas y montos, F-169 por cobrar), y en `chips`, ch-15.
+- **Vuelta 1, contra v10.84.171:** fallaban 19 de 20 en `sesion` y ch-15. ses-120 dice lo que vio Karla; ses-138 (Lupita) pasaba porque no cambia.
+  ses-128 (folio anticipado) también fallaba, pero por la prueba: la ventana dice «FOLIO ANTICIPADO» en mayúsculas por CSS. Se corrigió la prueba.
+- **Vuelta 2, por donde no se diseñó:** el folio anticipado como siempre; por partes; agrupada; la lectura del plan que falla (no ofrece nada de
+  folio); la base que rechaza; dos clics a la vez (una sola entrega); Esc y clic afuera; el plan que se cancela con la ventana abierta; 30 facturas
+  (el tope del plan) con el cliente de nombre más largo a 1366 y a 1920; la maquila recibida; Lupita; la OC mixta.
+- Con el arreglo: 20 de 20 y 15 de 15. Las tandas de lo tocado (`detalle`, `oc`, `folio`, `ficha`, `tablero`, `espera`, `todas`, `oc-lista`,
+  `sesion`, `chips`, `hooks`): 1007 de 1007, de a 4, 703 s, sin regresiones.
+- Los bancos hechos a mano traen lo nuevo si el App.jsx lo trae: `gen-detalle` (`sinFacturar`) y `gen-oc` (`fiscalOk` y `sinFacturar`).
+
 ## v10.84.171 — La orden cuya factura se canceló dice dónde se libera el folio (también la de una OC) — 2-nov-2026
 
 **Qué pasaba.** Lo destapó F-236 (abajo, v10.84.170 datos): Karla canceló la factura de la OC-1060 y «las órdenes no se liberaron». En el detalle de P-0685

@@ -1130,7 +1130,7 @@ function getTaskFilters(role){
   if(role==="karla")return[...base,
     {key:"salidas",Icon:ExportIcon,label:"Salidas",color:C.sal,predicate:o=>o.stage==="salidas"},
     {key:"maq_received",Icon:DownloadSimpleIcon,label:"Recibida de Maquila",color:C.maqin,predicate:o=>o.stage==="maq_received"},
-    {key:"oc_pending",Icon:ClipboardTextIcon,label:"OC pendiente folio",color:C.prf,predicate:o=>!!o.purchase_order_id&&!o.invoice_folio&&o.stage==="salidas"},
+    {key:"oc_pending",Icon:ClipboardTextIcon,label:"OC pendiente folio",color:C.prf,predicate:o=>!!o.purchase_order_id&&sinFacturar(o)&&o.stage==="salidas"},   // v10.84.172 — con las cuatro patas (lo del plan de su OC no está pendiente de folio)
     {key:"pre_assigned",Icon:LockIcon,label:"Pre-asignados",color:C.cart,predicate:o=>!!o.invoice_pre_assigned},
   ];
   if(role==="produccion")return[...base,
@@ -1275,6 +1275,40 @@ const vuelveAlDeshacer = o => {
 // matriz), como el DetailModal. La card del grid de Pendientes de Folio solo miraba invoice_folio: a una orden con
 // partes (y resto vivo) le ofrecia «Asignar Folio y Entregar» (la base lo rechazaba) y el snooze «no ha pedido factura».
 const fiscalOk = o => !!(o?.invoice_folio || ((o?.has_splits || o?.has_matrix_lines || o?.grouped_invoice_folio) && !o?.fiscal_desconocido));
+// v10.84.172 — «NADA FACTURADO», con las cuatro patas y cerrando en la duda: ni folio propio ni agrupado, ni partes, ni plan matriz. Es lo que abre
+//   las puertas de FOLIAR (la OC, su ventana, el chip de Karla, «ya puedes asignar folio») y «El cliente no pide factura». En la duda
+//   (`fiscal_desconocido`) reload pone has_splits y has_matrix_lines en true: aquí no cuenta como sin facturar y esas puertas se cierran
+//   (v10.80.13); `!fiscalOk` las abriría. El caso: Hotsson, OC-0966 (3-nov), facturada en su plan por adelantado, llegó a Salidas y la OC
+//   ofrecía «Asignar folio» (la base lo frena: `assign_folio_to_oc` folia sólo lo que `NOT orden_ya_facturada`), la ficha «El cliente no pide
+//   factura» y el chip la contaba «pendiente de folio».
+const sinFacturar = o => !!o && !o.invoice_folio && !o.grouped_invoice_folio && !o.has_splits && !o.has_matrix_lines;
+// v10.84.172 — CON QUÉ ESTÁ FACTURADA la orden que se entrega sin folio nuevo («Marcar como Entregada»): su folio propio, la factura agrupada, sus
+//   partes o el plan de su OC, con las facturas que la llevan (`pos`: las OC con su `matrix_plan`; sin ellas, el plan sin sus facturas). La
+//   ventana de entrega, la bitácora, los avisos y la guía de la ficha lo dicen con esto: antes decían «Folio anticipado ya asignado» vacío y
+//   «folio null». null = no tiene ninguna de las cuatro patas.
+const facturacionDeLaEntrega = (o, pos) => {
+  if (!o) return null;
+  if (o.invoice_folio) return { tipo: "propia", folio: o.invoice_folio };
+  if (o.grouped_invoice_folio) return { tipo: "agrupada", folio: o.grouped_invoice_folio, facturas: [] };
+  if (o.has_splits) return { tipo: "partes", resto: !!restoPorFacturar(o), facturas: (o.splits || []).filter(s => !s.cancelled_at && s.invoice_folio)
+    .map(s => ({ folio: s.invoice_folio, piezas: Number(s.qty_portion) || 0, monto: Number(s.amount_portion) || 0, pago: s.payment_status })) };
+  if (o.has_matrix_lines) {
+    const po = (pos || []).find(p => p.id === o.purchase_order_id);
+    return { tipo: "plan", oc: o.purchase_order_id || "", facturas: (po?.matrix_plan?.groups || []).filter(g => !g.cancelled_at)
+      .flatMap(g => (g.lines || []).filter(l => !l.cancelled_at && l.order_id === o.id)
+        .map(l => ({ folio: g.folio || "", piezas: Number(l.qty_portion) || 0, monto: Number(l.amount_portion) || 0, pago: g.payment_status }))) };
+  }
+  return null;
+};
+// en pocas palabras: «folio F-…», «factura agrupada F-…», «por partes: F-1, F-2», «plan de la OC-…: 11 facturas»
+const dichoDeLaFacturacion = f => {
+  if (!f) return "";
+  if (f.tipo === "propia") return "folio " + f.folio;
+  if (f.tipo === "agrupada") return "factura agrupada " + f.folio;
+  const fs = (f.facturas || []).map(x => x.folio).filter(Boolean);
+  if (f.tipo === "partes") return "por partes" + (fs.length ? ": " + fs.join(", ") : "");
+  return "plan de la " + (f.oc || "OC") + (fs.length ? ": " + fs.length + (fs.length === 1 ? " factura" : " facturas") : "");
+};
 const liquidadaConSaldoAFavor = o => !o?.invoice_folio && (
      !!o?.credit_applied_at
   || (String(o?.stage||"").includes("delivered")
@@ -4954,7 +4988,8 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction,oc=null}) 
     role==="karla"&&sePuedeJalar(o)&&recibeDeMaquila(o)&&{k:"jalar_a_salidas",icono:<DownloadSimpleIcon size={14} weight="bold"/>,color:tintaAA(C.maqin,5),t:"Ya llegó de la maquila: recibirla",d:(()=>{const d=dondeVa(o),r=orderResponsible(o)?.name||"Lupita";return (o.stage==="maq_created"?r+" no la marcó como enviada"+(d.detalle?" ("+d.detalle+")":"")+". Si ya llegó del proveedor, recíbela":"Si "+r+" no la ha recibido. Sigue "+d.lugar.charAt(0).toLowerCase()+d.lugar.slice(1)+(d.detalle?" ("+d.detalle+")":""))+"; queda en «Por foliar» y a "+r+" le llega aviso."})()},   // v10.84.117: la que no se marcó como enviada
     role==="karla"&&sePuedeJalar(o)&&!recibeDeMaquila(o)&&{k:"jalar_a_salidas",icono:<ExportIcon size={14} weight="bold"/>,color:tintaAA(C.sal,5),t:"Ya está lista: pasar a Salidas",d:(()=>{const d=dondeVa(o);return "Si Gerardo no la ha pasado. Sigue "+d.lugar.replace(/^En /,"en ")+(d.detalle?" ("+d.detalle+")":"")+"; a él le llega aviso."})()},
     // v10.84.48 — lo que en Salidas era el botón «El cliente no pide factura» (su explicación vivía sólo en el title)
-    canActFlow&&(o.stage==="salidas"||o.stage==="maq_received")&&role==="karla"&&!o.invoice_folio&&!snoozeActive(o)&&{k:"snooze_invoice",icono:<BellSlashIcon size={14} weight="bold"/>,color:C.ac,t:"El cliente no pide factura",d:"Sale de tu lista de Salidas hasta que el cliente pida factura o remisión."},
+    // v10.84.172 — sólo de lo que no tiene nada facturado (`sinFacturar`): a P-0621 de Hotsson, con sus 11 facturas en el plan de la OC, se le ofrecía
+    canActFlow&&(o.stage==="salidas"||o.stage==="maq_received")&&role==="karla"&&sinFacturar(o)&&!snoozeActive(o)&&{k:"snooze_invoice",icono:<BellSlashIcon size={14} weight="bold"/>,color:C.ac,t:"El cliente no pide factura",d:"Sale de tu lista de Salidas hasta que el cliente pida factura o remisión."},
     // v10.84.112 — Karla (y Dirección) corrigen el precio de lo que todavía no se factura (Marcelo, 15-oct: «a karla no le aparece la opción de editar»)
     puedeCorregirPrecio(o,role)&&{k:"corregir_precio",icono:<CurrencyDollarIcon size={14} weight="bold"/>,color:tintaAA(C.fac,5),t:"Corregir precio",d:foliadaParaCorregir(o)?o.invoice_folio+": si no está timbrada, cambia con el mismo folio.":"Antes de facturar; queda en su historial."},   // v10.84.118: también la foliada
     fic.ponerEnEspera&&{k:"snooze",icono:<BellSlashIcon size={14} weight="bold"/>,color:C.ac,t:"Poner en espera",d:"Eliges por qué y hasta cuándo; sale de las listas activas."},
@@ -12547,7 +12582,14 @@ function PreInvoiceModal({order,onConfirm,onClose,cargarCandidatas=null,onFactur
 
 // ─── DELIVER ONLY MODAL (v10.31.0) ─── Karla entrega orden que YA tiene folio anticipado
 // Detecta payment_status y muestra info contextual (legacy/unpaid/paid/partial)
-function DeliverOnlyModal({order, onConfirm, onClose}) {
+// v10.84.172 — también la que va facturada sin folio propio (agrupada, por partes, en el plan de su OC): App le pasa `facturacion`
+//   (`facturacionDeLaEntrega`, con la orden viva) y la ventana dice con qué facturas va; el «estado de pago» de abajo es el de un folio propio y
+//   sólo sale con él. Antes, a P-0621 de Hotsson (11 facturas en el plan de OC-0966) le habría dicho «Folio anticipado ya asignado» vacío y «Estado
+//   de pago no registrado… el saldo de $80,370.00 queda pendiente», con 10 de 11 pagadas. Sin `facturacion` (el banco), la de siempre. Si deja de
+//   estar facturada con la ventana abierta (null), lo dice y no deja confirmar.
+function DeliverOnlyModal({order, facturacion, onConfirm, onClose}) {
+  const f = facturacion !== undefined ? facturacion : (order?.invoice_folio ? {tipo:"propia", folio:order.invoice_folio} : null);
+  const propia = f?.tipo === "propia";
   // v10.58.11: backdrop+ESC guards durante busy.
   const busyRef = useRef(false);
   useEscClose(useCallback(()=>{ if(!busyRef.current) onClose(); }, [onClose]));
@@ -12583,7 +12625,7 @@ function DeliverOnlyModal({order, onConfirm, onClose}) {
         <p style={{fontSize:11,color:C.ac,margin:"0 0 14px",fontWeight:600}}>{order?.production_number||""}</p>
 
         {/* Bloque: Folio ya asignado */}
-        <div style={{background:(isFactura?C.fac:C.live)+"10",borderRadius:12,padding:14,marginBottom:12,border:"1px solid "+(isFactura?C.fac:C.live)+"40"}}>
+        {propia&&<div style={{background:(isFactura?C.fac:C.live)+"10",borderRadius:12,padding:14,marginBottom:12,border:"1px solid "+(isFactura?C.fac:C.live)+"40"}}>
           <div style={{display:"flex",alignItems:"center",gap:5,fontSize:10,color:C.t2,textTransform:"uppercase",fontWeight:700,marginBottom:4}}>
             <LightningIcon size={11} weight="fill"/>Folio anticipado ya asignado
           </div>
@@ -12598,10 +12640,34 @@ function DeliverOnlyModal({order, onConfirm, onClose}) {
           <div style={{fontSize:10,color:C.t3,marginTop:6}}>
             Asignado por {order?.invoiced_by==="secretaria"?"Lupita":(order?.invoiced_by||"—")} · {order?.invoiced_at?fDT(order.invoiced_at):"—"}
           </div>
-        </div>
+        </div>}
+
+        {/* v10.84.172 — la que va sin folio propio: con qué facturas va, cuántas piezas cubren y cuáles faltan por cobrar */}
+        {f&&!propia&&(()=>{
+          const fx=f.facturas||[],piezas=fx.reduce((a,x)=>a+x.piezas,0),monto=Math.round(fx.reduce((a,x)=>a+x.monto,0)*100)/100,porCobrar=fx.filter(x=>x.pago!=="paid").length;
+          const titulo=f.tipo==="plan"?"Facturada en el plan de la "+(f.oc||"OC"):f.tipo==="partes"?"Facturada por partes":"Va en la factura agrupada "+f.folio;
+          return <div data-facturacion-de-la-entrega style={{background:C.fac+"10",borderRadius:12,padding:14,marginBottom:12,border:"1px solid "+C.fac+"40"}}>
+            <div style={{display:"flex",alignItems:"center",gap:6,fontSize:13,fontWeight:800,color:tintaAA(C.fac,5),overflowWrap:"anywhere"}}><FileTextIcon size={15} weight="bold"/>{titulo}</div>
+            {fx.length>0&&<>
+              <div style={{fontSize:11.5,color:C.t2,marginTop:4}}>{fx.length===1?"1 factura":fx.length+" facturas"} · {piezas.toLocaleString("es-MX")} de {(Number(order?.quantity)||0).toLocaleString("es-MX")} piezas · ${fmtMx(monto)} sin IVA</div>
+              <div role="list" aria-label="Las facturas que la llevan" style={{marginTop:8,display:"grid",gap:3,maxHeight:230,overflowY:"auto"}}>
+                {fx.map((x,i)=><div role="listitem" key={x.folio+"-"+i} style={{display:"grid",gridTemplateColumns:"minmax(58px,auto) 1fr auto 72px",gap:10,alignItems:"baseline",fontSize:12,color:C.tx}}>
+                  <b style={{fontFamily:"'Geist Mono',monospace"}}>{x.folio||"—"}</b>
+                  <span style={{color:C.t2}}>{x.piezas.toLocaleString("es-MX")} pzas</span>
+                  <span style={{fontFamily:"'Geist Mono',monospace",textAlign:"right"}}>${fmtMx(x.monto)}</span>
+                  <span style={{fontSize:11,fontWeight:700,textAlign:"right",color:x.pago==="paid"?C.okInk:x.pago==="partial"?C.wnInk:C.t2}}>{x.pago==="paid"?"Pagada":x.pago==="partial"?"Con abono":"Por cobrar"}</span>
+                </div>)}
+              </div>
+            </>}
+            <div style={{fontSize:11,color:C.t2,marginTop:8,lineHeight:1.5}}>Se entrega sin folio nuevo: ya está facturada.{f.tipo==="partes"&&f.resto?" Lo que falta se factura después, con «Facturar siguiente parte».":""} El cobro {f.tipo==="agrupada"?"de esa factura":"de cada factura"} se lleva en CobranzaFlow{porCobrar?" ("+(porCobrar===1?"1 por cobrar":porCobrar+" por cobrar")+")":""}.</div>
+          </div>;
+        })()}
+        {!f&&<div role="alert" style={{background:C.dn+"10",borderRadius:12,padding:14,marginBottom:12,border:"1px solid "+C.dn+"40",fontSize:12,color:C.tx,lineHeight:1.5}}>
+          <b>Ya no está facturada.</b> Mientras esta ventana estaba abierta se canceló su facturación (en otra sesión o en CobranzaFlow): no se entrega desde aquí. Ciérrala; su ficha dice qué sigue.
+        </div>}
 
         {/* CASO A: payment_status NULL (legacy pre-v10.29) */}
-        {!paymentStatus && (
+        {propia && !paymentStatus && (
           <div style={{background:C.amb+"10",borderRadius:12,padding:14,marginBottom:12,border:"1px solid "+C.amb+"40"}}>
             <div style={{display:"flex",alignItems:"center",gap:5,fontSize:11,fontWeight:700,color:C.amb,marginBottom:4}}>
               <WarningIcon size={12} weight="fill"/>Estado de pago no registrado
@@ -12616,7 +12682,7 @@ function DeliverOnlyModal({order, onConfirm, onClose}) {
         )}
 
         {/* CASO B: unpaid */}
-        {paymentStatus === "unpaid" && (
+        {propia && paymentStatus === "unpaid" && (
           <div style={{background:C.amb+"10",borderRadius:12,padding:14,marginBottom:12,border:"1px solid "+C.amb+"40"}}>
             <div style={{display:"flex",alignItems:"center",gap:5,fontSize:11,fontWeight:700,color:C.amb,marginBottom:4}}>
               <HourglassIcon size={12} weight="bold"/>Estado de pago: No pagada
@@ -12628,7 +12694,7 @@ function DeliverOnlyModal({order, onConfirm, onClose}) {
         )}
 
         {/* CASO C: paid */}
-        {paymentStatus === "paid" && (
+        {propia && paymentStatus === "paid" && (
           <div style={{background:C.live+"10",borderRadius:12,padding:14,marginBottom:12,border:"1px solid "+C.live+"40"}}>
             <div style={{display:"flex",alignItems:"center",gap:5,fontSize:11,fontWeight:700,color:C.live,marginBottom:4}}>
               <CheckCircleIcon size={12} weight="fill"/>Estado de pago: Pagada
@@ -12640,7 +12706,7 @@ function DeliverOnlyModal({order, onConfirm, onClose}) {
         )}
 
         {/* CASO D: partial */}
-        {paymentStatus === "partial" && (
+        {propia && paymentStatus === "partial" && (
           <div style={{background:C.fac+"10",borderRadius:12,padding:14,marginBottom:12,border:"1px solid "+C.fac+"40"}}>
             <div style={{display:"flex",alignItems:"center",gap:5,fontSize:11,fontWeight:700,color:C.fac,marginBottom:6}}>
               <CircleHalfIcon size={12} weight="fill"/>Estado de pago: Parcial
@@ -12660,7 +12726,7 @@ function DeliverOnlyModal({order, onConfirm, onClose}) {
           <button onClick={onClose} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd,opacity:busy?0.6:1}}>
             Cancelar
           </button>
-          <button onClick={handleConfirm} disabled={busy} style={{...bt(C.ok),flex:1,justifyContent:"center",opacity:busy?0.6:1}}>
+          <button onClick={handleConfirm} disabled={busy||!f} style={{...bt(C.ok),flex:1,justifyContent:"center",opacity:(busy||!f)?0.6:1}}>
             {busy ? <><HourglassIcon size={14} weight="bold"/>Procesando...</> : <><CheckCircleIcon size={14} weight="bold"/>Confirmar Entrega</>}
           </button>
         </div>
@@ -15146,11 +15212,13 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
   }, [invoiceType, activeMode, emisorKey]);
 
   // v10.58.64 M8: alinear con el backend (assign_folio/split rechazan delivered/maq_delivered/stocked).
+  // v10.84.172 — y con las cuatro patas, como la base (`assign_folio_to_oc` folia sólo `NOT orden_ya_facturada`): en una OC con una orden en el plan
+  //   y otra no, la ventana contaba las dos «por facturar» y su importe, y el CFDI salía sólo por la otra
   const pendingOrders = useMemo(()=>
-    ocOrders.filter(o=>!o.invoice_folio && !o.return_covered_by_folio && !o.stage.includes("cancelled") && !o.stage.includes("delivered") && o.stage!=="stocked"),
+    ocOrders.filter(o=>sinFacturar(o) && !o.return_covered_by_folio && !o.stage.includes("cancelled") && !o.stage.includes("delivered") && o.stage!=="stocked"),
     [ocOrders]);
   const invoicedOrders = useMemo(()=>
-    ocOrders.filter(o=>o.invoice_folio),
+    ocOrders.filter(o=>fiscalOk(o)),
     [ocOrders]);
   const pendingCount = pendingOrders.length;
   // 🆕 Fase 2 — una OC no puede mezclar tercero POR ORDEN (Fase 1) con tercero a NIVEL OC; pre-filtro UI (el backend además lo rechaza).
@@ -15596,7 +15664,7 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
         <div style={{background:C.sf,borderRadius:10,padding:"10px 12px",marginBottom:14}}>
           <div style={{display:"flex",gap:14,fontSize:11,flexWrap:"wrap",color:C.t2}}>
             <span><b style={{color:C.tx}}>{pendingCount}</b> por facturar</span>
-            {invoicedOrders.length > 0 && <span><b style={{color:C.tx}}>{invoicedOrders.length}</b> ya {invoicedOrders.length===1?"tiene":"tienen"} folio: {invoicedOrders.map(o=>pnum(o)+" "+o.invoice_folio).join(" · ")}</span>}
+            {invoicedOrders.length > 0 && <span><b style={{color:C.tx}}>{invoicedOrders.length}</b> ya {invoicedOrders.every(o=>o.invoice_folio)?(invoicedOrders.length===1?"tiene folio":"tienen folio"):(invoicedOrders.length===1?"está facturada":"están facturadas")}: {invoicedOrders.map(o=>pnum(o)+" "+(o.invoice_folio||o.grouped_invoice_folio||(o.has_splits?"por partes":"en el plan de la OC"))).join(" · ")/* v10.84.172 — la del plan o por partes no tiene folio propio */}</span>}
           </div>
           {activeMode==="simple" && pendingCount > 0 && <div style={{marginTop:8,display:"flex",flexDirection:"column",gap:3}}>
             {(verTodas ? pendingOrders : pendingOrders.slice(0,6)).map(o=><div key={o.id} style={{display:"flex",gap:8,fontSize:11,alignItems:"baseline"}}>
@@ -15883,7 +15951,8 @@ function StageFlowButtons({o,role,onAction:onActionSinEscudo,variante}){
       {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&!o.return_covered_by_folio&&Number(o.maq_price)>0&&Number(o.quantity)>0&&!o.has_splits&&!o.grouped_invoice_folio&&!o.has_matrix_lines&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"split_invoice")} style={B(C.fac)} title="Divide ESTA orden en varias facturas con cantidades parciales"><FilesIcon size={14} weight="bold"/>Facturar por partes</button>}
       {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&(o.invoice_folio||((o.has_splits||o.has_matrix_lines||o.grouped_invoice_folio)&&!o.fiscal_desconocido))/* v10.80.19: FALTABA has_matrix_lines. La reparacion de v10.80.13 se hizo con 3 patas, asi que la orden facturada por PLAN MATRIZ reproducia exactamente el bloqueo que esa version vino a quitar: sin folio propio, sin boton de foliar (ya esta facturada) y sin boton de entregar. Atorada en salidas para siempre. *//* v10.80.15: con la carga fiscal en duda no se ofrece entregar por splits *//* v10.80.13: una orden facturada POR PARTES o en folio agrupado no tiene invoice_folio propio, y con el filtro anterior se quedaba SIN NINGUN boton de entrega: ya no se le puede foliar (esta facturada) y tampoco se le podia cerrar. Quedaba atorada en salidas para siempre. */&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"deliver_only")} style={B(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Marcar como Entregada</button>}
       {/* v10.72.50 — Karla: parquear "el cliente no ha pedido factura" / reactivar, desde cualquier OCard (incl. Mis Pendientes) */}
-      {!det&&(o.stage==="salidas"||o.stage==="maq_received")&&role==="karla"&&!o.invoice_folio&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"snooze_invoice")} style={{...bs(C.sf,C.t2),border:"1px solid "+C.bd}} title="Sácala de tu cola activa hasta que el cliente pida factura o remisión"><BellSlashIcon size={13} weight="bold"/>El cliente no pide factura</button>}
+      {/* v10.84.172 — sólo de lo que no tiene nada facturado (`sinFacturar`, las cuatro patas): a lo del plan de su OC (Hotsson) se le ofrecía */}
+      {!det&&(o.stage==="salidas"||o.stage==="maq_received")&&role==="karla"&&sinFacturar(o)&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"snooze_invoice")} style={{...bs(C.sf,C.t2),border:"1px solid "+C.bd}} title="Sácala de tu cola activa hasta que el cliente pida factura o remisión"><BellSlashIcon size={13} weight="bold"/>El cliente no pide factura</button>}
       {(o.stage==="salidas"||o.stage==="maq_received")&&role==="karla"&&snoozeActive(o)&&o.snooze_kind==="awaiting_client_invoice"&&<button onClick={()=>onAction(o.id,"unsnooze_invoice")} style={{...bs(C.ac+"15",C.ac),border:"1px solid "+C.ac+"40"}}><BellRingingIcon size={13} weight="bold"/>{etiquetaYaPidio(o,role)}</button>}
   </>;
 }
@@ -16001,7 +16070,9 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsp
   // Lupita (secretaria) coordina TODAS las órdenes/maquilas sin importar quién las
   // creó — desde que Genaro captura las suyas, el gate viejo la dejaba sin botones.
   const secOwns=role==="secretaria"||!isSec(role)||!o.created_by||o.created_by===userLogin||agentMatch;const vOwns=role!=="vendedor"||!o.created_by||o.created_by===userLogin||agentMatch;const canAct=secOwns&&(st?.who===role||(st?.who==="secretaria"&&isSec(role))||st?.who==="both"&&(role==="produccion"||role==="preprensa")||role==="admin"||(o.stage==="proof_client"&&isSec(role)));const stale=getStale(o);const hp=role==="produccion"||role==="preprensa"||role==="german";
-  const guide=GUIDES[role]?.[o.stage];
+  // v10.84.172 — la de Karla en Salidas («Asigna el folio fiscal… y marca entregada») salía encima de «Marcar como Entregada» de lo ya facturado
+  //   (Hotsson, OC-0966): ahí sólo se entrega, y la guía lo dice con su factura
+  const guide=role==="karla"&&(o.stage==="salidas"||o.stage==="maq_received")&&fiscalOk(o)?"Ya está facturada ("+dichoDeLaFacturacion(facturacionDeLaEntrega(o,null))+"): sólo márcala entregada":GUIDES[role]?.[o.stage];
   const isDraggable=["ready","in_production","maquila_in","packaging"].includes(o.stage);
   const [expanded,setExpanded]=useState(false);
   const [badgesOpen,setBadgesOpen]=useState(false); // v10.73.7 distill: overflow "+N" de la fila de badges
@@ -20460,7 +20531,7 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
   // v10.84.97 — LAS FACTURAS SIN ORDEN DEL CLIENTE, EN LA OC (la critique del flujo de facturas de Karla, 13-oct, P1: F-143 y F-155 de
   //   PORTLAND suman exacto OC-0960 con IVA y la OC no lo decía; enseñaba cuatro botones, cuatro caminos). Se leen al abrir una OC con
   //   órdenes sin folio (Karla y admin). undefined = leyendo · null = no se pudo · lista. (Va antes del `if (selectedOC)`: es un hook.)
-  const ocPendientesSinFolio = useMemo(() => ocOrders.filter(o => !o.invoice_folio && !o.return_covered_by_folio && !String(o.stage||"").includes("cancelled")).length, [ocOrders]);
+  const ocPendientesSinFolio = useMemo(() => ocOrders.filter(o => sinFacturar(o) && !o.return_covered_by_folio && !String(o.stage||"").includes("cancelled")).length, [ocOrders]);   // v10.84.172 — las cuatro patas
   const [sinOrdenDeLaOc, setSinOrdenDeLaOc] = useState(undefined);
   const [lecturaSinOrdenDeLaOc, setLecturaSinOrdenDeLaOc] = useState(0);
   useEffect(() => {
@@ -20487,8 +20558,10 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
 
   if (selectedOC) {
     // 📄 v10.11.0 Sub-fase B — Métricas y permisos para asignación de folios
-    const pendingOrders = ocOrders.filter(o => !o.invoice_folio && !o.return_covered_by_folio && !o.stage.includes("cancelled"));
-    const invoicedCount = ocOrders.filter(o => o.invoice_folio).length;
+    // v10.84.172 — «por facturar» y «facturados» con las cuatro patas (`sinFacturar`, `fiscalOk`): OC-0966 de Hotsson, con sus dos órdenes en el plan,
+    //   ofrecía «Asignar folio» y «Pre-asignar folio» (la base los frena: «OC no tiene productos pendientes de facturar») y no decía «2 facturados»
+    const pendingOrders = ocOrders.filter(o => sinFacturar(o) && !o.return_covered_by_folio && !o.stage.includes("cancelled"));
+    const invoicedCount = ocOrders.filter(o => fiscalOk(o)).length;
     // v10.59.2 D3 — agente (contacto) derivado de la 1ª orden hija que lo tenga
     const ocAgent = ocOrders.find(o => (o.client_agent||"").trim())?.client_agent || "";
     const isLocked = selectedOC.folios_locked === true;
@@ -22785,7 +22858,8 @@ export default function PrintFlow() {
       const partes=[];
       if(hechas.length){
         const oc=hechas[0].purchase_order_id;
-        const delOC=oc&&hechas.every(o=>o.purchase_order_id===oc)?ordersRef.current.filter(o=>o.purchase_order_id===oc&&!o.invoice_folio&&!o.return_covered_by_folio&&!String(o.stage||"").includes("cancelled")&&!String(o.stage||"").includes("delivered")):[];
+        // v10.84.172 — lo que falta foliar de la OC, con las cuatro patas: con todo en el plan de su OC (Hotsson) decía «ya puedes asignar folio a OC-…»
+        const delOC=oc&&hechas.every(o=>o.purchase_order_id===oc)?ordersRef.current.filter(o=>o.purchase_order_id===oc&&sinFacturar(o)&&!o.return_covered_by_folio&&!String(o.stage||"").includes("cancelled")&&!String(o.stage||"").includes("delivered")):[];
         const ocLista=delOC.length>1&&delOC.every(o=>["salidas","maq_received"].includes(o.stage));
         // v10.84.116 — dónde quedó: Salidas, o «Recibida de maquila» (las dos en «Por foliar»)
         const mq=hechas.filter(recibeDeMaquila).length,quedan=mq===0?(hechas.length===1?" ya está en Salidas":" ya están en Salidas"):mq===hechas.length?(hechas.length===1?" ya está recibida de maquila":" ya están recibidas de maquila"):" ya están en Salidas o recibidas de maquila";
@@ -23754,8 +23828,12 @@ export default function PrintFlow() {
       // invoice_folio propio y SI esta facturada. Este return mudo la dejaba sin ninguna salida:
       // no se le puede foliar (ya lo esta) y tampoco se le podia cerrar, o sea atorada en
       // salidas para siempre, con un console.error que nadie ve.
-      if(!o.invoice_folio&&!o.has_splits&&!o.grouped_invoice_folio){
-        showToast("Esta orden no tiene folio fiscal. Usa \"Asignar Folio y Entregar\".","error");return}
+      // v10.84.172 — CON LAS CUATRO PATAS (`fiscalOk`), como el botón (v10.80.19) y la base (`deliver_only` → `orden_ya_facturada`). Este guardia se
+      //   quedó con tres, sin el plan matriz: la orden facturada en el plan de su OC POR ADELANTADO (Hotsson, P-0621 y P-0623 de OC-0966: sus 11
+      //   facturas se ligaron el 14-oct con las órdenes en la planta) llegaba a Salidas con «Marcar como Entregada», y al tocarlo decía «no tiene
+      //   folio fiscal. Usa "Asignar Folio y Entregar"», un botón que esa orden no tiene. Atorada (Karla, 3-nov). En la duda, lo dice así.
+      if(!fiscalOk(o)){
+        showToast(o.fiscal_desconocido?"No se pudo comprobar cómo está facturada "+(o.production_number||"esta orden")+": recarga la página antes de entregarla.":"Esta orden no tiene folio fiscal. Usa \"Asignar Folio y Entregar\".","error");return}
       setDeliverOnlyModal(o);
     }
     // 🆕 v10.72.83 — Entregar re-trabajo cubierto (devolución): SIN folio nuevo (ya lo cubre return_covered_by_folio).
@@ -24505,7 +24583,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
               lector. Aquí está: los cierres sin costo, con input inline. setMaintenanceCost solo toca `cost`. */}
           {user==="admin"&&(()=>{const pend=maintenance.filter(m=>m.ended_at&&m.cost==null).sort((a,b)=>new Date(b.ended_at)-new Date(a.ended_at));if(!pend.length)return null;return <div style={{marginTop:20}}><h3 style={{fontSize:15,fontWeight:800,letterSpacing:"-0.005em",margin:"0 0 2px",color:C.wn,display:"flex",alignItems:"center",gap:6}}><WrenchIcon size={15} weight="bold"/>Costos de mantenimiento pendientes ({pend.length})</h3><p style={{fontSize:11,color:C.t2,margin:"0 0 12px"}}>Reparaciones cerradas sin costo. Captúralo cuando llegue la factura del técnico; el reporte semanal lo excluye hasta entonces.</p><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))",gap:8}}>{pend.map(rec=><MaintCostRow key={rec.id} rec={rec} onSave={async(id,cost)=>{try{await db.setMaintenanceCost(id,cost);const m=await db.loadMaintenance();setMaintenance(m);showToast("✅ Costo capturado","success")}catch(e){console.error("[setMaintenanceCost] Error:",e);showToast("❌ "+(e?.message||"No se pudo guardar el costo"),"error")}}}/>)}</div></div>})()}
           {user==="admin"&&<><h3 style={{fontSize:15,fontWeight:800,letterSpacing:"-0.005em",margin:"20px 0 4px",color:C.ctp,display:"flex",alignItems:"center",gap:6}}><DiscIcon size={15} weight="bold"/>Tablero Germán</h3><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>CTP y Procesadora</p><PreprensaBoard orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} onPlateRequired={(oid,mid,o,m)=>setPlateModal({oid,mid,order:o,machine:m})} maintenance={maintenance} role={user} platedIds={platedIds}/><CTPMaintenanceCounter user={user} userLogin={userLogin}/></>}</div>}
-        {view==="board"&&user==="karla"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:8}}><FileTextIcon size={18} weight="bold"/>Pendientes de Folio</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Asigna folio fiscal y marca como entregadas</p>{/* v10.84.67 — «En la planta»: lo que todavía no llega a Salidas, y pasar ella lo que ya está listo */}{lectura.ok&&(()=>{const nFoliar=filteredOrders.filter(o=>["salidas","maq_received"].includes(o.stage)&&!snoozeActive(o)).length,nPlanta=filteredOrders.filter(enLaPlanta).length;return <div role="tablist" aria-label="Qué ver" style={{display:"flex",gap:4,margin:"0 0 14px",borderBottom:"1px solid "+C.bd,flexWrap:"wrap"}}>{[{id:"foliar",l:"Por foliar",n:nFoliar},{id:"planta",l:"En la planta",n:nPlanta}].map(t=>{const sel=folioTab===t.id;return <button key={t.id} role="tab" aria-selected={sel} onClick={()=>setFolioTab(t.id)} style={{display:"inline-flex",alignItems:"center",gap:7,minHeight:44,padding:"0 16px",background:"transparent",border:"none",borderBottom:"2.5px solid "+(sel?C.ac:"transparent"),marginBottom:-1,color:sel?tintaAA(C.ac,5):C.t2,fontSize:13,fontWeight:sel?800:600,cursor:"pointer",fontFamily:"'Geist',sans-serif"}}>{t.l}<span style={{fontSize:11,fontWeight:700,minWidth:22,padding:"1px 7px",borderRadius:999,background:sel?C.ac+"18":C.sf,color:sel?tintaAA(C.ac,5):C.t2}}>{t.n}</span></button>})}</div>})()}{!lectura.ok?<div role="status" data-folios-sin-lectura style={{textAlign:"center",padding:"40px 20px",color:C.t2}}><div style={{fontSize:15,fontWeight:700,color:C.tx}}>{lectura.fallo?"No se pudieron leer tus pendientes de folio":"Leyendo tus pendientes de folio…"}</div><div style={{fontSize:12,marginTop:4}}>{lectura.fallo?"Mientras no se lean de la base, esta lista no dice si tienes o no: arriba está «Reintentar».":"En cuanto lleguen de la base, salen aquí."}</div></div>:folioTab==="planta"?<EnLaPlanta orders={filteredOrders} todas={viewOrders} buscando={search} onJalar={jalarASalidas} onDetalle={id=>handleAction(id,"detail")} ocupada={actionLoading}/>:<>{search&&(()=>{const enPl=filteredOrders.filter(enLaPlanta);if(!enPl.length)return null;const d=enPl.length===1?dondeVa(enPl[0]):null;return <div role="status" style={{display:"flex",alignItems:"center",gap:"6px 12px",flexWrap:"wrap",background:C.ac+"0d",border:"1px solid "+C.ac+"33",borderRadius:12,padding:"8px 12px",marginBottom:12,fontSize:12.5,color:C.tx}}><span style={{flex:"1 1 260px"}}>{enPl.length===1?<><b>{nombreDeOrden(enPl[0])}</b> todavía no llega a Salidas: {d.lugar}{d.detalle?" ("+d.detalle+")":""}.</>:<>{enPl.length} de lo que buscas todavía no llegan a Salidas.</>}</span><button onClick={()=>setFolioTab("planta")} style={{...bs(C.ac+"14",tintaAA(C.ac,7)),border:"1px solid "+C.ac+"44"}}>Ver en «En la planta»</button></div>})()}{(()=>{/* v10.84.97 — de qué OC es cada ficha: las órdenes de la OC (todas, no sólo las que pasan la búsqueda) */const nOc={};orders.forEach(x=>{if(x.purchase_order_id&&!String(x.stage||"").includes("cancelled"))nOc[x.purchase_order_id]=(nOc[x.purchase_order_id]||0)+1});const sal=filteredOrders.filter(o=>["salidas","maq_received"].includes(o.stage)&&!snoozeActive(o)).sort(prioSort)/* v10.73.82 (L11) — simétrico con `wait`, que SÍ incluye maq_received. Antes, una orden recibida de maquila sin pausar caía en el hueco entre los dos filtros y no existía en la pantalla "Pendientes de Folio", pese a que GUIDES y myTasks de Karla ya la reclaman. La acción de la card ya soporta maq_received (deliver_with_invoice/split_invoice lo validan). */;const wait=filteredOrders.filter(o=>["salidas","maq_received"].includes(o.stage)&&snoozeActive(o)).sort((a,b)=>(a.client||"").localeCompare(b.client||""));/* v10.84.0 — las ordenes facturadas por partes en el tiempo ya estan ENTREGADAS y no viven en salidas: sin esta lista, el resto por facturar no lo veria nadie. Se ordenan de la mas vieja a la mas nueva: la que mas tiempo lleva esperando va primero. */const partes=filteredOrders.filter(o=>restoPorFacturar(o)&&!o.stage.includes("cancelled")).sort((a,b)=>String(restoPorFacturar(a).created_at||"").localeCompare(String(restoPorFacturar(b).created_at||"")));const card=(o,waiting)=><div key={o.id} onClick={()=>handleAction(o.id,"detail")} style={{background:C.bg,borderRadius:14,padding:16,cursor:"pointer",border:"1.5px solid "+(waiting?C.t3:C.sal)+"66",boxShadow:C.sh2}}><div style={{fontSize:14,fontWeight:700}}>{o.client}{o.client_company&&o.client_company.trim()!==String(o.client||"").trim()?" · "+o.client_company:""}</div><div style={{fontSize:11,color:C.t2,marginTop:2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>{o.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600,marginTop:2}}>{o.production_number}</div>}{o.purchase_order_id&&(nOc[o.purchase_order_id]||0)>=2&&<button type="button" data-oc-de-la-ficha onClick={e=>{e.stopPropagation();setPendingOCNavId(o.purchase_order_id);setView("oc")}} title={"Abrir "+o.purchase_order_id+": sus "+nOc[o.purchase_order_id]+" órdenes se folian juntas"} style={{marginTop:6,display:"inline-flex",alignItems:"center",gap:5,padding:"3px 9px",borderRadius:999,border:"1px solid "+C.bd,background:C.sf,color:tintaAA(C.ac,7),fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}><ShoppingCartIcon size={11} weight="bold"/>{o.purchase_order_id} · {nOc[o.purchase_order_id]} órdenes</button>}{o.due_date&&<div style={{fontSize:10,color:vencidaAhora(o)?C.dnInk:C.t3,marginTop:4}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Entrega: {fD(o.due_date)}</div>}{(()=>{const amt=o.order_type==="maquila"?o.maq_price:o.price;/* v10.73.82 (verificación L11) — el monto de una orden maquila vive en maq_price, no en price (igual que deliver_with_invoice/split_invoice); sin esto las maq_received que L11 trajo a este grid salían sin importe. */return amt?<div style={{fontSize:13,fontWeight:700,color:C.okInk,marginTop:4}}><span>{fmt(amt)}</span><span style={{fontSize:10.5,fontWeight:500,color:C.t2}}> sin IVA</span></div>:null})()}{waiting?<><div style={{fontSize:10,color:C.t2,marginTop:6,fontStyle:"italic"}}>{o.snooze_reason||"Esperando factura del cliente"}{o.snoozed_by&&o.snoozed_by!==(userLogin||user)?" · "+(AUTHOR_NAME[o.snoozed_by]||o.snoozed_by):""}</div><button onClick={e=>{e.stopPropagation();handleAction(o.id,"unsnooze")}} style={{...bs(C.ac+"15",C.ac),marginTop:8,width:"100%",justifyContent:"center",border:"1px solid "+C.ac+"40"}}><BellRingingIcon size={13} weight="bold"/>{o.snooze_kind==="awaiting_client_invoice"?etiquetaYaPidio(o,user):"Quitar espera"}</button></>:<><button onClick={e=>{e.stopPropagation();handleAction(o.id,fiscalOk(o)?"deliver_only":(o.return_covered_by_folio?"deliver_covered":"deliver_with_invoice"))}} aria-label={(fiscalOk(o)?"Marcar como Entregada":o.return_covered_by_folio?"Entregar (cubierta "+o.return_covered_by_folio+")":"Asignar Folio y Entregar")+" · "+(o.production_number||"")+" · "+(o.client||"")} style={{...bt(tintaAA(C.ok)),marginTop:10,width:"100%",justifyContent:"center"}}>{fiscalOk(o)?<><CheckCircleIcon size={14} weight="bold"/>Marcar como Entregada</>:(o.return_covered_by_folio?<><CheckCircleIcon size={14} weight="bold"/>Entregar (cubierta {o.return_covered_by_folio})</>:<><FileTextIcon size={14} weight="bold"/>Asignar Folio y Entregar</>)}</button>{!fiscalOk(o)&&!o.return_covered_by_folio&&<button onClick={e=>{e.stopPropagation();snoozeAwaitingInvoice(o)}} style={{...bs(C.sf,C.t2),marginTop:6,width:"100%",justifyContent:"center",border:"1px solid "+C.bd,fontSize:10.5}}><BellSlashIcon size={12} weight="bold"/>El cliente no ha pedido factura</button>}</>}</div>;return <>{sal.length===0&&wait.length===0&&partes.length===0?(search&&filteredOrders.some(enLaPlanta)?null:<div style={{textAlign:"center",padding:"40px 20px",color:C.t3}}><div style={{display:"flex",justifyContent:"center"}}><ExportIcon size={46} color={C.t3}/></div><div style={{fontSize:15,fontWeight:700,color:C.tx,marginTop:8}}>Sin órdenes en salida</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>Las órdenes aparecerán aquí cuando Producción las envíe</div></div>):<>{sal.length>0?<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10}}>{sal.map(o=>card(o,false))}</div>:<div style={{textAlign:"center",padding:"24px",color:C.t2,fontSize:13}}>Sin pendientes activos de folio · lo que queda está en espera, abajo</div>}{wait.length>0&&<details open style={{marginTop:18,background:C.sf,border:"1px solid "+C.bd,borderRadius:14,padding:"12px 14px"}}><summary style={{cursor:"pointer",fontSize:13.5,fontWeight:700,color:C.tx,display:"flex",alignItems:"center",gap:8,listStyle:"none"}} title="Clic para ver/ocultar"><CaretDownIcon size={12} weight="bold" color={C.t3} className="imp-caret" style={{flexShrink:0,transition:"transform .18s ease"}}/><span style={{background:C.bg,color:C.tx,minWidth:24,height:24,borderRadius:12,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,padding:"0 7px",border:"1px solid "+C.bd}}>{wait.length}</span><BellSlashIcon size={14} weight="bold" color={C.t2} style={{flexShrink:0}}/>En espera <span style={{fontSize:10.5,fontWeight:500,color:C.t2}}>· en pausa; se reactivan al cambiar de etapa o al vencer</span></summary><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10,marginTop:12}}>{wait.map(o=>card(o,true))}</div></details>}{partes.length>0&&<details open style={{marginTop:18,background:C.sf,border:"1px solid "+C.bd,borderRadius:14,padding:"12px 14px"}}><summary style={{cursor:"pointer",fontSize:13.5,fontWeight:700,color:C.tx,display:"flex",alignItems:"center",gap:8,listStyle:"none"}} title="Clic para ver/ocultar"><CaretDownIcon size={12} weight="bold" color={C.t3} className="imp-caret" style={{flexShrink:0,transition:"transform .18s ease"}}/><span style={{background:C.amb+"22",color:tintaAA(C.wnInk,7),minWidth:24,height:24,borderRadius:12,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,padding:"0 7px",border:"1px solid "+C.amb+"55"}}>{partes.length}</span><FilesIcon size={14} weight="bold" color={C.wn} style={{flexShrink:0}}/>Por facturar en partes <span style={{fontSize:10.5,fontWeight:500,color:C.t2}}>· ya entregadas; se factura el resto cuando el cliente pida la siguiente</span></summary><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10,marginTop:12}}>{partes.map(o=>{const r=restoPorFacturar(o);const tot=Number(o.order_type==="maquila"?o.maq_price:o.price)||0;const fac=(o.splits||[]).filter(x=>!x.cancelled_at&&x.doc_type!=="por_facturar").reduce((a,x)=>a+Number(x.amount_portion||0),0);const desde=r.created_at?Math.floor((Date.now()-new Date(r.created_at).getTime())/86400000):null;return <div key={o.id} onClick={()=>handleAction(o.id,"detail")} style={{background:C.bg,borderRadius:14,padding:16,cursor:"pointer",border:"1.5px solid "+C.amb+"66",boxShadow:C.sh2}}><div style={{fontSize:14,fontWeight:700}}>{o.client}{o.client_company&&o.client_company.trim()!==String(o.client||"").trim()?" · "+o.client_company:""}</div><div style={{fontSize:11,color:C.t2,marginTop:2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>{o.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600,marginTop:2}}>{o.production_number}</div>}<div style={{fontSize:12,color:C.tx,marginTop:6}}>Facturado <b>{fmt(fac)}</b> de {fmt(tot)}</div><div style={{fontSize:13,fontWeight:700,color:C.wnInk,marginTop:2}}>Faltan {fmt(Number(r.amount_portion))} <span style={{fontSize:10,fontWeight:500,color:C.t2}}>sin IVA · {Number(r.qty_portion).toLocaleString("es-MX")} pzas{desde!=null?" · desde hace "+desde+" día"+(desde===1?"":"s"):""}</span></div><button onClick={e=>{e.stopPropagation();handleAction(o.id,"facturar_siguiente_parte")}} style={{...bt(C.fac),marginTop:10,width:"100%",justifyContent:"center"}}><FileTextIcon size={14} weight="bold"/>Facturar siguiente parte</button></div>})}</div></details>}</>}</>;})()}<MaquilaTracker orders={filteredOrders} onAction={handleAction} role={user} userLogin={userLogin}/></>}</div>}
+        {view==="board"&&user==="karla"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:8}}><FileTextIcon size={18} weight="bold"/>Pendientes de Folio</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Asigna folio fiscal y marca como entregadas</p>{/* v10.84.67 — «En la planta»: lo que todavía no llega a Salidas, y pasar ella lo que ya está listo */}{lectura.ok&&(()=>{const nFoliar=filteredOrders.filter(o=>["salidas","maq_received"].includes(o.stage)&&!snoozeActive(o)).length,nPlanta=filteredOrders.filter(enLaPlanta).length;return <div role="tablist" aria-label="Qué ver" style={{display:"flex",gap:4,margin:"0 0 14px",borderBottom:"1px solid "+C.bd,flexWrap:"wrap"}}>{[{id:"foliar",l:"Por foliar",n:nFoliar},{id:"planta",l:"En la planta",n:nPlanta}].map(t=>{const sel=folioTab===t.id;return <button key={t.id} role="tab" aria-selected={sel} onClick={()=>setFolioTab(t.id)} style={{display:"inline-flex",alignItems:"center",gap:7,minHeight:44,padding:"0 16px",background:"transparent",border:"none",borderBottom:"2.5px solid "+(sel?C.ac:"transparent"),marginBottom:-1,color:sel?tintaAA(C.ac,5):C.t2,fontSize:13,fontWeight:sel?800:600,cursor:"pointer",fontFamily:"'Geist',sans-serif"}}>{t.l}<span style={{fontSize:11,fontWeight:700,minWidth:22,padding:"1px 7px",borderRadius:999,background:sel?C.ac+"18":C.sf,color:sel?tintaAA(C.ac,5):C.t2}}>{t.n}</span></button>})}</div>})()}{!lectura.ok?<div role="status" data-folios-sin-lectura style={{textAlign:"center",padding:"40px 20px",color:C.t2}}><div style={{fontSize:15,fontWeight:700,color:C.tx}}>{lectura.fallo?"No se pudieron leer tus pendientes de folio":"Leyendo tus pendientes de folio…"}</div><div style={{fontSize:12,marginTop:4}}>{lectura.fallo?"Mientras no se lean de la base, esta lista no dice si tienes o no: arriba está «Reintentar».":"En cuanto lleguen de la base, salen aquí."}</div></div>:folioTab==="planta"?<EnLaPlanta orders={filteredOrders} todas={viewOrders} buscando={search} onJalar={jalarASalidas} onDetalle={id=>handleAction(id,"detail")} ocupada={actionLoading}/>:<>{search&&(()=>{const enPl=filteredOrders.filter(enLaPlanta);if(!enPl.length)return null;const d=enPl.length===1?dondeVa(enPl[0]):null;return <div role="status" style={{display:"flex",alignItems:"center",gap:"6px 12px",flexWrap:"wrap",background:C.ac+"0d",border:"1px solid "+C.ac+"33",borderRadius:12,padding:"8px 12px",marginBottom:12,fontSize:12.5,color:C.tx}}><span style={{flex:"1 1 260px"}}>{enPl.length===1?<><b>{nombreDeOrden(enPl[0])}</b> todavía no llega a Salidas: {d.lugar}{d.detalle?" ("+d.detalle+")":""}.</>:<>{enPl.length} de lo que buscas todavía no llegan a Salidas.</>}</span><button onClick={()=>setFolioTab("planta")} style={{...bs(C.ac+"14",tintaAA(C.ac,7)),border:"1px solid "+C.ac+"44"}}>Ver en «En la planta»</button></div>})()}{(()=>{/* v10.84.97 — de qué OC es cada ficha: las órdenes de la OC (todas, no sólo las que pasan la búsqueda) */const nOc={};orders.forEach(x=>{if(x.purchase_order_id&&!String(x.stage||"").includes("cancelled"))nOc[x.purchase_order_id]=(nOc[x.purchase_order_id]||0)+1});const sal=filteredOrders.filter(o=>["salidas","maq_received"].includes(o.stage)&&!snoozeActive(o)).sort(prioSort)/* v10.73.82 (L11) — simétrico con `wait`, que SÍ incluye maq_received. Antes, una orden recibida de maquila sin pausar caía en el hueco entre los dos filtros y no existía en la pantalla "Pendientes de Folio", pese a que GUIDES y myTasks de Karla ya la reclaman. La acción de la card ya soporta maq_received (deliver_with_invoice/split_invoice lo validan). */;const wait=filteredOrders.filter(o=>["salidas","maq_received"].includes(o.stage)&&snoozeActive(o)).sort((a,b)=>(a.client||"").localeCompare(b.client||""));/* v10.84.0 — las ordenes facturadas por partes en el tiempo ya estan ENTREGADAS y no viven en salidas: sin esta lista, el resto por facturar no lo veria nadie. Se ordenan de la mas vieja a la mas nueva: la que mas tiempo lleva esperando va primero. */const partes=filteredOrders.filter(o=>restoPorFacturar(o)&&!o.stage.includes("cancelled")).sort((a,b)=>String(restoPorFacturar(a).created_at||"").localeCompare(String(restoPorFacturar(b).created_at||"")));const card=(o,waiting)=><div key={o.id} onClick={()=>handleAction(o.id,"detail")} style={{background:C.bg,borderRadius:14,padding:16,cursor:"pointer",border:"1.5px solid "+(waiting?C.t3:C.sal)+"66",boxShadow:C.sh2}}><div style={{fontSize:14,fontWeight:700}}>{o.client}{o.client_company&&o.client_company.trim()!==String(o.client||"").trim()?" · "+o.client_company:""}</div><div style={{fontSize:11,color:C.t2,marginTop:2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>{o.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600,marginTop:2}}>{o.production_number}</div>}{o.purchase_order_id&&(nOc[o.purchase_order_id]||0)>=2&&<button type="button" data-oc-de-la-ficha onClick={e=>{e.stopPropagation();setPendingOCNavId(o.purchase_order_id);setView("oc")}} title={"Abrir "+o.purchase_order_id+": sus "+nOc[o.purchase_order_id]+" órdenes se folian juntas"} style={{marginTop:6,display:"inline-flex",alignItems:"center",gap:5,padding:"3px 9px",borderRadius:999,border:"1px solid "+C.bd,background:C.sf,color:tintaAA(C.ac,7),fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}><ShoppingCartIcon size={11} weight="bold"/>{o.purchase_order_id} · {nOc[o.purchase_order_id]} órdenes</button>}{o.due_date&&<div style={{fontSize:10,color:vencidaAhora(o)?C.dnInk:C.t3,marginTop:4}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Entrega: {fD(o.due_date)}</div>}{(()=>{const amt=o.order_type==="maquila"?o.maq_price:o.price;/* v10.73.82 (verificación L11) — el monto de una orden maquila vive en maq_price, no en price (igual que deliver_with_invoice/split_invoice); sin esto las maq_received que L11 trajo a este grid salían sin importe. */return amt?<div style={{fontSize:13,fontWeight:700,color:C.okInk,marginTop:4}}><span>{fmt(amt)}</span><span style={{fontSize:10.5,fontWeight:500,color:C.t2}}> sin IVA</span></div>:null})()}{waiting?<><div style={{fontSize:10,color:C.t2,marginTop:6,fontStyle:"italic"}}>{o.snooze_reason||"Esperando factura del cliente"}{o.snoozed_by&&o.snoozed_by!==(userLogin||user)?" · "+(AUTHOR_NAME[o.snoozed_by]||o.snoozed_by):""}</div><button onClick={e=>{e.stopPropagation();handleAction(o.id,"unsnooze")}} style={{...bs(C.ac+"15",C.ac),marginTop:8,width:"100%",justifyContent:"center",border:"1px solid "+C.ac+"40"}}><BellRingingIcon size={13} weight="bold"/>{o.snooze_kind==="awaiting_client_invoice"?etiquetaYaPidio(o,user):"Quitar espera"}</button></>:<><button onClick={e=>{e.stopPropagation();handleAction(o.id,fiscalOk(o)?"deliver_only":(o.return_covered_by_folio?"deliver_covered":"deliver_with_invoice"))}} aria-label={(fiscalOk(o)?"Marcar como Entregada":o.return_covered_by_folio?"Entregar (cubierta "+o.return_covered_by_folio+")":"Asignar Folio y Entregar")+" · "+(o.production_number||"")+" · "+(o.client||"")} style={{...bt(tintaAA(C.ok)),marginTop:10,width:"100%",justifyContent:"center"}}>{fiscalOk(o)?<><CheckCircleIcon size={14} weight="bold"/>Marcar como Entregada</>:(o.return_covered_by_folio?<><CheckCircleIcon size={14} weight="bold"/>Entregar (cubierta {o.return_covered_by_folio})</>:<><FileTextIcon size={14} weight="bold"/>Asignar Folio y Entregar</>)}</button>{sinFacturar(o)/* v10.84.172 — en la duda tampoco (era !fiscalOk) */&&!o.return_covered_by_folio&&<button onClick={e=>{e.stopPropagation();snoozeAwaitingInvoice(o)}} style={{...bs(C.sf,C.t2),marginTop:6,width:"100%",justifyContent:"center",border:"1px solid "+C.bd,fontSize:10.5}}><BellSlashIcon size={12} weight="bold"/>El cliente no ha pedido factura</button>}</>}</div>;return <>{sal.length===0&&wait.length===0&&partes.length===0?(search&&filteredOrders.some(enLaPlanta)?null:<div style={{textAlign:"center",padding:"40px 20px",color:C.t3}}><div style={{display:"flex",justifyContent:"center"}}><ExportIcon size={46} color={C.t3}/></div><div style={{fontSize:15,fontWeight:700,color:C.tx,marginTop:8}}>Sin órdenes en salida</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>Las órdenes aparecerán aquí cuando Producción las envíe</div></div>):<>{sal.length>0?<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10}}>{sal.map(o=>card(o,false))}</div>:<div style={{textAlign:"center",padding:"24px",color:C.t2,fontSize:13}}>Sin pendientes activos de folio · lo que queda está en espera, abajo</div>}{wait.length>0&&<details open style={{marginTop:18,background:C.sf,border:"1px solid "+C.bd,borderRadius:14,padding:"12px 14px"}}><summary style={{cursor:"pointer",fontSize:13.5,fontWeight:700,color:C.tx,display:"flex",alignItems:"center",gap:8,listStyle:"none"}} title="Clic para ver/ocultar"><CaretDownIcon size={12} weight="bold" color={C.t3} className="imp-caret" style={{flexShrink:0,transition:"transform .18s ease"}}/><span style={{background:C.bg,color:C.tx,minWidth:24,height:24,borderRadius:12,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,padding:"0 7px",border:"1px solid "+C.bd}}>{wait.length}</span><BellSlashIcon size={14} weight="bold" color={C.t2} style={{flexShrink:0}}/>En espera <span style={{fontSize:10.5,fontWeight:500,color:C.t2}}>· en pausa; se reactivan al cambiar de etapa o al vencer</span></summary><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10,marginTop:12}}>{wait.map(o=>card(o,true))}</div></details>}{partes.length>0&&<details open style={{marginTop:18,background:C.sf,border:"1px solid "+C.bd,borderRadius:14,padding:"12px 14px"}}><summary style={{cursor:"pointer",fontSize:13.5,fontWeight:700,color:C.tx,display:"flex",alignItems:"center",gap:8,listStyle:"none"}} title="Clic para ver/ocultar"><CaretDownIcon size={12} weight="bold" color={C.t3} className="imp-caret" style={{flexShrink:0,transition:"transform .18s ease"}}/><span style={{background:C.amb+"22",color:tintaAA(C.wnInk,7),minWidth:24,height:24,borderRadius:12,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,padding:"0 7px",border:"1px solid "+C.amb+"55"}}>{partes.length}</span><FilesIcon size={14} weight="bold" color={C.wn} style={{flexShrink:0}}/>Por facturar en partes <span style={{fontSize:10.5,fontWeight:500,color:C.t2}}>· ya entregadas; se factura el resto cuando el cliente pida la siguiente</span></summary><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10,marginTop:12}}>{partes.map(o=>{const r=restoPorFacturar(o);const tot=Number(o.order_type==="maquila"?o.maq_price:o.price)||0;const fac=(o.splits||[]).filter(x=>!x.cancelled_at&&x.doc_type!=="por_facturar").reduce((a,x)=>a+Number(x.amount_portion||0),0);const desde=r.created_at?Math.floor((Date.now()-new Date(r.created_at).getTime())/86400000):null;return <div key={o.id} onClick={()=>handleAction(o.id,"detail")} style={{background:C.bg,borderRadius:14,padding:16,cursor:"pointer",border:"1.5px solid "+C.amb+"66",boxShadow:C.sh2}}><div style={{fontSize:14,fontWeight:700}}>{o.client}{o.client_company&&o.client_company.trim()!==String(o.client||"").trim()?" · "+o.client_company:""}</div><div style={{fontSize:11,color:C.t2,marginTop:2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>{o.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600,marginTop:2}}>{o.production_number}</div>}<div style={{fontSize:12,color:C.tx,marginTop:6}}>Facturado <b>{fmt(fac)}</b> de {fmt(tot)}</div><div style={{fontSize:13,fontWeight:700,color:C.wnInk,marginTop:2}}>Faltan {fmt(Number(r.amount_portion))} <span style={{fontSize:10,fontWeight:500,color:C.t2}}>sin IVA · {Number(r.qty_portion).toLocaleString("es-MX")} pzas{desde!=null?" · desde hace "+desde+" día"+(desde===1?"":"s"):""}</span></div><button onClick={e=>{e.stopPropagation();handleAction(o.id,"facturar_siguiente_parte")}} style={{...bt(C.fac),marginTop:10,width:"100%",justifyContent:"center"}}><FileTextIcon size={14} weight="bold"/>Facturar siguiente parte</button></div>})}</div></details>}</>}</>;})()}<MaquilaTracker orders={filteredOrders} onAction={handleAction} role={user} userLogin={userLogin}/></>}</div>}
         {/* v10.73.28 — Vista dedicada "En espera": las órdenes pausadas del rol (admin=todas), agrupadas por etapa, con la razón visible (banner de OCard) y botón "Volver a producción". */}
         {view==="espera"&&<div>
           <h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:8}}><BellSlashIcon size={18} weight="bold"/>En espera{esperaCount?" ("+esperaCount+")":""}</h2>
@@ -25136,11 +25214,14 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
       }} onClose={()=>setPreInvoiceModal(null)} cargarCandidatas={candidatasParaLigar} onFacturarPorPartes={()=>{const id=preInvoiceModal.id;setPreInvoiceModal(null);handleAction(id,"split_invoice")}}
           ocDeLaOrden={preInvoiceModal.purchase_order_id?{id:preInvoiceModal.purchase_order_id,n:orders.filter(x=>x.purchase_order_id===preInvoiceModal.purchase_order_id&&!String(x.stage||"").includes("cancelled")).length}:null} onIrALaOC={ocId=>{setPreInvoiceModal(null);setPendingOCNavId(ocId);setView("oc")}}/>}
       {/* v10.31.0 — Modal de entrega simple para órdenes con folio anticipado ya asignado */}
-      {deliverOnlyModal&&<DeliverOnlyModal order={deliverOnlyModal} onConfirm={async()=>{
+      {/* v10.84.172 — sobre la orden VIVA (con `key`, la regla 14) y con su facturación (`facturacionDeLaEntrega`: su folio, la agrupada, sus partes o
+          el plan de su OC con sus facturas). La bitácora y los avisos la dicen: con lo que no tiene folio propio decían «folio null». */}
+      {deliverOnlyModal&&(()=>{const vivo=orders.find(x=>x.id===deliverOnlyModal.id)||deliverOnlyModal,fac=facturacionDeLaEntrega(vivo,purchaseOrders);return <DeliverOnlyModal key={deliverOnlyModal.id} order={vivo} facturacion={fac} onConfirm={async()=>{
         try{
-          const newStage=deliverOnlyModal.order_type==="maquila"?"maq_delivered":"delivered";
+          if(!fac)return;   // dejó de estar facturada con la ventana abierta: la ventana lo dice y no deja confirmar
+          const newStage=vivo.order_type==="maquila"?"maq_delivered":"delivered";
           const now=new Date().toISOString();
-          const tlMsg="✅ Entregada (folio "+deliverOnlyModal.invoice_folio+" ya asignado)";
+          const tlMsg=fac.tipo==="propia"?"✅ Entregada (folio "+fac.folio+" ya asignado)":"✅ Entregada ("+(fac.tipo==="agrupada"?"en la ":fac.tipo==="partes"?"facturada ":"facturada en el ")+dichoDeLaFacturacion(fac)+")";
           // v10.31.1 fix #5 — UPDATE atómico: requiere invoice_folio aún presente (race con cancel_with_nc en otro tab)
           // v10.80.19 — POR RPC, no por filtro de PostgREST. v10.80.15 escribio aqui
           // `.or("...,has_splits.eq.true,...")`, y `has_splits` es un campo que ESTE archivo calcula
@@ -25155,8 +25236,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           await db.addTimeline(deliverOnlyModal.id,tlMsg,user,C.ok);
           setOrders(p=>p.map(o=>o.id===deliverOnlyModal.id?{...o,stage:newStage,delivered_at:now,timeline:addTL(o,tlMsg,{to:newStage})}:o));
           // Notif a admin + Lupita + creador (vendedor) — mismo patrón que entrega normal
-          const notifMsg="✅ "+deliverOnlyModal.production_number+" entregada · "+(deliverOnlyModal.client||"")+" · folio "+deliverOnlyModal.invoice_folio+" (anticipado)";
-          await db.notifySecs(deliverOnlyModal.id,"delivery",notifMsg,null,user,deliverOnlyModal.created_by);
+          const notifMsg="✅ "+vivo.production_number+" entregada · "+(vivo.client||"")+" · "+(fac.tipo==="propia"?"folio "+fac.folio+" (anticipado)":dichoDeLaFacturacion(fac));
+          await db.notifySecs(deliverOnlyModal.id,"delivery",notifMsg,null,user,vivo.created_by);
           showToast("✅ Entregada");
           setDeliverOnlyModal(null);
         }catch(e){
@@ -25164,7 +25245,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           showToast("❌ "+(e?.message||"No se pudo marcar entregada"),"error");
           reload();
         }
-      }} onClose={()=>setDeliverOnlyModal(null)}/>}
+      }} onClose={()=>setDeliverOnlyModal(null)}/>})()}
       {/* 🆕 v10.9.0 — Modal de cancelación con NC (solo Marcelo cuando hay folio) */}
       {/* v10.84.73 — la ventana lee el caso de su folio al abrir (actor: pf_price_drop_check es de admin/karla); el rechazo vuelve
           a ella como {error}; ya cancelada, lo demás (la bitácora, los avisos) va por su lado y una falla ahí ya no dice «No se pudo
