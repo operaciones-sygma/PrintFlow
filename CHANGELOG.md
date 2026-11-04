@@ -60,7 +60,13 @@ Lo que destaparon las vueltas:
   desde ses-120 (`SESION_PARTE`, cada una compila en su carpeta y sirve en su puerto).
 - **Sin probar:** desligar de verdad en producción (se probó contra la base simulada; lo que hace la base se leyó de `pg_get_functiondef` y no cambió).
 
-**Permisos.** `authenticated` lee las dos columnas (`has_column_privilege`), así que la lectura no se cae para ningún rol.
+**En producción** 3-nov-2026, ~19:01 (READY `dpl_BgN6VjyyQ1oPWbYvcmXr3LsUfQAd`, commit `875128c`). Candado 2756 de 2756, de a 4, 1375 s, a la primera y sin inestables. Dice
+«nuevas 40» porque `sesion-2` es tanda nueva: 20 son nuevas de verdad y 20 (ses-120 a ses-139) cambiaron de tanda. Revisado en producción sin escribir: los dos dominios
+sirven `index-dw3GT29r.js`, con lo nuevo y sin «Facturas esperando orden». La lectura exacta de `reload`, con la sesión de cada usuario activo, no falla para ningún
+rol: 13 ligadas de 22 facturas del plan (un vendedor, 11 de 20: lo suyo). La base no cambió.
+
+**Vuelta atrás.** `git revert 875128c` y subir (ensayada en un worktree: deja `src`, `scripts` y `tests` como 256b343, el código de v10.84.172). Mientras sea el despliegue
+anterior, también promover `dpl_7sKLnMXz9jJJhTUG9dwTJk6S1Uzc` (el código de v10.84.172); el commit de estos documentos pone otro despliegue encima. La base no cambió.
 
 ## v10.84.172 — Lo facturado en el plan de su OC se entrega (Hotsson, OC-0966) — 3-nov-2026
 

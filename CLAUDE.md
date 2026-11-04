@@ -109,6 +109,8 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
     🔑 Y «nada facturado» = ninguna de las cuatro (helper `sinFacturar`, v10.84.172): cierra en la duda (con `fiscal_desconocido` las banderas de
     partes y plan llegan en true), así que es el que abre foliar y «El cliente no pide factura»; `!fiscalOk` abriría en la duda. Una sola pata o
     tres atoraron a Hotsson (OC-0966, 3-nov): «Marcar como Entregada» decía «no tiene folio fiscal» a lo facturado en el plan de su OC.
+    🔑 **Y `reload` lee `order_invoice_splits`, `oc_invoice_split_groups` y `oc_invoice_split_lines` con columnas explícitas**: la columna que use una pantalla se agrega ahí, o en
+    producción no llega y el banco no lo ve, porque sus datos entran por props. `ligada` (v10.84.89) nunca se pidió hasta v10.84.173: la tanda `sesion`, con la app real, contesta sólo lo pedido.
 18. `isSec(role)` / `secOwns` / `vOwns` / `userLogin` / `notifKey` — gates de siempre; `created_by`
     guarda username, no rol.
 19. Prefijo `// vX.Y.Z — ` en cada cambio, con el **porqué** (los comentarios son el historial que sí
@@ -128,7 +130,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2736 pruebas, ~23 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2756 pruebas, ~23 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Las tandas con banco van de a 7 a la vez (`PROBAR_PARALELO`; con 11 juntas,
@@ -217,7 +219,14 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.172 (3-nov, ~11:57, READY `dpl_6mbpJSvGTiyGvuFB5Mb6yGTmzLhw`, commit `8960930`; vuelta atrás: `git revert 8960930` y subir (ensayada en
+- **LIVE:** v10.84.173 (3-nov, ~19:01, READY `dpl_BgN6VjyyQ1oPWbYvcmXr3LsUfQAd`, commit `875128c`; vuelta atrás: `git revert 875128c` y subir (ensayada en
+  un worktree: deja `src`, `scripts` y `tests` como 256b343, el código de la 172), o promover `dpl_7sKLnMXz9jJJhTUG9dwTJk6S1Uzc` (el código de la 172); la base no
+  cambió; candado 2756 de 2756 (20 nuevas), de a 4, 1375 s, a la primera y sin inestables; revisado en producción sin escribir). 🔑 **La factura ligada del plan se ve
+  ligada, y se desliga** (en las capturas de Karla del 3-nov, las 11 de Hotsson sin su etiqueta): `reload` no pedía `ligada` ni `bill_to_name`, y a Dirección le ofrecía
+  «Cancelar factura», «se cancela en CobranzaFlow», cuando la base sólo la desliga (13 ligadas, todas vivas). La ventana usa esa palabra de principio a fin, la desligada
+  dice DESLIGADA y se cuenta aparte; sin leer las facturas del plan se avisa y se cierran folio y entrega. La simulada de `sesion` contesta sólo las columnas pedidas, y
+  la tanda va en dos (`sesion` + `sesion-2`, `SESION_PARTE`): pasó del tope de 12 minutos. ses-140 a ses-158.
+  v10.84.172 (3-nov, ~11:57, READY `dpl_6mbpJSvGTiyGvuFB5Mb6yGTmzLhw`, commit `8960930`; vuelta atrás: `git revert 8960930` y subir (ensayada en
   un worktree: deja `src` y `tests` como f5303b0, el código de la 171), o promover `dpl_NnkYvdMpycAPebSfk1wbKAqwML8k` (el código de la 171); la base no
   cambió; candado 2736 de 2736 (21 nuevas), de a 4, 1363 s, a la primera y sin inestables; revisado en producción sin escribir). 🔑 **Lo facturado en el
   plan de su OC se entrega** (Karla, 3-nov: P-0621 y P-0623 de Hotsson, OC-0966, con sus 11 facturas ligadas en el plan por adelantado, llegaron a Salidas
