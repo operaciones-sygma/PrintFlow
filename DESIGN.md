@@ -228,6 +228,10 @@ La tarjeta de orden/registro, y el patrón a replicar en CobranzaFlow para factu
   trabajo (Producción, Pre-prensa, Germán: `hp`) ve primero las especificaciones y las notas, y después el producto y el nombre interno; la oficina y
   Dirección, el cliente y lo que es primero. Y el cuerpo no repite lo que el encabezado ya dice (tipo, cantidad, la descripción cuando es lo que el
   encabezado enseña): a 1366 el cuerpo enseña ~414 px y cada renglón repetido empuja los acabados y las notas abajo del corte.
+- **«Tiempo por etapa» responde quién tardó** (v10.84.175; Marcelo, 4-nov): el nombre de la etapa con quien responde de ella («CTP · Germán») y abajo quién la pasó; los pasos de una etapa (cada máquina, «En
+  fila», CTP y Procesadora) y en Validar cada quien, en una rejilla que comparte columnas. El tiempo va SIEMPRE en la columna de la derecha y en Geist Mono, también el total en su pastilla: se recorre de arriba abajo buscando el mayor. El
+  que llegó al último, en negritas (peso, no caja). 🔑 **Un tiempo que compara personas va en horas de jornada** (`JORNADA_TRAMOS`, medida de la bitácora) y lo dice abajo: con 24 h al día, quien valida a primera hora de lo capturado a las 18:40 sale con 15 h.
+  Lo que la bitácora no guardó se dice («validó · la bitácora no guardó la hora»), no se inventa.
 - **Lo que se lee va a 10 px o más; micro (9) es sólo para chips** (v10.84.160, la critique del tablero como Producción, 27/40): qué es la orden, el
   papel, la entrega, «ACTIVA», «EN ESPERA» y lo que dice un `<select>` son meta (10) o body (11); a 9 px sólo el folio «#P-…» y el turno «1°». Gerardo
   lee el tablero de pie, a un metro de una pantalla de 1366. 🔑 **Un contador o un título de color va en su tinta** (`tintaAA(color)` de fondo con letra

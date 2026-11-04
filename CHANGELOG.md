@@ -12,6 +12,42 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.175 — «Tiempo por etapa»: quién tardó en Validar, cada etapa con sus pasos, y horas de jornada — 4-nov-2026
+
+**Qué pasaba.** Marcelo, 4-nov: «la etapa de validación tiene 2, Noemí y Gerardo, veo que tardan horas en aprobarla, pero no sé quién tardó» y «en algunas órdenes se repite el proceso varias
+veces, diseño o CTP aparece varias veces, eso no lo entiendo». Medido en `order_timeline` (120 días):
+- **Casi todo lo que se repetía eran pasos sin nombre.** Cada máquina escribe su renglón con la misma etapa: «Máquina, Máquina» en 295 órdenes (la Printmaster, luego la Polar) y «CTP, CTP, CTP» en 238
+  (llegó, «🏭 CTP», «🏭 Procesadora»). 🔑 De los «🏭 CTP», el 87% (205 de 236) sale de ahí en menos de un minuto: Germán marca CTP y Procesadora de golpe, así que esos tiempos no miden la máquina; lo que sí mide es «En fila».
+- **Lo que de verdad estaba mal: la doble.** 41 órdenes con «✅ Validada» y «Ambos validaron» escritos dos veces, por la misma persona, de 1 a 45 s después (P-0712, P-0705, P-0669; la más reciente, el 29-oct). Una
+  recarga que salió antes de guardar regresa la orden sin validar, el botón vuelve a salir y el segundo clic escribía todo otra vez, y ponía la etapa sin mirar en cuál iba. Era el «Diseño dos veces» que ya anotó la crítica del 7-oct.
+- **Lo entregado seguía «en curso».** La entrega y la cancelación no llevan `to_stage`: 558 órdenes de 120 días, ya terminadas, decían «en curso · aquí ahora» (P-0609, entregada el 29-oct: «Salidas · en curso · 6d 16h»).
+- **Validar tenía un solo tiempo**, y lo validan dos a la vez. El renglón decía quién la PASÓ a esa etapa, no quién responde de ella: CTP decía «Noemí».
+- **Las noches contaban como horas hábiles.** «Tiempo hábil» eran 24 h de lunes a viernes: P-0721, capturada a las 18:40 y validada por Gerardo a las 15:08 del día siguiente, decía 20 h; de jornada son 6.
+
+**Qué se cambió** (la pantalla; la base no).
+- **`src/lib/tiempoPorEtapa.js`**, la cuenta sin React (`tiempoPorEtapa`, `horasDeJornada`, `duracion`), y `StageFlowHistory` la pinta. Sin `bizMsBetween` ni `bizHoursBetween`, que sólo usaba el panel.
+- **Validar dice quién tardó**: Noemí y Gerardo, cada quien desde que la orden entró a Validar hasta su «✅ Validada por…», el que llegó al último en negritas; el que falta, «falta validar» y lo que lleva. Si otra persona
+  firma, «por Administrador». Lo que la bitácora no guardó se dice y no se inventa: «validó · la bitácora no guardó la hora»; quien la pasó sin validar, «no validó · la pasó Administrador».
+- **Una etapa con sus pasos**: «En fila», «CTP», «Procesadora»; «Printmaster 52 · turno 5», «Polar 115», cada uno con su tiempo. Si de verdad regresó, es otro renglón, con «2.ª vez» y la razón que se escribió al regresar. La
+  doble vieja de la bitácora no abre renglón. Las «Ambos validaron» que se escribieron sin etapa (hasta junio, y la «(auto)») se leen de su texto.
+- **Cada etapa con quien responde** («CTP · Germán», `orderResponsible`, también la maquila del vendedor) y abajo quién la pasó. Lo terminado se cierra con su fecha («Entregada · fin»): sin «en curso» ni «aquí ahora».
+- 🔑 **Horas de jornada**: lunes a viernes de 9:00 a 14:00 y de 15:00 a 19:30, medida de la bitácora (~10,000 eventos: la comida se ve, antes de las 8:30 y después de las 20:30 no hay ninguno, y los sábados sólo 35). «1d» son 9.5 h; ámbar desde un
+  día y rojo desde dos, como antes con días de 24 h. Sólo este panel: «estancada» y lo demás siguen con su cuenta. La nota de abajo dice qué cuenta.
+- **El tiempo en su columna, a la derecha y en Geist Mono**: el panel se recorre de arriba abajo buscando el mayor. `aria-expanded` en el botón.
+- **Validar es UNA vez** (`validate_prod`, `validate_pre`): el UPDATE lleva sus condiciones (`stage=draft` y sin esa validación); si no toca nada, ya estaba: «Esta orden ya estaba validada por…», no se anota nada y se recarga. Y el arreglo solo (`autoFix`) anota a dónde fue.
+
+**Cómo se probó.** Tanda nueva **`tiempos`** (banco `gen-tiempos.mjs`, con `extraer.mjs`; las bitácoras de producción y el reloj fijo). **Vuelta 1**, escrita antes de tocar nada y con las cuentas a mano: **16 de 16 fallaban**. **Vuelta 2**, por donde no
+se diseñó: lo que no se parte a 552 y a 300 px, `<script>`, emoji y texto de derecha a izquierda, la razón en dos renglones, la bitácora vacía o con basura, la cancelada, la entrega sin fecha o anterior a su última etapa, 300 pasos, Gerardo que valida con el panel
+abierto, fuera de jornada, la pausa en Validar, otra firma, teclado, contraste y 10 px. **Barrido de sólo lectura** con la cuenta nueva sobre la bitácora real (1,126 órdenes de 180 días, 10,662 eventos: `scratchpad`, no se queda): ninguna negativa, ninguna entregada «en
+curso», ninguna etapa seguida de sí misma, los pasos suman su etapa; encontró dos cosas que el banco no tenía (tie-45, el turno viejo «(cola #2)»; tie-46, P-0544 y 7 más que perdieron un paso de la bitácora: Gerardo sí validó). Con la app real, tanda `sesion`: ses-159 a ses-164 (validar otra vez
+con la recarga vieja, las condiciones, el arreglo solo, la bitácora que manda la base y la ficha abierta); y `detalle`, det-237, en las dos pantallas. Lo escrito después del arreglo se saboteó: sin cada arreglo caen 16 de `tiempos` y ses-159 a ses-162 (sin las condiciones salen
+dos «Validada» y dos «Ambos validaron», como en producción). Lo encontró tie-47: la cancelada sin salir de Validar (P-0628) no enseñaba el panel. El detector de diseño, sin hallazgos en el panel.
+
+**Lo que dice la bitácora de quién tarda** (738 órdenes de 180 días con las dos validaciones, en horas de jornada): Noemí, mediana 1.3 h, promedio 2.1, y queda al último en 507 (69%); Gerardo, mediana 0.5 h, promedio 1.1, y al último en 226 (31%). De reloj los promedios eran 9.4 y 3.9: la mayor parte de «tardan
+horas» eran noches.
+
+**Para Marcelo.** La jornada es lo medido: si el horario es otro, es un renglón (`JORNADA_TRAMOS`). Germán marca CTP y Procesadora de golpe: para medir esas máquinas tendría que marcarlas cuando pasa.
+
 ## v10.84.174 — Dirección corrige lo que falta de una orden por partes (P-0430) — 3-nov-2026
 
 **Qué pasaba.** Marcelo, 3-nov: «en printflow en el archivo no me deja editar el precio». P-0430 (JOSE DE JESUS RODRIGUEZ PORRAS, ETIQUETA STEVE MADDEN, 120,000 pzas) está entregada y

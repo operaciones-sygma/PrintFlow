@@ -80,6 +80,7 @@ function simulada() {
     rpcRespuestas: {}, // v10.84.96 — { rpc: valor }: lo que contesta esa RPC (por omisión, null)
     escrituraFalla: null, // v10.84.150 — una tabla cuyas escrituras (PATCH, POST) contestan 503: la base que no guarda
     ordenesSeMueven: false, // v10.84.172 — un PATCH a una orden contesta su id (sin esto, vacío: «cambió de etapa en otra sesión»)
+    validar: null,     // v10.84.175 — { hechas: Set }: como la base de verdad, recuerda lo validado: el UPDATE que lleva su condición y ya estaba no toca nada (contesta [] sin error)
   };
 }
 const b64u = o => Buffer.from(JSON.stringify(o)).toString("base64url");
@@ -188,6 +189,12 @@ async function rutear(ctx, s) {
       if (ruta.startsWith("/rest/v1/rpc/") && Object.prototype.hasOwnProperty.call(s.rpcRespuestas, ruta.slice(13))) return J(200, s.rpcRespuestas[ruta.slice(13)]);
       // v10.84.172 — con `ordenesSeMueven`, mover una orden contesta su id: la app pide de vuelta el renglón movido, y vacío es «cambió en otra sesión»
       if (s.ordenesSeMueven && m === "PATCH" && ruta === "/rest/v1/orders") { const id = (url.searchParams.get("id") || "").replace(/^eq\./, ""); return J(200, id ? [{ id }] : []); }
+      if (s.validar && m === "PATCH" && ruta === "/rest/v1/orders") {
+        const id = (url.searchParams.get("id") || "").replace(/^eq\./, ""), col = Object.keys(cuerpo || {}).find(k => /^validated_by_/.test(k));
+        const yaEstaba = col && s.validar.hechas.has(id + col), conCondicion = col && url.searchParams.get(col) === "not.is.true";
+        if (col) s.validar.hechas.add(id + col);
+        return J(200, yaEstaba && conCondicion ? [] : [{ id }]);
+      }
       return J(200, ruta.startsWith("/rest/v1/rpc/") ? null : []);
     }
     if (ruta.startsWith("/functions/v1/")) return J(200, {});
@@ -2402,6 +2409,93 @@ await caso("ses-158-el-motivo-sin-cortes-de-la-desligada-cabe", async ({ p, s })
   const a1920 = await medir();
   const bien = a => a.hay && a.seSale === false && !a.pagina;
   ok("ses-158-el-motivo-sin-cortes-de-la-desligada-cabe", bien(a1366) && bien(a1920), `1366: ${JSON.stringify(a1366)} · 1920: ${JSON.stringify(a1920)}`);
+});
+
+// ════════════════════════ v10.84.175 — validar una sola vez, y «Tiempo por etapa» con la bitácora que manda la base ════════════════════════
+// (41 órdenes en 120 días con «✅ Validada» y «Ambos validaron» escritos dos veces, de 1 a 45 s después y por la misma persona: P-0712, P-0705, P-0669. Una recarga que salió antes de
+//  guardar regresa la orden sin validar y el botón vuelve a salir: la simulada lee lo de siempre, así que aquí la recarga llega con la orden como estaba.)
+const escritoEnLaBitacora = s => s.peticiones.filter(x => x.m === "POST" && x.ruta === "/rest/v1/order_timeline").map(x => x.cuerpo?.action || "");
+const validarDosVeces = async (p, s, quien, pn, boton, marca) => {
+  s.validar = { hechas: new Set() };
+  await abrirYEntrar(p, s, quien);
+  await esperarMenu(p, /^Pendientes/); await despertar(p);
+  await abrirPendientes(p);
+  const b = fichaDe(p, pn).getByRole("button", { name: boton, exact: true });
+  await b.click();
+  await esperarQue(() => escritoEnLaBitacora(s).some(a => /Ambos validaron/.test(a)), 8000);
+  await p.waitForTimeout(300);
+  await p.evaluate(() => window.dispatchEvent(new Event("focus")));   // la recarga que llega con la orden como estaba: el botón regresa
+  const regreso = await b.waitFor({ timeout: 8000 }).then(() => true, () => false);
+  if (regreso) { await p.waitForTimeout(250); await b.click(); await p.waitForTimeout(1500); }
+  const esc = escritoEnLaBitacora(s), t = await texto(p);
+  return { regreso, validadas: esc.filter(a => marca.test(a)).length, ambos: esc.filter(a => /Ambos validaron/.test(a)).length, aviso: /ya estaba validada/.test(t) };
+};
+await caso("ses-159-noemi-doble-clic-con-la-recarga-vieja-no-escribe-dos-veces", async ({ p, s }) => {
+  s.filas = { orders: [ordenK("P-0950", { stage: "draft", validated_by_production: true, validated_by_preprensa: false })] };
+  const r = await validarDosVeces(p, s, "noemi", "P-0950", "Validar Pre-prensa", /Validada por Pre-prensa/);
+  ok("ses-159-noemi-doble-clic-con-la-recarga-vieja-no-escribe-dos-veces", r.regreso && r.validadas === 1 && r.ambos === 1 && r.aviso, JSON.stringify(r));
+});
+await caso("ses-160-gerardo-doble-clic-con-la-recarga-vieja-no-escribe-dos-veces", async ({ p, s }) => {
+  s.filas = { orders: [ordenK("P-0951", { stage: "draft", validated_by_production: false, validated_by_preprensa: true })] };
+  const r = await validarDosVeces(p, s, "gerardo", "P-0951", "Validar Producción", /Validada por Producción/);
+  ok("ses-160-gerardo-doble-clic-con-la-recarga-vieja-no-escribe-dos-veces", r.regreso && r.validadas === 1 && r.ambos === 1 && r.aviso, JSON.stringify(r));
+});
+// el UPDATE no mueve la orden sin sus condiciones: si en la base ya avanzó, un clic viejo no la regresa a Diseño (antes ponía la etapa sin mirar en cuál iba)
+await caso("ses-161-validar-lleva-sus-condiciones", async ({ p, s }) => {
+  s.filas = { orders: [ordenK("P-0952", { stage: "draft", validated_by_production: true, validated_by_preprensa: false })] };
+  s.validar = { hechas: new Set() };
+  await abrirYEntrar(p, s, "noemi");
+  await esperarMenu(p, /^Pendientes/); await despertar(p);
+  await abrirPendientes(p);
+  const pedidas = []; p.on("request", r => { if (r.method() === "PATCH" && /\/rest\/v1\/orders/.test(r.url())) pedidas.push(decodeURIComponent(r.url())); });
+  await fichaDe(p, "P-0952").getByRole("button", { name: "Validar Pre-prensa", exact: true }).click();
+  await esperarQue(() => escritoEnLaBitacora(s).some(a => /Ambos validaron/.test(a)), 8000);
+  ok("ses-161-validar-lleva-sus-condiciones", pedidas.some(u => /stage=eq\.draft/.test(u) && /validated_by_preprensa=not\.is\.true/.test(u)), pedidas.join(" | ").slice(0, 240));
+});
+// el arreglo solo (`autoFix`: las dos validaciones puestas y la orden en Validar) escribe a dónde fue: sin etapa, «Tiempo por etapa» la seguía contando en Validar (P-0430)
+await caso("ses-162-el-arreglo-solo-anota-a-donde-fue", async ({ p, s }) => {
+  s.filas = { orders: [ordenK("P-0953", { stage: "draft", validated_by_production: true, validated_by_preprensa: true }), ordenK("P-0954", { stage: "draft", validated_by_production: true, validated_by_preprensa: true, plate_status: "existing" })] };
+  await abrirYEntrar(p, s, "karla");
+  await esperarQue(() => s.peticiones.filter(x => x.m === "POST" && x.ruta === "/rest/v1/order_timeline" && /Ambos validaron/.test(x.cuerpo?.action || "")).length >= 2, 8000);
+  const es = s.peticiones.filter(x => x.m === "POST" && x.ruta === "/rest/v1/order_timeline" && /Ambos validaron/.test(x.cuerpo?.action || "")).map(x => ({ id: x.cuerpo.order_id, a: x.cuerpo.to_stage }));
+  ok("ses-162-el-arreglo-solo-anota-a-donde-fue", es.some(x => x.id === "OP-P-0953" && x.a === "design") && es.some(x => x.id === "OP-P-0954" && x.a === "ready"), JSON.stringify(es));
+});
+// con la app real: la bitácora como la manda la base (to_stage, by_user, created_at) llega al panel del detalle, con quién tardó y cada máquina
+await caso("ses-163-tiempo-por-etapa-con-la-bitacora-de-la-base", async ({ p, s }) => {
+  const ev = (h, to_stage, by_user, action) => ({ order_id: "OP-P-0955", action, by_user, color: "#8e8e93", created_at: haceH(h), to_stage });
+  s.filas = { orders: [ordenK("P-0955", { stage: "in_production", created_at: haceH(120), validated_by_production: true, validated_by_preprensa: true, current_machine: "off_pm52", machine_queue_position: 0 })],
+    order_timeline: [ev(120, "draft", "secretaria", "📋 Orden creada"), ev(119, null, "preprensa", "✅ Validada por Pre-prensa"), ev(100, null, "produccion", "✅ Validada por Producción"),
+      ev(100, "design", "produccion", "📝 → 🎨 Ambos validaron → Diseño"), ev(90, "ctp", "preprensa", "🎨 Diseño → 💿 CTP"), ev(80, "ctp", "german", "🏭 CTP"), ev(79, "ctp", "german", "🏭 Procesadora"),
+      ev(70, "placas_listas", "german", "💿 CTP → 📋 Placas Listas"), ev(60, "ready", "produccion", "📋 Placas Listas → ✅ Lista para imprimir"), ev(50, "in_production", "produccion", "🏭 Printmaster 52 (turno 2)"), ev(10, "in_production", "produccion", "🏭 Polar 115")] };
+  await abrirYEntrar(p, s, "marcelo");
+  await esperarMenu(p, /^Todas|^Pendientes/); await despertar(p);
+  await p.locator('button[title="Todas"]').first().click(); await p.waitForTimeout(800);
+  await fichaDe(p, "P-0955").click(); await p.waitForTimeout(600);
+  const dlg = p.getByRole("dialog").first();
+  await dlg.getByRole("button", { name: /Tiempo por etapa/ }).click(); await p.waitForTimeout(200);
+  const t = (await dlg.innerText()).replace(/\s+/g, " ");
+  ok("ses-163-tiempo-por-etapa-con-la-bitacora-de-la-base", /Noemí[^·]{0,40}validó/.test(t) && /Gerardo[^·]{0,40}validó/.test(t) && /En fila/.test(t) && /Procesadora/.test(t) && /Máquina · Gerardo/.test(t) && /Printmaster 52/.test(t) && /Polar 115/.test(t) && /aquí ahora/.test(t), `el detalle: «${(t.match(/Tiempo por etapa.{0,420}/) || [t.slice(0, 200)])[0]}»`);
+});
+
+// el mismo panel en la ficha abierta («Historial y notas»), que es más angosta: se lee y nada se sale, en las dos pantallas de Marcelo, y tocarlo no abre el detalle
+await caso("ses-164-tiempo-por-etapa-en-la-ficha-abierta", async ({ p, s }) => {
+  const ev = (h, to_stage, by_user, action) => ({ order_id: "OP-P-0956", action, by_user, color: "#8e8e93", created_at: haceH(h), to_stage });
+  s.filas = { orders: [ordenK("P-0956", { stage: "in_production", created_at: haceH(120), validated_by_production: true, validated_by_preprensa: true, current_machine: "off_pm52", machine_queue_position: 0 })],
+    order_timeline: [ev(120, "draft", "secretaria", "📋 Orden creada"), ev(119, null, "preprensa", "✅ Validada por Pre-prensa"), ev(100, null, "produccion", "✅ Validada por Producción"),
+      ev(100, "design", "produccion", "📝 → 🎨 Ambos validaron → Diseño"), ev(90, "in_production", "produccion", "🏭 Printmaster 52 (turno 2)"), ev(10, "in_production", "produccion", "🏭 Müller Martini")] };
+  await abrirYEntrar(p, s, "marcelo");
+  await esperarMenu(p, /^Todas|^Pendientes/); await despertar(p);
+  await p.locator('button[title="Todas"]').first().click(); await p.waitForTimeout(800);
+  const ficha = fichaDe(p, "P-0956");
+  await ficha.getByRole("button", { name: /Historial y notas de P-0956/ }).click(); await p.waitForTimeout(250);
+  await ficha.getByRole("button", { name: /Tiempo por etapa/ }).click(); await p.waitForTimeout(250);
+  const medir = () => ficha.evaluate(f => { const c = f.getBoundingClientRect(); const fuera = [...f.querySelectorAll("span,div")].filter(e => [...e.childNodes].some(x => x.nodeType === 3 && x.textContent.trim()) && e.getClientRects().length).filter(e => { const q = document.createRange(); q.selectNodeContents(e); return q.getBoundingClientRect().right > c.right + 1; }).map(e => e.textContent.trim().slice(0, 30));
+    return { fuera, pagina: document.documentElement.scrollWidth > document.documentElement.clientWidth, ancho: Math.round(c.width) }; });
+  const a1366 = await medir(), t = (await ficha.innerText()).replace(/\s+/g, " "), detalle = await p.getByRole("dialog").count();
+  await p.setViewportSize({ width: 1920, height: 1080 }); await p.waitForTimeout(400);
+  const a1920 = await medir();
+  const bien = a => !a.fuera.length && !a.pagina;
+  ok("ses-164-tiempo-por-etapa-en-la-ficha-abierta", bien(a1366) && bien(a1920) && detalle === 0 && /Noemí[^·]{0,40}validó/.test(t) && /Gerardo[^·]{0,40}validó/.test(t) && /Printmaster 52/.test(t) && /Müller Martini/.test(t), `1366: ${JSON.stringify(a1366)} · 1920: ${JSON.stringify(a1920)} · diálogos: ${detalle} · «${(t.match(/Tiempo por etapa.{0,200}/) || [""])[0]}»`);
 });
 
 await browser.close();

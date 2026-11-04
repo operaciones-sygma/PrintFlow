@@ -78,7 +78,8 @@ const partes = [
   ...(L.some(l => /^const pideReimprimir = /.test(l)) ? [multi(/^const pideReimprimir = /, "pideReimprimir")] : []),
   line(/^const recProof=/, "recProof"), multi(/^const STAGE_SEQUENCE/, "STAGE_SEQUENCE"), multi(/^const ROLE_AREAS=\{/, "ROLE_AREAS"), fnBlock("getRevertOptions"), fnBlock("StageFlowButtons"),
   // el tiempo por etapa, el historial de cambios y los pantones REALES (v10.84.49): la base que leen y escriben va simulada abajo
-  line(/^function bizMsBetween\(/, "bizMsBetween"), line(/^function bizHoursBetween\(/, "bizHoursBetween"), line(/^function bizDaysBefore\(/, "bizDaysBefore"),
+  // v10.84.175 — la cuenta se fue a src/lib/tiempoPorEtapa.js (entra con importacionesDeLib); las de antes, sólo si el App.jsx las trae (la corrida doble)
+  ...["bizMsBetween", "bizHoursBetween"].flatMap(n => opcional(L.some(l => l.startsWith("function " + n + "(")), () => line(new RegExp("^function " + n + "\\("), n))), line(/^function bizDaysBefore\(/, "bizDaysBefore"),
   fnBlock("StageFlowHistory"), fnBlock("OrderChangeHistory"),
   ...["HexDelPantone"].flatMap(n => opcional(L.some(l => l.startsWith("function " + n + "(")), () => fnBlock(n))), fnBlock("PantoneChips"),
   fnBlock("PantoneInput"),   // el mismo campo del HEX en la forma de la orden (pantoneinput=1)
@@ -186,6 +187,15 @@ CASOS.sinclasificar = { ...BASE, production_number: "P-0655", stage: "design", p
 // v10.84.171 — P-0685 de PORTLAND LEATHER, en la OC-1060 con folio compartido F-236, que se canceló ante el SAT (2-nov: «las órdenes no se liberaron»)
 CASOS.ocfoliocancelado = { ...BASE, production_number: "P-0685", client: "PORTLAND LEATHER", stage: "delivered", invoice_folio: "F-236", invoice_type: "factura",
   purchase_order_id: "OC-1060", invoiced_by: "karla", invoiced_at: "2026-10-29T19:46:01Z", delivered_at: "2026-10-29T19:46:01Z", price: 11500, payment_status: "unpaid" };
+// v10.84.175 — «Tiempo por etapa» con una bitácora de verdad (P-0609, con lo que regresó, tres máquinas y la entrega), dentro del detalle real
+CASOS.tiempos = { ...BASE, production_number: "P-0609", stage: "delivered", delivered_at: "2026-10-29T22:52:03Z", created_at: "2026-10-07T23:05:58Z", invoice_folio: "F-240", invoice_type: "factura", timeline: [
+  ["2026-10-07T23:05:59Z", "draft", "secretaria", "📋 Orden creada"], ["2026-10-07T23:21:30Z", null, "preprensa", "✅ Validada por Pre-prensa"], ["2026-10-07T23:38:09Z", null, "produccion", "✅ Validada por Producción"],
+  ["2026-10-07T23:38:09Z", "design", "produccion", "📝 → 🎨 Ambos validaron → Diseño"], ["2026-10-08T00:03:44Z", "draft", "preprensa", "↩️ Regresada de 🎨 Diseño → 📝 Validar · Razón: cambio de medida"],
+  ["2026-10-08T00:20:17Z", null, "preprensa", "✅ Validada por Pre-prensa"], ["2026-10-08T00:43:29Z", null, "produccion", "✅ Validada por Producción"], ["2026-10-08T00:43:29Z", "design", "produccion", "📝 → 🎨 Ambos validaron → Diseño"],
+  ["2026-10-08T15:08:13Z", "ctp", "preprensa", "🎨 Diseño → 💿 CTP"], ["2026-10-08T15:57:57Z", "ctp", "german", "🏭 CTP"], ["2026-10-08T15:58:01Z", "ctp", "german", "🏭 Procesadora"], ["2026-10-08T15:58:03Z", "placas_listas", "german", "💿 CTP → 📋 Placas Listas"],
+  ["2026-10-08T17:16:37Z", "ready", "produccion", "📋 Placas Listas → ✅ Lista para imprimir"], ["2026-10-08T17:16:50Z", "in_production", "produccion", "🏭 Printmaster 74 (turno 3)"], ["2026-10-09T00:46:00Z", "in_production", "produccion", "🏭 Cilíndrica (turno 2)"],
+  ["2026-10-09T16:13:41Z", "in_production", "produccion", "🏭 Polar 115"], ["2026-10-09T19:57:48Z", "packaging", "produccion", "⚙️ Máquina → 📦 Empaque"], ["2026-10-09T22:16:22Z", "salidas", "produccion", "📦 Empaque → 📤 Salidas"],
+  ["2026-10-29T22:52:03Z", null, "karla", "📄 Asignado folio F-240 (Factura) · ✅ Entregada · ⏳ Pendiente cobro"]].map(([date, to, by, action]) => ({ date, by, action, ...(to ? { to } : {}) })) };
 const categoriaDe = t => CATS.categoriaSugerida(t) ?? (String(t || "").trim() && !CATS.esVentaDeInventario(t) ? "otro" : null);
 Object.values(CASOS).forEach(o => { if (!("categoria" in o)) o.categoria = categoriaDe(o.product_type); });
 // etapa=… cambia la etapa del caso (para barrer etapas y roles); cliente=… cambia el nombre del cliente

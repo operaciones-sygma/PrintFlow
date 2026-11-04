@@ -144,6 +144,8 @@ const TANDAS = [
   // v10.84.167 — la venta desde inventario con el precio de cada producto (Marcelo, 22-oct: «PrintFlow infla el precio por dividirlos… podemos asustar
   //   al cliente»): el carrito pedía UN total y la base lo repartía por piezas; el precio de lista y el nombre en la factura de cada producto del catálogo
   { nombre: "venta-inventario", gen: "tests/banco/gen-venta-inventario.mjs", romper: "tests/romper/venta-inventario.mjs", puerto: 5492 },
+  // v10.84.175 — «Tiempo por etapa» (Marcelo, 4-nov: «no sé quién tardó, Gerardo o Noemí» y «diseño o CTP aparece varias veces»), con las bitácoras de producción y el reloj fijo
+  { nombre: "tiempos", gen: "tests/banco/gen-tiempos.mjs", romper: "tests/romper/tiempos.mjs", puerto: 5493 },
 ];
 // 🔑 LA SEGUNDA OPORTUNIDAD (8-oct-2026, Marcelo: «sí es una mejora, aplica la misma metodología para todos los proyectos»; la misma de
 // CobranzaFlow desde el 7-oct, con sus candados: scripts/reintento.mjs). Lo que falla se repite UNA vez, y sólo eso: lo que vuelve a fallar

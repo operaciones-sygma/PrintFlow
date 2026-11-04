@@ -562,6 +562,16 @@ await caso("det-91-tiempo-por-etapa-se-lee", "caso=salidas&rol=karla", async p =
   const m = await peoresContrastes(p);
   ok("det-91-tiempo-por-etapa-se-lee", m.length === 0, `«Tiempo por etapa» abierto: ${m.slice(0, 3).join(" · ") || "todo se lee"}`);
 });
+// v10.84.175 — con una bitácora de verdad, dentro del detalle real, en las dos pantallas de Marcelo: se lee, nada se sale y lo de abajo del panel se alcanza
+for (const [n, viewport] of [["1366", { width: 1366, height: 768 }], ["1920", { width: 1920, height: 1080 }]]) {
+  await caso("det-237-tiempo-por-etapa-con-bitacora-" + n, "caso=tiempos&rol=admin", async p => {
+    await dlg(p).getByRole("button", { name: /Tiempo por etapa/ }).click(); await espera(p, 300);
+    const m = await peoresContrastes(p), t = (await textoDlg(p)).replace(/\s+/g, " ");
+    const fuera = await dlg(p).evaluate(d => { const c = d.getBoundingClientRect(); return [...d.querySelectorAll("span,div")].filter(e => [...e.childNodes].some(x => x.nodeType === 3 && x.textContent.trim()) && e.getClientRects().length).filter(e => { const q = document.createRange(); q.selectNodeContents(e); const r = q.getBoundingClientRect(); return r.right > c.right + 1; }).map(e => e.textContent.trim().slice(0, 30)); });
+    ok("det-237-tiempo-por-etapa-con-bitacora-" + n, m.length === 0 && fuera.length === 0 && /Noemí[^·]{0,40}validó/.test(t) && /Gerardo[^·]{0,40}validó/.test(t) && /Razón: cambio de medida/.test(t) && /Printmaster 74/.test(t) && /Polar 115/.test(t) && !/aquí ahora/.test(t),
+      `contraste: ${m.slice(0, 3).join(" · ") || "bien"}; se sale: ${fuera.slice(0, 3).join(" · ") || "nada"}; ${(t.match(/Tiempo por etapa.{0,160}/) || [""])[0]}`);
+  }, viewport);
+}
 // «Más» es un menú: las flechas se mueven, y Tab lo cierra sin perder el foco
 await caso("det-92-flechas-en-mas", "caso=salidas&rol=admin", async p => {
   await abrirMas(p);

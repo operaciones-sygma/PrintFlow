@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect, lazy, Suspense, Component } from "react";
 import { corregirPrecioEnLaBase, capturarPrecioEnLaBase, revisarPrecioFoliado, corregirPrecioFoliado, corregirRestoEnLaBase } from "./lib/corregirPrecio.js"; // v10.84.112 — «Corregir precio» contra la base, probado con Node (v10.84.115: y «Capturar precio»; v10.84.174: y lo que falta de una orden por partes)
+import { tiempoPorEtapa, duracion, HORAS_DE_UN_DIA } from "./lib/tiempoPorEtapa.js"; // v10.84.175 — «Tiempo por etapa», probado con Node contra las bitácoras de producción
 import { cancelarUnaDelLote } from "./lib/cancelarEnLote.js"; // v10.84.113 — «Cancelaciones» cancela cada orden completa, probado con Node
 import { cuadrarPartes } from "./lib/cuadrarPartes.js"; // v10.84.3 — aritmetica del reparto, probada con Node
 import { proponerPiezas, descripcionDeOrden } from "./lib/proponerPiezas.js"; // v10.84.102 — casar los conceptos de un CFDI con las órdenes del plan, probado con Node
@@ -2690,10 +2691,6 @@ const hoursAgo=d=>d?Math.round((Date.now()-new Date(d).getTime())/3600000):0;
 // Para "estancadas": una orden parada el viernes no acumula días durante el fin de semana.
 // Itera por día (incremento a medianoche local → seguro ante DST) restando el fin de semana.
 const bizHoursAgo=d=>{if(!d)return 0;const start=new Date(d).getTime();const now=Date.now();if(now<=start)return 0;let weekendMs=0;let cur=new Date(start);cur.setHours(0,0,0,0);let guard=0;while(cur.getTime()<now&&guard++<420){const dow=cur.getDay();const dayStart=cur.getTime();const nextMid=new Date(cur.getFullYear(),cur.getMonth(),cur.getDate()+1).getTime();if(dow===0||dow===6){const ds=Math.max(start,dayStart);const de=Math.min(now,nextMid);if(de>ds)weekendMs+=de-ds;}cur=new Date(nextMid);}return Math.round((now-start-weekendMs)/3600000);};
-// v10.73.19 (F2) — ms HÁBILES entre dos instantes (resta fines de semana completos), generaliza bizHoursAgo.
-function bizMsBetween(a,b){const start=new Date(a).getTime(),end=new Date(b).getTime();if(!(end>start))return 0;let weekendMs=0;let cur=new Date(start);cur.setHours(0,0,0,0);let guard=0;while(cur.getTime()<end&&guard++<3660){const dow=cur.getDay();const dayStart=cur.getTime();const nextMid=new Date(cur.getFullYear(),cur.getMonth(),cur.getDate()+1).getTime();if(dow===0||dow===6){const ds=Math.max(start,dayStart);const de=Math.min(end,nextMid);if(de>ds)weekendMs+=de-ds;}cur=new Date(nextMid);}return end-start-weekendMs;}
-// horas hábiles trabajables entre a y b, NETEANDO las ventanas de pausa "En espera" (mismo motor bizMs → sin doble-conteo del finde dentro de la pausa).
-function bizHoursBetween(a,b,pauses){let ms=bizMsBetween(a,b);(pauses||[]).forEach(p=>{const s=Math.max(new Date(a).getTime(),new Date(p.start).getTime());const e=Math.min(new Date(b).getTime(),new Date(p.end).getTime());if(e>s)ms-=bizMsBetween(s,e);});return Math.max(0,ms)/3600000;}
 // v10.43.1 FIX M4 — Traduce errores SQL crudos a mensajes legibles para Karla/Gerardo.
 // v10.43.2 FIX M5 — Cobertura de UNIQUE constraints (doble click).
 const humanizeStockError=err=>{
@@ -3379,57 +3376,64 @@ function bizDaysSince(date){
 // v10.73.19 (F2) — Historial de tiempos por etapa: reconstruye del timeline cuánto estuvo la orden en cada etapa
 // (neteando pausas "En espera" y fines de semana), el día/hora de cada paso, quién la movió, y las regresiones.
 // Vuelve objetivo el "se echan la bolita": el registro muestra exactamente cuándo entró/salió de cada etapa y quién.
+// v10.84.175 — la cuenta se fue a src/lib/tiempoPorEtapa.js (ahí está por qué): quién tardó en Validar, Noemí o Gerardo; una etapa con sus pasos (cada máquina, CTP y Procesadora); la razón de lo que
+//   regresó; lo entregado se cierra; y las horas son de jornada. Cada tiempo va en su columna a la derecha y en Geist Mono: el panel se recorre de arriba abajo buscando el mayor.
 function StageFlowHistory({order:o}){
   const [open,setOpen]=useState(false);
   const data=useMemo(()=>{
-    const tl=(o?.timeline||[]).filter(t=>t?.date&&!isNaN(new Date(t.date).getTime())).slice().sort((a,b)=>new Date(a.date)-new Date(b.date));
-    const nowISO=new Date().toISOString();
-    const isFinal=s=>/delivered|cancelled|stocked|maq_delivered|maq_cancelled|web_rejected/.test(s||"");
-    // ventana de pausa: desde "🔕 En espera" hasta el 1er evento posterior que sea "🔔 Reactivada" o una transición real
-    // (los eventos neutros —edición/merma/precio— NO la cortan); si sigue abierta cierra en el vencimiento (si ya pasó) o ahora.
     // v10.73.44b — tope de una pausa AÚN ABIERTA: el más TEMPRANO entre (a) vencimiento snooze_until y (b) auto-lift far_due
     // (due − 5 días hábiles, v10.73.44). Si el instante de lift es futuro (aún lejana), no topa (falla el test <end=ahora) → la
     // pausa sigue corriendo hasta ahora, correcto. Espeja en el timeline lo que snoozeActive ya hace computado.
     const _capUntil=o?.snooze_until?new Date(String(o.snooze_until).slice(0,10)+"T23:59:59").toISOString():null;
     const _capFarDue=(o?.snooze_kind==="far_due"&&o?.due_date)?bizDaysBefore(o.due_date,5).toISOString():null;
-    const snoozeCapISO=(_capUntil&&_capFarDue)?(_capUntil<_capFarDue?_capUntil:_capFarDue):(_capUntil||_capFarDue);
-    const pauses=[]; tl.forEach((t,i)=>{ if(!/En espera/i.test(t.action||""))return; let end=null; for(let j=i+1;j<tl.length;j++){ if(/Reactivada|En espera/i.test(tl[j].action||"")||tl[j].to){ end=tl[j].date; break; } } if(!end){ end=nowISO; if(snoozeCapISO&&new Date(snoozeCapISO)<new Date(end))end=snoozeCapISO; } if(new Date(end)<new Date(t.date))end=t.date; pauses.push({start:t.date,end}); });
-    // el evento "📋 Orden creada" YA trae to=etapa inicial + by=creador → NO lo tratamos como transición (evita fila duplicada)
-    const created=tl.find(t=>/Orden creada/i.test(t.action||""));
-    const trans=tl.filter(t=>t.to&&!/Orden creada/i.test(t.action||""));
-    const seqIdx=s=>STAGE_SEQUENCE.indexOf(s);
-    let segs=[];
-    if(trans.length===0){
-      if(o?.created_at&&!isFinal(o.stage)) segs=[{stage:o.stage,at:o.created_at,by:created?.by||o.created_by,current:true,isReg:false,hours:bizHoursBetween(o.created_at,nowISO,pauses)}];
-    } else {
-      const initStage=created?.to||(o.order_type==="maquila"?"maq_created":"draft");
-      if(o.created_at&&new Date(o.created_at)<new Date(trans[0].date)) segs.push({stage:initStage,at:o.created_at,by:created?.by||o.created_by,current:false,isReg:false,hours:bizHoursBetween(o.created_at,trans[0].date,pauses)});
-      trans.forEach((t,i)=>{ const last=i===trans.length-1; const endpoint=last&&isFinal(t.to); const end=last?(endpoint?t.date:nowISO):trans[i+1].date; const prev=segs.length?segs[segs.length-1].stage:null; const isReg=/^↩️/.test(t.action||"")||(!!prev&&seqIdx(t.to)>=0&&seqIdx(prev)>=0&&seqIdx(t.to)<seqIdx(prev)); segs.push({stage:t.to,at:t.date,by:t.by,current:last&&!endpoint,endpoint,isReg,hours:bizHoursBetween(t.date,end,pauses)}); });
-    }
-    return {segs,regs:segs.filter(s=>s.isReg).length};
+    const topePausa=(_capUntil&&_capFarDue)?(_capUntil<_capFarDue?_capUntil:_capFarDue):(_capUntil||_capFarDue);
+    return tiempoPorEtapa(o,{ahora:new Date().toISOString(),topePausa,secuencia:STAGE_SEQUENCE,responsable:stage=>orderResponsible({...o,stage})?.name,persona:q=>AUTHOR_NAME[q]||q});
   },[o]);
-  if(!data.segs.length) return null;
-  const fmtDur=h=>{ if(h==null)return "—"; if(h<1)return Math.max(1,Math.round(h*60))+"m"; if(h<9.95)return h.toFixed(1)+"h"; const H=Math.round(h); if(H<24)return H+"h"; const d=Math.floor(H/24),hr=H%24; return d+"d"+(hr?" "+hr+"h":""); };
+  if(!data.bloques.length) return null;
+  // v10.84.175 — un día son las horas de una jornada: de color lo que ya pasó de un día (ámbar) y de dos (rojo), como antes con días de 24 h
+  const tono=h=>h>=2*HORAS_DE_UN_DIA?C.dn:h>=HORAS_DE_UN_DIA?C.amb:C.t2;
+  const cifra={fontFamily:"'Geist Mono',monospace",whiteSpace:"nowrap"};
+  const nombreDe=q=>q?(q==="system"?"Sistema":AUTHOR_NAME[q]||q):null;
+  // v10.84.175 — los renglones de adentro de una etapa (cada validación, cada paso): comparten sus columnas, y el tiempo cae bajo el total de la etapa para leerlos de arriba abajo
+  const renglon=(n,nombre,h,meta,fuerte)=><div key={n} style={{display:"contents"}}>
+    <span style={{gridColumn:1,gridRow:n+1,fontSize:11,fontWeight:fuerte?700:500,color:C.tx,overflowWrap:"anywhere"}}>{nombre}</span>
+    <span style={{...cifra,gridColumn:3,gridRow:n+1,fontSize:11,fontWeight:fuerte?700:500,color:tintaAA(tono(h)),paddingRight:7,textAlign:"right"}}>{duracion(h)}</span>
+    <span style={{gridColumn:2,gridRow:n+1,fontSize:10,color:C.t2,minWidth:0,overflowWrap:"anywhere"}}>{meta}</span>
+  </div>;
+  const rejilla={display:"grid",gridTemplateColumns:"fit-content(45%) minmax(0,1fr) auto",columnGap:10,rowGap:3,alignItems:"baseline",marginTop:4};
   return <div onClick={e=>e.stopPropagation()} style={{marginTop:6}}>
-    <button onClick={()=>setOpen(!open)} style={{...bs(C.sf,C.t2),boxShadow:"0 0 0 0.5px "+C.bd,padding:"4px 10px",fontSize:11,gap:4}}><FastForwardIcon size={11} weight="bold"/>Tiempo por etapa{data.regs>0?<span style={{color:C.dnInk,fontWeight:700}}> · {data.regs} regresi{data.regs===1?"ón":"ones"}</span>:null} {open?<CaretUpIcon size={10} weight="bold"/>:<CaretDownIcon size={10} weight="bold"/>}</button>
+    <button aria-expanded={open} onClick={()=>setOpen(!open)} style={{...bs(C.sf,C.t2),boxShadow:"0 0 0 0.5px "+C.bd,padding:"4px 10px",fontSize:11,gap:4}}><FastForwardIcon size={11} weight="bold"/>Tiempo por etapa{data.regs>0?<span style={{color:C.dnInk,fontWeight:700}}> · {data.regs} regresi{data.regs===1?"ón":"ones"}</span>:null} {open?<CaretUpIcon size={10} weight="bold"/>:<CaretDownIcon size={10} weight="bold"/>}</button>
     {open&&<div style={{marginTop:8}}>
-      {data.segs.map((s,i)=>{ const st=SM[s.stage]; const c=s.isReg?C.dn:(st?.c||C.t3); const durC=s.hours>=48?C.dn:s.hours>=24?C.amb:C.t2;
-        return <div key={i} style={{display:"flex",gap:10,alignItems:"stretch"}}>
+      {data.bloques.map((b,i)=>{ const st=SM[b.stage]; const c=b.isReg?C.dn:(st?.c||C.t3); const durC=tono(b.hours); const ultimo=i===data.bloques.length-1;
+        const varios=b.pasos.length>1, solo=b.pasos[0], quien=nombreDe(b.by);
+        // cómo llegó: quién la capturó, la pasó o la regresó (de ese tiempo responde quien dice el nombre de la etapa)
+        const llego=b.inicial?"Capturada "+fDT(b.at)+(quien?" · "+quien:""):b.isReg?"Regresó "+fDT(b.at)+(quien?" · la regresó "+quien:""):"Entró "+fDT(b.at)+(quien?" · la pasó "+quien:"");
+        return <div key={i} data-etapa={b.stage} style={{display:"flex",gap:10,alignItems:"stretch"}}>
           <div style={{display:"flex",flexDirection:"column",alignItems:"center",flexShrink:0,paddingTop:3}}>
-            <div style={{width:10,height:10,borderRadius:"50%",background:c,flexShrink:0,boxShadow:s.current?"0 0 0 3px "+c+"22":"none"}}/>
-            {i<data.segs.length-1&&<div style={{width:2,flex:1,minHeight:16,background:C.bd,marginTop:2}}/>}
+            <div style={{width:10,height:10,borderRadius:"50%",background:c,flexShrink:0,boxShadow:b.current?"0 0 0 3px "+c+"22":"none"}}/>
+            {!ultimo&&<div style={{width:2,flex:1,minHeight:16,background:C.bd,marginTop:2}}/>}
           </div>
-          <div style={{flex:1,minWidth:0,paddingBottom:i<data.segs.length-1?10:0}}>
+          <div style={{flex:1,minWidth:0,paddingBottom:ultimo?0:10}}>
             <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-              {s.isReg&&<span title="Regresión (retrocedió de etapa)" style={{display:"inline-flex"}}><ArrowUUpLeftIcon size={11} weight="bold" color={C.dnInk}/></span>}
-              <span style={{fontSize:12,fontWeight:700,color:tintaAA(c,4.6)}}><StageLbl stage={s.stage}/></span>
-              {!s.endpoint&&<span style={{fontSize:11,fontWeight:700,color:tintaAA(durC),background:durC+"14",padding:"1px 7px",borderRadius:5}}>{s.current?"en curso · ":""}{fmtDur(s.hours)}{s.current&&snoozeActive(o)?" · en espera":""}</span>}
+              {b.isReg&&<span title="Regresión (retrocedió de etapa)" style={{display:"inline-flex"}}><ArrowUUpLeftIcon size={11} weight="bold" color={C.dnInk}/></span>}
+              <span style={{fontSize:12,fontWeight:700,color:tintaAA(c,4.6)}}><StageLbl stage={b.stage}/>{b.responsable?<span style={{fontSize:11,fontWeight:600,color:C.tx}}> · {b.responsable}</span>:null}</span>
+              {b.vez>1&&<span style={{fontSize:10,fontWeight:600,color:C.t2}}>{b.vez}.ª vez</span>}
+              {!b.endpoint&&<span style={{marginLeft:"auto",fontSize:11,fontWeight:700,color:tintaAA(durC),background:durC+"14",padding:"1px 7px",borderRadius:5,whiteSpace:"nowrap"}}>{b.current?"en curso · ":""}<span style={cifra}>{duracion(b.hours)}</span>{b.current&&snoozeActive(o)?" · en espera":""}</span>}
             </div>
-            <div style={{fontSize:10,color:C.t2,marginTop:2}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{fDT(s.at)}{s.by?" · "+(AUTHOR_NAME[s.by]||s.by):""}{s.current?" · aquí ahora":(s.endpoint?" · fin":"")}</div>
+            {b.endpoint&&<div style={{fontSize:10,color:C.t2,marginTop:2}}>{fDT(b.at)}{quien?" · "+quien:""} · fin</div>}
+            {!b.endpoint&&!varios&&<div style={{fontSize:10,color:C.t2,marginTop:2,overflowWrap:"anywhere"}}>{solo.maquina?<><span style={{fontWeight:600,color:C.tx}}>{solo.maquina}</span>{solo.turno?" · turno "+solo.turno:""} · </>:null}{llego}{b.current?" · aquí ahora":""}</div>}
+            {b.razon&&<div style={{fontSize:11,color:C.tx,marginTop:2,overflowWrap:"anywhere"}}>Razón: {b.razon}</div>}
+            {b.validaciones&&<div style={rejilla}>{b.validaciones.map((v,n)=>renglon(n,v.quien,v.hours,
+              v.falta?<span style={{color:C.wnInk,fontWeight:600}}><HourglassIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>falta validar</span>
+              :v.at?"validó "+fDT(v.at)+(v.por?" · por "+v.por:"")
+              :v.sinHora?"validó · la bitácora no guardó la hora"
+              :"no validó"+(v.pasoPor?" · la pasó "+v.pasoPor:""),v.ultima))}</div>}
+            {varios&&<div style={rejilla}>{b.pasos.map((p,n)=>renglon(n,p.etiqueta,p.hours,
+              fDT(p.at)+(n===0?(quien?(b.isReg?" · la regresó ":" · la pasó ")+quien:""):(nombreDe(p.by)?" · "+nombreDe(p.by):""))+(p.turno?" · turno "+p.turno:"")+(p.current?" · aquí ahora":"")))}</div>}
           </div>
         </div>;
       })}
-      <div style={{fontSize:10,color:C.t2,marginTop:4,fontStyle:"italic"}}>Tiempo hábil (sin fines de semana ni pausas "En espera")</div>
+      <div style={{fontSize:10,color:C.t2,marginTop:8,fontStyle:"italic",lineHeight:1.45}}>Horas de jornada: lunes a viernes de 9:00 a 14:00 y de 15:00 a 19:30, sin pausas «En espera». «1d» son {HORAS_DE_UN_DIA} horas. En Validar, cada quien cuenta desde que la orden entró.</div>
     </div>}
   </div>;
 }
@@ -21842,7 +21846,7 @@ export default function PrintFlow() {
           const tlColor = skipCtp ? C.live : C.dsn;
           const { count, error:afErr } = await supabase.from("orders").update({ stage: targetStage }, { count: "exact" }).eq("id", o.id).eq("stage", "draft");
           if (afErr || count === 0) return; // error or already fixed by another tab/session
-          await db.addTimeline(o.id, tlMsg, user || "sistema", tlColor);
+          await db.addTimeline(o.id, tlMsg, user || "sistema", tlColor, targetStage);   // v10.84.175 — con su etapa: sin ella «Tiempo por etapa» la seguía contando en Validar (P-0430)
           setOrders(p => p.map(x => x.id === o.id && x.stage === "draft" ? { ...x, stage: targetStage } : x));
           if (skipCtp) {
             try { await db.notify("produccion", o.id, "auto_skip_ctp", "♻️ Orden lista (placa ya existe) — saltó CTP", null, user || "sistema"); } catch(e) { console.error("[auto-skip notify]", e); }
@@ -24171,13 +24175,16 @@ export default function PrintFlow() {
       if(o)setClientHistory(o.client)
     }
     if(action==="flow"){const o=orders.find(x=>x.id===id);if(o)setFlowDiagram({stage:o.stage,type:o.order_type})}
+    // v10.84.175 — validar es UNA VEZ, lo diga o no la pantalla (Marcelo, 4-nov: «diseño aparece varias veces»; 41 órdenes en 120 días con «✅ Validada» y «Ambos validaron» escritos dos veces, de 1 a 45 s
+    //   después, por la misma persona: P-0712, P-0705, P-0669). Una recarga que salió antes de guardar devuelve la orden sin validar y el botón regresa; el segundo clic escribía todo otra vez y
+    //   ponía la etapa sin mirar en cuál iba. El UPDATE lleva sus condiciones (sigue en Validar y sin esa validación); si no toca nada, ya estaba: no se anota nada y se recarga.
     if(action==="validate_prod"){const o=orders.find(x=>x.id===id);
       // 🔒 v10.12.0.3 Phase 2 — Hardstop: solo admin/produccion validan producción
       if(o&&!canExecuteAction("validate_prod",o,user,userLogin)){showToast(actionDeniedToast("validate_prod",o,user,userLogin),"error");return}
       // v10.58.43 #16: "placa existente → saltar CTP" (v10.15.0) nunca se aplicaba en el
       // flujo normal — solo el auto-fix lo hacía. Al validar ambos, placa existente va
       // directo a Lista (ready); 41/41 órdenes verificadas iban a Diseño y se arrastraban a mano.
-      setActionLoading(id);(async()=>{try{const vTarget=o?.plate_status==="existing"?"ready":"design";const vTlMsg=vTarget==="ready"?"📝 → ⏩ Ambos validaron → Lista (placa existente, salta CTP)":"📝 → 🎨 Ambos validaron → Diseño";setOrders(p=>p.map(x=>{if(x.id!==id)return x;const u={...x,validated_by_production:true,timeline:addTL(x,"✅ Validada por Producción")};if(x.validated_by_preprensa){u.stage=vTarget;u.timeline=addTL(u,vTlMsg,{to:vTarget})}return u}));const {error:vpErr}=await supabase.from("orders").update({validated_by_production:true,...(o?.validated_by_preprensa?{stage:vTarget}:{})}).eq("id",id);if(vpErr)throw new Error(vpErr.message);await db.addTimeline(id,"✅ Validada por Producción",user,C.ok);if(o?.validated_by_preprensa)await db.addTimeline(id,vTlMsg,user,C.dsn,vTarget);await db.notifySecs(id,"validation","✅ Producción validó la orden de "+(o?.client||"")+" — "+(o?.product_type||""),null,user,o?.created_by);showToast("✅ Orden validada por Producción")}catch(e){console.error("[validate_prod] Error:",e);showToast("❌ No se pudo validar: "+(e?.message||"error desconocido"),"error");reload()}finally{setActionLoading(null)}})()
+      setActionLoading(id);(async()=>{try{const vTarget=o?.plate_status==="existing"?"ready":"design";const vTlMsg=vTarget==="ready"?"📝 → ⏩ Ambos validaron → Lista (placa existente, salta CTP)":"📝 → 🎨 Ambos validaron → Diseño";setOrders(p=>p.map(x=>{if(x.id!==id)return x;const u={...x,validated_by_production:true,timeline:addTL(x,"✅ Validada por Producción")};if(x.validated_by_preprensa){u.stage=vTarget;u.timeline=addTL(u,vTlMsg,{to:vTarget})}return u}));const {data:vpFilas,error:vpErr}=await supabase.from("orders").update({validated_by_production:true,...(o?.validated_by_preprensa?{stage:vTarget}:{})}).eq("id",id).eq("stage","draft").not("validated_by_production","is",true).select("id");if(vpErr)throw new Error(vpErr.message);if(!vpFilas?.length){showToast("Esta orden ya estaba validada por Producción","info");reload();return}await db.addTimeline(id,"✅ Validada por Producción",user,C.ok);if(o?.validated_by_preprensa)await db.addTimeline(id,vTlMsg,user,C.dsn,vTarget);await db.notifySecs(id,"validation","✅ Producción validó la orden de "+(o?.client||"")+" — "+(o?.product_type||""),null,user,o?.created_by);showToast("✅ Orden validada por Producción")}catch(e){console.error("[validate_prod] Error:",e);showToast("❌ No se pudo validar: "+(e?.message||"error desconocido"),"error");reload()}finally{setActionLoading(null)}})()
     }
     if(action==="validate_pre"){const o=orders.find(x=>x.id===id);
       // 🔒 v10.12.0.3 Phase 2 — Hardstop: solo admin/preprensa validan pre-prensa
@@ -24193,8 +24200,9 @@ export default function PrintFlow() {
       const vTlMsg=vTarget==="ready"?"📝 → ⏩ Ambos validaron → Lista (placa existente, salta CTP)":"📝 → 🎨 Ambos validaron → Diseño";
       setOrders(p=>p.map(x=>{if(x.id!==id)return x;const u={...x,validated_by_preprensa:true,timeline:addTL(x,"✅ Validada por Pre-prensa")};if(calcDate){u.due_date=calcDate;u.delivery_calculated_at=calcAt;u.timeline=addTL(u,"⏱️ Tiempo de entrega arrancó · "+fD(calcDate))}if(x.validated_by_production){u.stage=vTarget;u.timeline=addTL(u,vTlMsg,{to:vTarget})}return u}));
       const dbUpd={validated_by_preprensa:true,...(o?.validated_by_production?{stage:vTarget}:{}),...(calcDate?{due_date:calcDate,delivery_calculated_at:calcAt}:{})};
-      const {error:vpreErr}=await supabase.from("orders").update(dbUpd).eq("id",id);
+      const {data:vpreFilas,error:vpreErr}=await supabase.from("orders").update(dbUpd).eq("id",id).eq("stage","draft").not("validated_by_preprensa","is",true).select("id");
       if(vpreErr)throw new Error(vpreErr.message);
+      if(!vpreFilas?.length){showToast("Esta orden ya estaba validada por Pre-prensa","info");reload();return}
       await db.addTimeline(id,"✅ Validada por Pre-prensa",user,C.dsn);
       if(calcDate){
         const method=o?.web_print_method||"offset";
