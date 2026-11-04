@@ -48,6 +48,14 @@ horas» eran noches.
 
 **Para Marcelo.** La jornada es lo medido: si el horario es otro, es un renglón (`JORNADA_TRAMOS`). Germán marca CTP y Procesadora de golpe: para medir esas máquinas tendría que marcarlas cuando pasa.
 
+**En producción.** 4-nov ~15:18, READY `dpl_F8suowzZRQunY3k5WsKLkzS9bYHd`, commit `66d726d`. Candado 2888 de 2888 (68 nuevas), de a 4, 1379 s, sin regresiones, con una inestable de la red (tab-40, `ERR_NETWORK_CHANGED`: Windows desconectó y reconectó la red a las 15:02:31; revisada). Revisado en producción sin escribir: `recorrido`
+contra produccion.sygma.mx, 8 roles y 99 pasos, nada truena; el panel con órdenes vivas (P-0736, P-0716, P-0705, P-0725 y P-0726, con las cifras de P-0726 iguales a las hechas a mano). **Vuelta 3**, sobre los arreglos y sólo leyendo: el barrido con la cuenta final (1,126 órdenes, ninguna terminada abierta ni negativa) y el PostgREST de verdad con la
+condición nueva, por GET (P-0736, sin Noemí: la encuentra; con Gerardo validado: `[]`; una que ya avanzó: `[]`). Dejó dos cosas chicas, en v10.84.176.
+
+**Vuelta atrás.** `git revert --no-edit 66d726d` y subir (ensayada en un worktree: deja todo como 999b973, el código de la 174), o promover `dpl_JBHLcBRmy9ETCNwKCeWKmEjPwofJ` (el código de la 174). La base no cambió.
+
+**Sin probar.** En un teléfono de verdad; en el banco, el panel a 300 px. El doble clic en producción: se reprodujo con la app real y la base simulada, y las condiciones se leyeron en el PostgREST de verdad sin escribir.
+
 ## v10.84.174 — Dirección corrige lo que falta de una orden por partes (P-0430) — 3-nov-2026
 
 **Qué pasaba.** Marcelo, 3-nov: «en printflow en el archivo no me deja editar el precio». P-0430 (JOSE DE JESUS RODRIGUEZ PORRAS, ETIQUETA STEVE MADDEN, 120,000 pzas) está entregada y
