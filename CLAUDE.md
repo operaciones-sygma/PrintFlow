@@ -130,7 +130,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2888 pruebas, ~23 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2895 pruebas, ~23 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Las tandas con banco van de a 7 a la vez (`PROBAR_PARALELO`; con 11 juntas,
@@ -219,9 +219,12 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.175 (4-nov, ~15:18, READY `dpl_F8suowzZRQunY3k5WsKLkzS9bYHd`, commit `66d726d`; vuelta atrás: `git revert --no-edit 66d726d` y subir (ensayada en un worktree: deja todo como 999b973, el código de la 174), o promover
+- **LIVE:** v10.84.176 (4-nov, ~16:54, READY `dpl_2XmLaLtyRTNVJjKQAdh3YZeSqQib`, commit `e9fe843`; vuelta atrás: `git revert --no-edit e9fe843` y subir (ensayada en un worktree: deja todo como e5eb151, el código de la 175), o promover
+  `dpl_At55dWMHayc8SJ3XsK6kgXfJo6i2` (el código de la 175); la base no cambió; candado 2895 de 2895 (7 nuevas), de a 4, 1366 s, a la primera y sin inestables; revisado en producción sin escribir: el panel con 3 órdenes vivas). 🔑 **«Tiempo por etapa» sólo cuenta el horario de trabajo** (Marcelo, 4-nov: «de 9 a 2, 1 hora de
+  descanso y de 3 a 7»; `JORNADA_TRAMOS`) y lo dice arriba de los tiempos, con el horario sacado de los tramos (`HORARIO_EN_PALABRAS`). Los festivos cuentan como día normal: la app no tiene calendario. Al abrirlo se ve, y las maquilas no enseñan validaciones.
+  v10.84.175 (4-nov, ~15:18, READY `dpl_F8suowzZRQunY3k5WsKLkzS9bYHd`, commit `66d726d`; vuelta atrás: `git revert --no-edit 66d726d` y subir (ensayada en un worktree: deja todo como 999b973, el código de la 174), o promover
   `dpl_JBHLcBRmy9ETCNwKCeWKmEjPwofJ` (el código de la 174); la base no cambió; candado 2888 de 2888 (68 nuevas), de a 4, 1379 s, sin regresiones, con una inestable de la red (tab-40, revisada); revisado en producción sin escribir: recorrido de 8 roles, nada truena, y el panel con 5 órdenes vivas). 🔑 **«Tiempo por etapa» dice
-  quién tardó** (Marcelo, 4-nov: «no sé quién tardó, Gerardo o Noemí» y «diseño o CTP aparece varias veces»): la cuenta en `src/lib/tiempoPorEtapa.js`, en **horas de jornada** (`JORNADA_TRAMOS`, medida de la bitácora; sólo este panel: «estancada» y lo demás siguen con 24 h de lunes a viernes); Noemí y Gerardo en Validar, cada etapa con
+  quién tardó** (Marcelo, 4-nov: «no sé quién tardó, Gerardo o Noemí» y «diseño o CTP aparece varias veces»): la cuenta en `src/lib/tiempoPorEtapa.js`, en **horas de jornada** (`JORNADA_TRAMOS`; sólo este panel: «estancada» y lo demás siguen con 24 h de lunes a viernes); Noemí y Gerardo en Validar, cada etapa con
   sus pasos (cada máquina, «En fila», CTP y Procesadora) y con quien responde, la razón de lo que regresó, lo terminado cerrado. 🔑 **Validar es UNA vez**: el UPDATE lleva sus condiciones (una recarga vieja regresaba el botón y el segundo clic escribía «Ambos validaron» otra vez: 41 órdenes). Tanda `tiempos`.
   v10.84.174 (3-nov, ~19:27, READY `dpl_4QaTmy1oT6jPRNWkoVFaoPctMAbj`, commit `8cd9c95`; vuelta atrás: `git revert --no-edit 8cd9c95` (se detiene en `CHANGELOG.md`: `git checkout --ours CHANGELOG.md && git add CHANGELOG.md && git revert --continue`) y subir (ensayada en un
   worktree: deja `src`, `scripts` y `tests` como 681f0f6, el código de la 173); la base no cambió. 🔥 Subió SIN el candado, a pedido de Marcelo («hagámoslo y después corremos el candado, es que urge»): antes, build, alcance, bancos, 810 de 810 en las tandas de

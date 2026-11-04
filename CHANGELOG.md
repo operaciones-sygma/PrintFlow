@@ -33,6 +33,12 @@ con el arreglo pasa, sin él cae, `{"boton":true,"etapa":false,"noemi":false,"ge
 
 **Sin descontar.** Los días festivos cuentan como día normal: la app no tiene calendario de festivos, y el texto no promete lo contrario.
 
+**En producción.** 4-nov ~16:54, READY `dpl_2XmLaLtyRTNVJjKQAdh3YZeSqQib`, commit `e9fe843`. Candado 2895 de 2895 (7 nuevas), de a 4, 1366 s, a la primera, sin regresiones ni inestables. Revisado en producción sin escribir: el panel con órdenes vivas (P-0736, P-0705 y P-0726): el texto arriba, y P-0726 con «En fila 54m», como a mano. El recorrido de toda la app no se repitió: el de la 175, de esa misma tarde, dio nada truena, y esta versión sólo toca el panel.
+
+**Vuelta atrás.** `git revert --no-edit e9fe843` y subir (ensayada en un worktree: deja todo como e5eb151, el código de la 175), o promover `dpl_At55dWMHayc8SJ3XsK6kgXfJo6i2` (el código de la 175). La base no cambió.
+
+**Sin probar.** En un teléfono de verdad; en el banco, el panel a 300 px.
+
 ## v10.84.175 — «Tiempo por etapa»: quién tardó en Validar, cada etapa con sus pasos, y horas de jornada — 4-nov-2026
 
 **Qué pasaba.** Marcelo, 4-nov: «la etapa de validación tiene 2, Noemí y Gerardo, veo que tardan horas en aprobarla, pero no sé quién tardó» y «en algunas órdenes se repite el proceso varias
