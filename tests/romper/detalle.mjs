@@ -1457,6 +1457,65 @@ await caso("det-225-el-aviso-se-lee", "caso=ocfoliocancelado&rol=karla", async p
   ok("det-225-el-aviso-se-lee", hay && malos.length === 0, !hay ? "no hay aviso que medir" : malos.length ? "sin AA: " + malos.slice(0, 6).join(" | ") : "se lee");
 });
 
+// v10.84.174 — «en printflow en el archivo no me deja editar el precio» (Marcelo, 3-nov, P-0430): a la orden entregada y por partes, Dirección no le veía ni «Editar» ni «Corregir
+//   precio», y la base dice «La corrige Dirección». Ahora «Corregir precio» en «Más», con lo que falta; sólo Dirección y sólo si falta algo. Vuelta 1: contra v10.84.172.
+await caso("det-226-direccion-corrige-lo-que-falta", "caso=resto&rol=admin", async p => {
+  const hay = await enMas(p, /Corregir precio/);
+  const t = hay ? (await p.getByRole("menuitem", { name: /Corregir precio/ }).innerText()).replace(/\s+/g, " ") : "";
+  let despacha = false, encima = false;
+  if (hay) { await p.getByRole("menuitem", { name: /Corregir precio/ }).click(); await espera(p, 300); const l = await log(p); despacha = /accion:corregir_precio/.test(l); encima = !/cerrado/.test(l) && (await cuantosDialogos(p)) === 2; }
+  ok("det-226-direccion-corrige-lo-que-falta", hay && /Faltan \$11,811\.43 por facturar/.test(t) && /no se toca/.test(t) && despacha && encima,
+    hay ? "«" + t + "»" + (despacha ? (encima ? " · encima del detalle" : " · y el detalle SE CIERRA") : " · no hace nada") : "«Corregir precio» NO está");
+});
+await caso("det-227-tambien-antes-de-entregar", "caso=resto&rol=admin&etapa=salidas", async p => {
+  const hay = await enMas(p, /Corregir precio/);
+  ok("det-227-tambien-antes-de-entregar", hay, `en Salidas con lo que falta: «Corregir precio» ${hay ? "está" : "NO está"}`);
+});
+for (const [rol, nombre] of [["karla", "karla"], ["secretaria", "lupita"], ["vendedor", "el-vendedor"], ["produccion", "produccion"], ["visor", "el-visor"]])
+  await caso("det-228-" + nombre + "-no-corrige-lo-que-falta", "caso=resto&rol=" + rol, async p => {
+    const hay = await enMas(p, /Corregir precio/);
+    ok("det-228-" + nombre + "-no-corrige-lo-que-falta", !hay, `${rol}: «Corregir precio» ${hay ? "SÍ está (por tabla la base se lo rechaza)" : "no está"}`);
+  });
+await caso("det-229-sin-nada-por-facturar-no-hay-que-corregir", "caso=partes&rol=admin", async p => {
+  const hay = await enMas(p, /Corregir precio/);
+  ok("det-229-sin-nada-por-facturar-no-hay-que-corregir", !hay, `todas sus partes con folio: «Corregir precio» ${hay ? "SÍ está (no hay un resto que absorba el cambio)" : "no está"}`);
+});
+await caso("det-230-sigue-sin-editar-por-la-forma", "caso=resto&rol=admin", async p => {
+  // la forma de la orden no se abre: cambia mucho más que el precio, y una entregada y partida ya tiene documentos
+  ok("det-230-sigue-sin-editar-por-la-forma", (await p.getByRole("button", { name: /^Editar$/ }).count()) === 0, "«Editar» en la entregada y por partes");
+});
+// v10.84.174 — «es que está en archivo, ¿la regreso a salidas?» (Marcelo, 3-nov): «Facturar siguiente parte» vivía sólo en la ficha y en la cola de Karla, y el Archivo abre el detalle, sin ficha.
+for (const [rol, nombre] of [["admin", "direccion"], ["karla", "karla"]])
+  await caso("det-231-" + nombre + "-factura-lo-que-falta-desde-el-detalle", "caso=resto&rol=" + rol, async p => {
+    const hay = await enMas(p, /Facturar siguiente parte/);
+    const t = hay ? (await p.getByRole("menuitem", { name: /Facturar siguiente parte/ }).innerText()).replace(/\s+/g, " ") : "";
+    let despacha = false, encima = false;
+    if (hay) { await p.getByRole("menuitem", { name: /Facturar siguiente parte/ }).click(); await espera(p, 300); const l = await log(p); despacha = /accion:facturar_siguiente_parte/.test(l); encima = !/cerrado/.test(l) && (await cuantosDialogos(p)) === 2; }
+    ok("det-231-" + nombre + "-factura-lo-que-falta-desde-el-detalle", hay && /Faltan \$11,811\.43 por facturar/.test(t) && despacha && encima,
+      hay ? "«" + t + "»" + (despacha ? (encima ? " · encima del detalle" : " · y el detalle SE CIERRA") : " · no hace nada") : "«Facturar siguiente parte» NO está");
+  });
+for (const [rol, nombre] of [["secretaria", "lupita"], ["vendedor", "el-vendedor"], ["produccion", "produccion"], ["visor", "el-visor"]])
+  await caso("det-232-" + nombre + "-no-factura-lo-que-falta", "caso=resto&rol=" + rol, async p => {
+    const hay = await enMas(p, /Facturar siguiente parte/);
+    ok("det-232-" + nombre + "-no-factura-lo-que-falta", !hay, `${rol}: «Facturar siguiente parte» ${hay ? "SÍ está (la base sólo deja a Dirección y Karla)" : "no está"}`);
+  });
+await caso("det-233-sin-nada-por-facturar-no-se-ofrece", "caso=partes&rol=karla", async p => {
+  const hay = await enMas(p, /Facturar siguiente parte/);
+  ok("det-233-sin-nada-por-facturar-no-se-ofrece", !hay, `todas sus partes con folio: «Facturar siguiente parte» ${hay ? "SÍ está" : "no está"}`);
+});
+await caso("det-234-cancelada-no-se-ofrece", "caso=resto&rol=karla&etapa=cancelled", async p => {
+  const hay = await enMas(p, /Facturar siguiente parte/);
+  ok("det-234-cancelada-no-se-ofrece", !hay, `cancelada: «Facturar siguiente parte» ${hay ? "SÍ está (la base la rechaza)" : "no está"}`);
+});
+await caso("det-235-dice-donde-a-quien-puede", "caso=resto&rol=karla", async p => {
+  const t = await textoDlg(p);
+  ok("det-235-dice-donde-a-quien-puede", /Se factura con Facturar siguiente parte, en «Más»/.test(t), t.match(/Facturado.{0,160}/)?.[0] || "(no dice «Facturado»)");
+});
+await caso("det-236-no-se-lo-dice-a-quien-no-puede", "caso=resto&rol=secretaria", async p => {
+  const t = await textoDlg(p);
+  ok("det-236-no-se-lo-dice-a-quien-no-puede", /Se factura con Facturar siguiente parte\./.test(t) && !/en «Más»/.test(t), t.match(/Facturado.{0,160}/)?.[0] || "(no dice «Facturado»)");
+});
+
 await browser.close();
 for (const r of res) console.log(r);
 const fallan = res.filter(r => r.startsWith("FALLA")).length;

@@ -60,6 +60,12 @@ const FOLIADA = Q.get("foliada") || "", GUARDA = Q.get("guarda") || "";
 const ORDEN_F = { id: "o2", production_number: "P-0648", client: "GRUPO VISION", client_id: "c2", product_type: "Lonas", product: "Lonas impresas", quantity: 40,
   price: FOLIADA === "sinprecio" ? null : 40000, maq_price: null, order_type: "normal", stage: "in_production", source: "admin", created_by: "secretaria",
   invoice_folio: "F-181", invoice_type: "factura", invoice_pre_assigned: true, payment_status: "unpaid" };
+// v10.84.174 — resto=1|falla: lo que falta de una orden por partes (P-0430 como estaba en la base el 3-nov: RS-12 por $10,000 y faltan $14,000 de 70,000 pzas), como lo abre Dirección.
+//   piezas=… (cuántas faltan) · nombre=… (el cliente) · falla: la base rechaza. window.__restoCambia() factura un pedazo con la ventana abierta y window.__restoSeAcaba() lo factura todo.
+const RESTO_Q = Q.get("resto") || "";
+const ORDEN_R = { id: "o3", production_number: "P-0430", client: Q.get("nombre") || "JOSE DE JESUS RODRIGUEZ PORRAS /", client_id: "c3", product_type: "ETIQUETA STEVE MADDEN", quantity: 120000,
+  price: 24000, maq_price: null, order_type: "normal", stage: "delivered", source: "admin", created_by: "secretaria", has_splits: true };
+const RESTO0 = { id: "s-resto", doc_type: "por_facturar", amount_portion: 14000, qty_portion: Number(Q.get("piezas") || 70000) };
 let revLlamadas = 0; const revisados = [];
 window.__revisar = () => revisados.slice();
 const revisarFoliada = async (id, precio) => { revLlamadas++; revisados.push(precio);
@@ -129,6 +135,8 @@ function Banco() {
   const [orden, setOrden] = useState(ORDER);            // v10.84.112 — el precio puede cambiar con la ventana abierta
   const [corrigiendo, setCorrigiendo] = useState(false);
   const [ordenF, setOrdenF] = useState(ORDEN_F), [foliadaAbierta, setFoliadaAbierta] = useState(false);   // v10.84.118
+  const [restoAbierta, setRestoAbierta] = useState(false), [restoV, setRestoV] = useState(RESTO0);   // v10.84.174
+  window.__restoCambia = () => setRestoV({ ...RESTO0, amount_portion: 7000, qty_portion: 35000 }); window.__restoSeAcaba = () => setRestoV(null);
   const [log, setLog] = useState([]);
   const L = t => setLog(l => [...l, t]);
   // (v10.84.70) lo que la base rechaza vuelve al diálogo como { error } (App ya no lo manda a un aviso que se borra)
@@ -143,6 +151,7 @@ function Banco() {
     <button id="abrir-ent" onClick={() => setM("ent")}>ent</button>
     <button id="abrir-precio" onClick={() => setM("precio")}>precio</button>
     <button id="abrir-foliada" onClick={() => setFoliadaAbierta(true)}>foliada</button>
+    <button id="abrir-resto" onClick={() => setRestoAbierta(true)}>resto</button>
     <pre id="log">{log.join("\\n")}</pre>
     {m === "inv" && <InvoiceModal key={"inv:" + (orden.order_type === "maquila" ? orden.maq_price : orden.price)} order={orden} onConfirm={confirma("inv")} onClose={() => { L("inv:cerrado"); setM(null); }}
       cargarCandidatas={cargarCandidatas} onLigar={ligar} onFacturarPorPartes={() => { L("inv:partes"); setM(null); }}
@@ -158,6 +167,10 @@ function Banco() {
       onGuardar={async (nuevo, motivo, visto) => { L("corregir:guardar " + nuevo + " " + motivo + " visto=" + JSON.stringify(visto === undefined ? null : visto)); await new Promise(r => setTimeout(r, 300));
         if (GUARDA === "rechazo") { L("corregir:rechazo"); return { error: "El importe de F-181 cambió mientras lo revisabas: ahora es $70,180.00. No se cambió nada." }; }
         setOrdenF(o => ({ ...o, price: nuevo })); setFoliadaAbierta(false); return null; }} />}
+    {restoAbierta && typeof CorregirPrecioModal !== "undefined" && <CorregirPrecioModal order={ORDEN_R} partes={true} resto={restoV} onClose={() => { L("corregir:cerrado"); setRestoAbierta(false); }}
+      onGuardar={async (nuevo, motivo, visto) => { L("corregir:guardar " + nuevo + " " + motivo + " visto=" + JSON.stringify(visto === undefined ? null : visto)); await new Promise(r => setTimeout(r, 300));
+        if (RESTO_Q === "falla") { L("corregir:rechazo"); return { error: "La base no aceptó el precio: sin conexión. No se cambió." }; }
+        setRestoAbierta(false); return null; }} />}
     {m === "pre" && <PreInvoiceModal order={ORDER} onConfirm={confirma("pre")} onClose={() => { L("pre:cerrado"); setM(null); }}
       cargarCandidatas={cargarCandidatas} onFacturarPorPartes={() => { L("pre:partes"); setM(null); }}
       ocDeLaOrden={EN_OC ? { id: "OC-0960", n: 4 } : null} onIrALaOC={id => { L("pre:oc " + id); setM(null); }} />}

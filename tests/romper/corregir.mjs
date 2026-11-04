@@ -15,6 +15,8 @@ const capturarPrecioEnLaBase = lib.capturarPrecioEnLaBase || (async () => ({ err
 // v10.84.118 — lo ya foliado sin timbrar, por la puerta de la base (CobranzaFlow v3.7.1010); si el módulo no lo trae, sus casos fallan
 const revisarPrecioFoliado = lib.revisarPrecioFoliado || (async () => ({ error: "el módulo no trae revisarPrecioFoliado" }));
 const corregirPrecioFoliado = lib.corregirPrecioFoliado || (async () => ({ error: "el módulo no trae corregirPrecioFoliado" }));
+// v10.84.174 — lo que falta de una orden por partes; si el módulo no lo trae, sus casos fallan
+const corregirRestoEnLaBase = lib.corregirRestoEnLaBase || (async () => ({ error: "el módulo no trae corregirRestoEnLaBase" }));
 import { extraer } from "../banco/extraer.mjs";
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -24,8 +26,9 @@ const decl = nombre => { const i = APP.findIndex(l => l.startsWith("const " + no
   if (i < 0) throw new Error("no encuentro " + nombre + " en App.jsx"); let e = i; while (!/;\s*$/.test(APP[e])) e++; return APP.slice(i, e + 1).join("\n"); };
 // (v10.84.118) foliadaParaCorregir, si el App.jsx la trae (contra v10.84.117 no: sus casos fallan sin tronar la tanda)
 const declOpcional = nombre => { try { return decl(nombre); } catch { return ""; } };
-const { puedeCorregirPrecio, errorEnPalabras, fmt } = new Function([decl("fmt"), decl("liquidadaConSaldoAFavor"), declOpcional("foliadaParaCorregir"), decl("puedeCorregirPrecio"), decl("errorEnPalabras"),
-  "return { puedeCorregirPrecio, errorEnPalabras, fmt };"].join("\n"))();
+// (v10.84.174) restoParaCorregir, si el App.jsx la trae (contra v10.84.172 no: nadie corrige lo que falta, y sus casos fallan sin tronar la tanda)
+const { puedeCorregirPrecio, errorEnPalabras, fmt, restoParaCorregir } = new Function([decl("fmt"), decl("liquidadaConSaldoAFavor"), decl("restoPorFacturar"), declOpcional("foliadaParaCorregir"), declOpcional("restoParaCorregir"), decl("puedeCorregirPrecio"), decl("errorEnPalabras"),
+  "return { puedeCorregirPrecio, errorEnPalabras, fmt, restoParaCorregir: typeof restoParaCorregir === 'function' ? restoParaCorregir : () => false };"].join("\n"))();
 
 // «Reimprimir» (cor-22 a cor-25): diagnoseOrder y el despertador VIVOS, con sus dependencias (extraer.mjs), en Node
 const { codigo: codDiag } = extraer(fs.readFileSync(path.join(RAIZ, "src", "App.jsx"), "utf8"), ["diagnoseOrder", "getWakeupItems"], { simulados: ["supabase"] });
@@ -301,6 +304,175 @@ try {
   pu = puerta(); rc = await corregirPrecioFoliado({ supabase: pu.supabase, orden: { ...F181, order_type: "maquila", maq_price: 12000 }, nuevo: 15000, motivo: MOTIVO,
     visto: { precio: 12000, folio: "F-181", importe: 13920 }, enPalabras: errorEnPalabras });
   ok("cor-48 una maquila: su columna es maq_price (el precio al cliente)", rc?.ok === true && rc.columna === "maq_price", JSON.stringify(rc));
+  // ── v10.84.174 — LO QUE FALTA DE UNA ORDEN POR PARTES (Marcelo, 3-nov: «en printflow en el archivo no me deja editar el precio»). P-0430 como estaba en la
+  //   base: entregada, RS-12 por $10,000 ya pagada y $14,000 por facturar (70,000 pzas), y «restan $12,600». Ni «Editar» ni «Corregir precio» se le ofrecían
+  //   a Dirección, y la base dice «La corrige Dirección». Vuelta 1: contra v10.84.172.
+  const RS12 = { id: "s-rs12", position: 1, doc_type: "remision", invoice_folio: "RS-12", qty_portion: 50000, amount_portion: 10000, cancelled_at: null };
+  const RESTO = { id: "s-resto", position: 2, doc_type: "por_facturar", invoice_folio: null, qty_portion: 70000, amount_portion: 14000, cancelled_at: null };
+  const P0430 = { id: "OP-MTM1AV3CCZW", production_number: "P-0430", client: "JOSE DE JESUS RODRIGUEZ PORRAS /", quantity: 120000, price: 24000, maq_price: null, order_type: "interna",
+    stage: "delivered", invoice_folio: null, grouped_invoice_folio: null, credit_applied_at: null, invoice_reason: "Dividida en 1 facturas (splits) · resto por facturar despues",
+    oc_invoice_group_id: null, has_splits: true, has_matrix_lines: false, fiscal_desconocido: false, created_by: "secretaria", source: "internal", return_covered_by_folio: null,
+    cancelled_at: null, splits: [RS12, RESTO] };
+  const reglaR = [
+    ["P-0430 entregada con lo que falta, Dirección", P0430, "admin", true],
+    ["todavía en Salidas, Dirección", { ...P0430, stage: "salidas" }, "admin", true],
+    ["una maquila entregada, Dirección", { ...P0430, stage: "maq_delivered", order_type: "maquila", maq_price: 24000 }, "admin", true],
+    ["P-0430, Karla (por tabla, la base se lo rechaza)", P0430, "karla", false],
+    ["P-0430, Lupita", P0430, "secretaria", false],
+    ["P-0430, el vendedor", P0430, "vendedor", false],
+    ["P-0430, producción", P0430, "produccion", false],
+    ["P-0430, visor", P0430, "visor", false],
+    ["sin nada por facturar: todas sus partes con folio", { ...P0430, splits: [RS12, { ...RESTO, doc_type: "remision", invoice_folio: "RS-13" }] }, "admin", false],
+    ["lo que faltaba ya se facturó (el resto, «Consumida»)", { ...P0430, splits: [RS12, { ...RESTO, cancelled_at: "2026-11-03T20:00:00Z", cancellation_reason: "Consumida: facturada completa como parte 3 (RS-69)" }] }, "admin", false],
+    ["con folio propio", { ...P0430, invoice_folio: "RS-70" }, "admin", false],
+    ["agrupada", { ...P0430, grouped_invoice_folio: "F-150" }, "admin", false],
+    ["en el plan matriz de su OC", { ...P0430, has_matrix_lines: true }, "admin", false],
+    ["en un grupo de OC", { ...P0430, oc_invoice_group_id: "g1" }, "admin", false],
+    ["con la duda de si va por partes (la lectura falló)", { ...P0430, fiscal_desconocido: true }, "admin", false],
+    ["pagada con saldo a favor", { ...P0430, credit_applied_at: "2026-10-01T10:00:00Z" }, "admin", false],
+    ["cancelada", { ...P0430, stage: "cancelled", cancelled_at: "2026-11-01T10:00:00Z" }, "admin", false],
+    ["un pedido web", { ...P0430, source: "web" }, "admin", false],
+    ["un re-trabajo cubierto por su folio", { ...P0430, return_covered_by_folio: "F-120" }, "admin", false],
+    ["entregada SIN partes (como antes: «Editar» de Dirección)", { ...P0430, has_splits: false, splits: [] }, "admin", false],
+  ];
+  let malR = [];
+  try { malR = reglaR.filter(([, o, rol, esperado]) => puedeCorregirPrecio(o, rol) !== esperado).map(([n]) => n); } catch (e) { malR = ["(tronó: " + e.message + ")"]; }
+  ok("res-01 «Corregir precio» en la orden por partes con algo por facturar: sólo Dirección, también entregada; no sin resto, con folio propio, agrupada, en plan o grupo de OC, en la duda, con saldo, cancelada, web ni re-trabajo",
+    malR.length === 0, malR.length ? "mal: " + malR.join(" · ") : "");
+  // la base de mentira de lo que falta: al escribir el precio, el disparador (sync_post_invoice_edit) mueve el resto en la misma transacción
+  function baseResto(cfg = {}) {
+    const fila = { ...P0430, ...(cfg.fila || {}) }, resto = { id: "s-resto", amount_portion: 14000, qty_portion: 70000, ...(cfg.resto || {}) };
+    const llamadas = []; let lecturasResto = 0;
+    const cumple = f => { const v = fila[f.col];
+      if (f.op === "eq") return v != null && (Number(v) === Number(f.val) || String(v) === String(f.val));
+      if (f.op === "is") return f.val === null ? v == null : v === f.val;
+      if (f.op === "notin") return !f.val.includes(String(v));
+      return true; };
+    const from = tabla => {
+      const q = { tabla, op: "select", filtros: [], conds: [], cols: null, cambios: null };
+      const contestar = () => {
+        llamadas.push({ ...q, filtros: [...q.filtros] });
+        if (q.op === "update") {
+          if (cfg.cambiaAntesDeEscribir) Object.assign(fila, cfg.cambiaAntesDeEscribir);
+          if (cfg.fallaGuardar) return { data: null, error: { message: cfg.fallaGuardar, code: "42501" } };
+          if (cfg.filtra) return { data: [], error: null };
+          if (!q.conds.every(cumple)) return { data: [], error: null };
+          const col = fila.order_type === "maquila" ? "maq_price" : "price", delta = Math.round(q.cambios[col] * 100) - Math.round(Number(fila[col]) * 100);
+          Object.assign(fila, q.cambios);
+          // restoNoSeMueve: el disparador se tragó un error (atrapa los suyos y sólo los anota); el precio igual cambió
+          if (!cfg.restoNoSeMueve) resto.amount_portion = (Math.round(resto.amount_portion * 100) + delta) / 100;
+          return { data: [Object.fromEntries(String(q.cols).split(",").map(c => [c, fila[c]]))], error: null };
+        }
+        if (tabla === "orders") {
+          if (cfg.fallaLeer) return { data: null, error: { message: "TypeError: Failed to fetch" } };
+          if (cfg.noEsta) return { data: null, error: null };
+          return { data: { ...fila }, error: null };
+        }
+        if (tabla === "order_invoice_splits") {
+          lecturasResto++;
+          if (cfg.fallaLeerResto === lecturasResto) return { data: null, error: { message: "upstream request timeout" } };
+          return { data: cfg.sinResto ? [] : [{ ...resto }], error: null };
+        }
+        if (cfg.fallaContar) return { data: null, count: null, error: { message: "upstream request timeout" } };
+        return { data: null, count: cfg.lineas || 0, error: null };
+      };
+      const b = {
+        select(cols) { q.cols = cols; return b; },
+        eq(c, v) { q.filtros.push(c + "=" + v); if (c !== "id" && tabla === "orders") q.conds.push({ op: "eq", col: c, val: v }); return b; },
+        is(c, v) { q.filtros.push(c + " is " + v); if (tabla === "orders") q.conds.push({ op: "is", col: c, val: v }); return b; },
+        not(c, op, v) { q.filtros.push(c + " not " + op + " " + v); if (op === "in") q.conds.push({ op: "notin", col: c, val: String(v).replace(/[()]/g, "").split(",") }); return b; },
+        update(c) { q.op = "update"; q.cambios = c; return b; },
+        maybeSingle() { return Promise.resolve(contestar()); },
+        then(bien, mal) { return Promise.resolve(contestar()).then(bien, mal); },
+      };
+      return b;
+    };
+    return { supabase: { from }, llamadas, fila, resto };
+  }
+  const MOTIVO_R = "Lo que falta se cobra a $0.18 la pieza";
+  const QUIEN_M = { last_edited_by: "admin", last_edited_by_uid: "uid-de-marcelo", last_edited_at: "2026-11-03T23:30:00.000Z" };
+  const corregirR = (br, { orden = P0430, nuevo = 12600, rol = "admin", motivo = MOTIVO_R } = {}) => { notas = []; avisos = [];
+    return corregirRestoEnLaBase({ supabase: br.supabase, orden, nuevo, motivo, anotar, avisar, rol, usuario: rol, ahora: () => ahora,
+      puede: vivo => puedeCorregirPrecio(vivo, rol), enPalabras: errorEnPalabras, quien: QUIEN_M, formato: fmt }); };
+  // 2-5. lo normal: el precio nuevo sale de lo que falta, con los dos leídos de la base
+  let br = baseResto(); let rr = await corregirR(br); let ur = updates(br);
+  ok("res-02 P-0430: lo que falta de $14,000 a $12,600 deja la orden en $22,600 (RS-12 no se mueve): escribe el precio en su columna, sólo esa orden y con quién, y el resto queda en $12,600",
+    !rr.error && ur.length === 1 && ur[0].tabla === "orders" && ur[0].cambios.price === 22600 && !("maq_price" in ur[0].cambios) && ur[0].cambios.last_edited_by === "admin"
+    && ur[0].cambios.last_edited_by_uid === "uid-de-marcelo" && !!ur[0].cambios.last_edited_at && ur[0].filtros.filter(f => f.startsWith("id=")).join() === "id=" + P0430.id
+    && br.fila.price === 22600 && br.resto.amount_portion === 12600 && rr.antes === 24000 && rr.precio === 22600 && rr.restoAntes === 14000 && rr.resto === 12600 && rr.restoId === "s-resto" && !rr.restoDistinto,
+    JSON.stringify({ rr, ur }));
+  ok("res-03 el UPDATE lleva sus condiciones (sin folio, agrupada, grupo de OC ni saldo, y el precio que se leyó) y SÍ deja la entregada: ése es el caso",
+    ur.length === 1 && ["invoice_folio is null", "grouped_invoice_folio is null", "oc_invoice_group_id is null", "credit_applied_at is null", "price=24000"].every(f => ur[0].filtros.includes(f))
+    && ur[0].filtros.some(f => /^stage not in .*cancelled/.test(f) && !/delivered/.test(f)), JSON.stringify(ur[0]?.filtros));
+  br = baseResto(); rr = await corregirR(br, { orden: { ...P0430, price: 39000, splits: [RS12, { ...RESTO, amount_portion: 29000 }] } });
+  ok("res-04 si la pantalla iba atrás ($39,000 y faltan $29,000), cuenta con lo que tiene la base: $22,600, y dice $24,000 y $14,000 como el antes",
+    !rr.error && br.fila.price === 22600 && br.resto.amount_portion === 12600 && rr.antes === 24000 && rr.restoAntes === 14000, JSON.stringify(rr));
+  br = baseResto({ fila: { order_type: "maquila", price: 9000, maq_price: 24000, stage: "maq_delivered" } }); rr = await corregirR(br, { orden: { ...P0430, order_type: "maquila", price: 9000, maq_price: 24000, stage: "maq_delivered" } }); ur = updates(br);
+  ok("res-05 una maquila: guarda maq_price (el precio al cliente) y no toca price", !rr.error && ur.length === 1 && ur[0].cambios.maq_price === 22600 && !("price" in ur[0].cambios) && br.fila.price === 9000 && rr.isMaq === true, JSON.stringify({ rr, ur }));
+  // (sabotaje: con $27,560 y $11,811.43 la cuenta de JavaScript da exacta de casualidad y la prueba no veía nada; con éstos da 22600.199999999993)
+  br = baseResto({ fila: { price: 24000.1 }, resto: { amount_portion: 14000.2 } }); rr = await corregirR(br, { nuevo: 12600.3 }); ur = updates(br);
+  ok("res-06 con centavos: $24,000.10 y faltan $14,000.20 → $12,600.30 da $22,600.20 exactos (sin el error de los decimales de JavaScript)",
+    !rr.error && ur[0]?.cambios.price === 22600.2 && rr.resto === 12600.3, JSON.stringify({ rr, cambios: ur[0]?.cambios }));
+  br = baseResto(); rr = await corregirR(br, { nuevo: 12600.004 });
+  ok("res-07 lo que falta con más de 2 decimales se redondea a centavos", !rr.error && br.fila.price === 22600 && rr.resto === 12600, JSON.stringify(rr));
+  // 8-12. sin leer no se cambia nada
+  br = baseResto({ fallaLeer: true }); rr = await corregirR(br);
+  ok("res-08 si no se pudo leer la orden (red), no escribe y lo dice en palabras", !!rr.error && /No se pudo leer/.test(rr.error) && /sin conexión/.test(rr.error) && !updates(br).length, rr.error);
+  br = baseResto({ noEsta: true }); rr = await corregirR(br);
+  ok("res-09 si la orden ya no está, no escribe y dice eso", !!rr.error && /ya no está/.test(rr.error) && !updates(br).length, rr.error);
+  br = baseResto({ fallaLeerResto: 1 }); rr = await corregirR(br);
+  ok("res-10 si no se pudo leer lo que falta, frena (una lectura que falla no es permiso) y dice que no se cambió", !!rr.error && /No se pudo/.test(rr.error) && /no se cambió/.test(rr.error) && !updates(br).length, rr.error);
+  br = baseResto({ fallaContar: true }); rr = await corregirR(br);
+  ok("res-11 si no se pudo revisar el plan matriz, frena", !!rr.error && /No se pudo/.test(rr.error) && !updates(br).length, rr.error);
+  br = baseResto({ lineas: 2 }); rr = await corregirR(br);
+  ok("res-12 si la base dice que está en el plan matriz de su OC, no escribe (ahí no hay un resto que absorba)", !!rr.error && /plan matriz/.test(rr.error) && !updates(br).length, rr.error);
+  // 13-16. cambió mientras se corregía
+  br = baseResto({ sinResto: true }); rr = await corregirR(br);
+  ok("res-13 si lo que faltaba ya se facturó mientras corregías, no cambia el precio y lo dice", !!rr.error && /ya no falta|ya se facturó/i.test(rr.error) && !updates(br).length && notas.length === 0 && avisos.length === 0, rr.error);
+  br = baseResto({ fila: { invoice_folio: "RS-70" } }); rr = await corregirR(br);
+  ok("res-14 si mientras corregías recibió folio propio, tampoco", !!rr.error && !updates(br).length, rr.error);
+  br = baseResto({ fila: { stage: "cancelled", cancelled_at: "2026-11-03T20:00:00Z" } }); rr = await corregirR(br);
+  ok("res-15 si mientras corregías se canceló, tampoco", !!rr.error && !updates(br).length, rr.error);
+  br = baseResto({ cambiaAntesDeEscribir: { price: 25000 } }); rr = await corregirR(br);
+  ok("res-16 si entre leer y escribir alguien le cambió el precio, no lo pisa, lo dice y no anota ni avisa", !!rr.error && /Mientras corregías/.test(rr.error) && br.fila.price === 25000 && notas.length === 0 && avisos.length === 0, JSON.stringify({ rr, notas, avisos }));
+  // 17-18. lo que la base contesta al guardar
+  br = baseResto({ fallaGuardar: "permission denied for table orders" }); rr = await corregirR(br);
+  ok("res-17 si la base rechaza el cambio, lo dice en palabras y que no se cambió", !!rr.error && /no tienes permiso/.test(rr.error) && /no se cambió/.test(rr.error) && notas.length === 0, rr.error);
+  br = baseResto({ filtra: true }); rr = await corregirR(br);
+  ok("res-18 si el permiso filtra el renglón (0 renglones y SIN error), NO dice que se corrigió", !!rr.error && br.fila.price === 24000 && notas.length === 0, JSON.stringify(rr));
+  // 19-22. lo que no debe llegar a la base
+  br = baseResto({ resto: { amount_portion: 12600 } }); rr = await corregirR(br);
+  ok("res-19 si ya faltan $12,600 (alguien lo corrigió mientras tanto), no escribe ni anota «$12,600 → $12,600»", !!rr.error && /12,600\.00/.test(rr.error) && !updates(br).length && notas.length === 0, rr.error);
+  const malosR = [];
+  for (const n of [0, -500, NaN, Infinity]) { br = baseResto(); rr = await corregirR(br, { nuevo: n }); malosR.push(!!rr.error && br.llamadas.length === 0); }
+  ok("res-20 lo que falta en 0, negativo o que no es número no llega a la base (ni la lee)", malosR.every(Boolean), JSON.stringify(malosR));
+  br = baseResto(); rr = await corregirR(br, { motivo: "ya está" });
+  ok("res-21 el porqué de menos de 8 letras no llega a la base", !!rr.error && br.llamadas.length === 0, JSON.stringify(rr));
+  br = baseResto(); rr = await corregirR(br, { rol: "karla" });
+  ok("res-22 Karla no corrige lo que falta (aunque llegue a la función; por tabla, la base se lo rechaza)", !!rr.error && !/Mientras corregías/.test(rr.error) && !updates(br).length, rr.error);
+  br = baseResto({ fila: { price: 5000 } }); rr = await corregirR(br);
+  ok("res-23 si el precio y lo que falta no cuadran (vale $5,000 y le faltan $14,000), no escribe: no hay de dónde sacar lo ya facturado", !!rr.error && /no cuadra/i.test(rr.error) && !updates(br).length, rr.error);
+  // 24-26. después de escribir: se relee lo que falta, porque el disparador atrapa sus errores
+  br = baseResto({ restoNoSeMueve: true }); rr = await corregirR(br);
+  ok("res-24 si el precio cambió y lo que falta no se movió, NO dice que quedó: lo marca con la cifra real (el precio ya cambió, no es un «no se cambió»)",
+    !rr.error && rr.restoDistinto === true && rr.resto === 14000 && rr.precio === 22600 && notas.length === 1 && /\$14,000\.00/.test(notas[0]) && /no en \$12,600\.00|se pidió \$12,600\.00/.test(notas[0]), JSON.stringify({ rr, notas }));
+  br = baseResto({ fallaLeerResto: 2 }); rr = await corregirR(br);
+  ok("res-25 si el precio cambió y no se pudo releer lo que falta, lo dice (sin confirmar), no un «listo»", !rr.error && rr.restoSinConfirmar === true && rr.precio === 22600, JSON.stringify(rr));
+  // 26-30. el porqué y los avisos
+  br = baseResto(); rr = await corregirR(br);
+  ok("res-26 el historial dice de cuánto a cuánto el precio y lo que falta, y por qué, una vez",
+    notas.length === 1 && notas[0].startsWith("💰 Precio corregido: $24,000.00 → $22,600.00 sin IVA") && /lo que falta: \$14,000\.00 → \$12,600\.00/.test(notas[0]) && notas[0].includes(MOTIVO_R) && rr.anotado === true, JSON.stringify(notas));
+  ok("res-27 avisa a quien capturó la orden (Lupita), con las cifras y el porqué una vez; Dirección corrige: no se avisa a sí misma",
+    avisos.length === 1 && avisos[0].startsWith("secretaria | ") && /P-0430/.test(avisos[0]) && /\$24,000\.00/.test(avisos[0]) && /\$22,600\.00/.test(avisos[0]) && /\$12,600\.00/.test(avisos[0]) && /sin IVA/.test(avisos[0])
+    && avisos[0].split(MOTIVO_R).length === 2 && rr.avisado === true && rr.avisados === 1, JSON.stringify({ avisos, rr }));
+  br = baseResto({ fila: { created_by: "admin" } }); rr = await corregirR(br, { orden: { ...P0430, created_by: "admin" } });
+  ok("res-28 si la capturó Dirección, nadie se avisa a sí mismo y el resultado no dice que avisó", !rr.error && avisos.length === 0 && rr.avisados === 0, JSON.stringify({ avisos, rr }));
+  fallaNota = true; br = baseResto(); rr = await corregirR(br); fallaNota = false;
+  ok("res-29 si no se pudo anotar en el historial, el precio sí quedó y lo dice (anotado: no)", !rr.error && br.fila.price === 22600 && rr.anotado === false, JSON.stringify(rr));
+  fallaAviso = true; br = baseResto(); rr = await corregirR(br); fallaAviso = false;
+  ok("res-30 si no se pudo avisar, el precio sí quedó y lo dice (avisado: no)", !rr.error && br.fila.price === 22600 && rr.avisado === false, JSON.stringify(rr));
+  ahora = new Date("2026-10-17T18:00:00Z"); br = baseResto(); rr = await corregirR(br); ahora = new Date("2026-10-15T17:00:00Z");
+  ok("res-31 fuera de horario se corrige igual y el resultado lo dice (el aviso no llega)", !rr.error && rr.fueraDeHorario === true, JSON.stringify(rr));
 } catch (e) {
   ok("cor-00 la prueba corrió sin tronar", false, e?.stack || e?.message || String(e));
 }

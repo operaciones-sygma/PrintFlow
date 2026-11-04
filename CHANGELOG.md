@@ -12,6 +12,37 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.174 — Dirección corrige lo que falta de una orden por partes (P-0430) — 3-nov-2026
+
+**Qué pasaba.** Marcelo, 3-nov: «en printflow en el archivo no me deja editar el precio». P-0430 (JOSE DE JESUS RODRIGUEZ PORRAS, ETIQUETA STEVE MADDEN, 120,000 pzas) está entregada y
+partida: RS-12 por $10,000, ya pagada, y $14,000 por facturar, de los que restaban $12,600. A una orden así `canEditAdmin` le quita «Editar» y `puedeCorregirPrecio` le quita «Corregir precio»,
+y la base (`_precio_al_final_clasificar`) dice «La corrige Dirección». Dirección no tenía salida en pantalla: se corrigió por la base (v10.84.172b, abajo).
+
+**Qué se cambió** (sólo la pantalla; la base no cambió).
+- **«Corregir precio» en «Más» del detalle** para la orden con algo por facturar, también entregada (`restoParaCorregir`): dice «Faltan $14,000.00 por facturar: cambia lo que falta; lo ya
+  facturado no se toca». 🔑 Sólo Dirección: por tabla, a Karla la base se lo rechaza (`guard_order_price_direct_write`). No con folio propio, agrupada, en el plan matriz, en un grupo de OC, en la
+  duda (`fiscal_desconocido`), con saldo a favor, cancelada, web ni re-trabajo; sin resto tampoco, porque no hay quién absorba el cambio.
+- **La ventana es la de siempre, con lo que falta** (`CorregirPrecioModal`, `partes` y `resto`): se captura lo que falta, y dice cuántas piezas son, en cuánto queda la orden y a cuánto sale la
+  pieza. Si lo que falta se factura con la ventana abierta, lo dice y no deja guardar (`resto` es el vivo).
+- **`corregirRestoEnLaBase`** (`src/lib/corregirPrecio.js`): relee la orden, lo que falta y el plan matriz; el precio nuevo es el de hoy más la diferencia de lo que falta, en centavos, con los dos
+  leídos de la base. Escribe el precio con sus condiciones y con quién, y `sync_post_invoice_edit` mueve el resto en la misma transacción. 🔥 Ese disparador atrapa sus errores: se relee lo que falta,
+  y si no quedó, se dice con la cifra real (el precio ya cambió). Anota el porqué y avisa a quien capturó la orden.
+- **«Facturar siguiente parte» también en «Más» del detalle**, para Dirección y Karla (Marcelo, 3-nov: «es que está en archivo, ¿la regreso a salidas?»): el botón vivía sólo en la ficha y en la cola de
+  Karla, y el Archivo abre el detalle, sin ficha. La ventana sale encima y el detalle se queda. El renglón «Avance» ya no manda «a la ficha».
+- **«Editar» sigue cerrado** en la entregada y por partes: la forma cambia mucho más que el precio, y esa orden ya tiene documentos.
+
+**Cómo se probó.** Vuelta 1, antes del arreglo: sin navegador fallaban 25 de las 31 `res-` (las 6 que pasaban son de «no escribe») y, contra `origin/main`, con navegador 20 de 33 (las 13 que pasaban son de «no
+se ofrece»). Vuelta 2, por donde no se diseñó: lo que falta se factura con la ventana abierta (un pedazo o todo), Esc y clic fuera con algo escrito, doble clic y Ctrl+Enter, el rechazo de la base, centavos,
+una pieza y clientes sin cortes, con acentos, de derecha a izquierda y con emoji, a 1366, 1920 y 683. Destapó `res-15` (la orden cancelada con la ventana abierta sólo la frenaba la condición del UPDATE) y
+un dato de `res-06` que no ejercía los decimales (lo vio el sabotaje). 32 sabotajes de `corregir`, todos caen. Tandas `corregir`, `detalle`, `folio`, `partes`, `hooks`, `sesion` y `sesion-2`: 810 de 810, con
+una inestable revisada (det-81, `ERR_NO_BUFFER_SPACE`; sola, 3 de 3). Con la app real (`tests/recorrido/corregir-foliada.mjs`, sin escribir): A a D como antes; E a H, los nuevos, desde el Archivo. Build,
+alcance y los 33 bancos generados sin nombres sin declarar. La escritura de verdad, como `authenticated` con la sesión de Marcelo y sus disparadores, es la de v10.84.172b.
+
+**Cómo subió.** 🔥 **Sin el candado completo, a pedido de Marcelo** (3-nov: «hagámoslo y después corremos el candado, es que urge»): lo anterior corrió antes de subir y la suite completa corre enseguida
+después. Su resultado va en el renglón LIVE de `CLAUDE.md`.
+
+**Para Marcelo.** ¿Karla también? Necesitaría una puerta en la base, como `corregir_precio_orden`; hoy sólo Dirección.
+
 ## v10.84.173 — La factura ligada del plan se ve ligada, y se desliga (no «se cancela») — 3-nov-2026
 
 **Qué pasaba.** En las capturas de Karla del 3-nov (OC-0966, Hotsson) las 11 facturas del plan no traían su etiqueta «LIGADA». `reload` lee
@@ -67,6 +98,19 @@ rol: 13 ligadas de 22 facturas del plan (un vendedor, 11 de 20: lo suyo). La bas
 
 **Vuelta atrás.** `git revert 875128c` y subir (ensayada en un worktree: deja `src`, `scripts` y `tests` como 256b343, el código de v10.84.172). Mientras sea el despliegue
 anterior, también promover `dpl_7sKLnMXz9jJJhTUG9dwTJk6S1Uzc` (el código de v10.84.172); el commit de estos documentos pone otro despliegue encima. La base no cambió.
+
+## v10.84.172b (datos) — P-0430: lo que falta, en $12,600 — 3-nov-2026
+
+**Qué pasaba.** WhatsApp, 3-nov ~17:57: de P-0430 (OC-0707) ya se remisionó una parte (RS-12, $10,000, 50,000 pzas, pagada) y «restan $12,600»; la orden decía $14,000. El cliente estaba esperando.
+
+**Qué se cambió** (18:14:51, con el OK escrito de Marcelo, firmado `admin`). `orders.price` de $24,000 a $22,600 por UPDATE con su sesión. `sync_post_invoice_edit` bajó lo que falta a $12,600, con sus
+70,000 pzas: $0.18 la pieza. Marcelo eligió esa lectura; $12,600 también salía con 63,000 pzas a $0.20. La OC-0707 quedó en $22,600 y la orden marcada «Editada tras facturar». RS-12 no se tocó. No se mandó
+aviso en la campana: Marcelo contestó por WhatsApp. No toca a Alpha: las remisiones no van allá.
+
+**Cómo se probó.** Ensayo con reversa como `authenticated`: la corrección como Marcelo y la remisión del resto como Karla (RS-69 por $12,600, sin IVA, cierra lo que falta), sin discrepancias nuevas. Al
+aplicar, un solo bloque con candados: lo que falta tenía que seguir en $14,000, y si no quedaba como en el ensayo se deshacía todo. Releído en otra consulta. Invariantes 91 de 91.
+
+**Vuelta atrás.** Mientras no salga la remisión, el mismo UPDATE de regreso a $24,000: el resto absorbe +$1,400. Ya emitida, se cancela la parte.
 
 ## v10.84.172 — Lo facturado en el plan de su OC se entrega (Hotsson, OC-0966) — 3-nov-2026
 

@@ -74,6 +74,63 @@ export async function corregirPrecioEnLaBase({ supabase, orden, nuevo, motivo = 
   }
   return { upd, antes, isMaq, precio, anotado, avisado, fueraDeHorario: !enHorarioDeAvisos(ahora()) };
 }
+// v10.84.174 — LO QUE FALTA DE UNA ORDEN POR PARTES (Marcelo, 3-nov: «en printflow en el archivo no me deja editar el precio»; P-0430: RS-12 ya pagada y «restan
+//   $12,600»). Sólo Dirección: por tabla, a Karla la base se lo rechaza (guard_order_price_direct_write). Lo ya facturado no se mueve, así que el precio nuevo de la
+//   orden sale de lo que falta, con los dos leídos de la base: precio de hoy + (lo que falta nuevo − lo que falta hoy). Se escribe el precio, con sus condiciones
+//   (también entregada: ése es el caso), y el disparador sync_post_invoice_edit mueve el resto en la misma transacción. Ese disparador atrapa sus errores, así que se
+//   relee lo que falta y se compara: si no quedó, se dice (`restoDistinto`, o `restoSinConfirmar` si no se pudo leer), porque el precio ya cambió. Devuelve { error } en
+//   palabras, o { upd, antes, isMaq, precio, restoId, restoAntes, resto, restoDistinto, restoSinConfirmar, anotado, avisado, avisados, fueraDeHorario }.
+const ETAPAS_SIN_CORREGIR_RESTO = "(cancelled,maq_cancelled,stocked,web_pending,web_rejected)";
+export async function corregirRestoEnLaBase({ supabase, orden, nuevo, motivo = "", anotar = null, avisar = null, puede, enPalabras = e => String(e?.message || e || "error"),
+  quien = {}, formato = n => "$" + Number(n).toFixed(2), rol = "", usuario = "", ahora = () => new Date() }) {
+  const nombre = orden?.production_number || "La orden";
+  const resto = Math.round(Number(nuevo) * 100) / 100;
+  const m = String(motivo || "").trim();
+  if (!orden?.id || !Number.isFinite(resto) || resto <= 0) return { error: "Lo que falta no es válido: no se cambió el precio." };
+  if (m.length < 8) return { error: "Escribe por qué cambia (8 letras o más): no se cambió el precio." };
+  if (!puede(orden)) return { error: nombre + ": lo que falta sólo lo corrige Dirección, y sólo si todavía hay algo por facturar." };
+  const { data: fr, error: fe } = await supabase.from("orders").select(COLUMNAS_PARA_CORREGIR).eq("id", orden.id).maybeSingle();
+  if (fe) return { error: "No se pudo leer la orden (" + enPalabras(fe) + "): no se cambió el precio. Reintenta." };
+  if (!fr) return { error: nombre + " ya no está en la base: no se cambió el precio." };
+  const vivo = { ...orden, ...fr };
+  if (!puede(vivo)) return { error: "Mientras corregías, " + nombre + " cambió (ya tiene folio, se agrupó, se canceló o se pagó con saldo a favor): no se cambió el precio." };
+  const leerResto = () => supabase.from("order_invoice_splits").select("id,amount_portion,qty_portion").eq("order_id", orden.id).eq("doc_type", "por_facturar").is("cancelled_at", null);
+  const [r1, r2] = await Promise.all([leerResto(), supabase.from("oc_invoice_split_lines").select("id", { count: "exact", head: true }).eq("order_id", orden.id).is("cancelled_at", null)]);
+  if (r1.error || r2.error) return { error: "No se pudo leer lo que falta por facturar (" + enPalabras(r1.error || r2.error) + "): no se cambió el precio. Reintenta." };
+  if ((r2.count || 0) > 0) return { error: nombre + " está en el plan matriz de su OC: ahí no hay un resto que absorba el cambio. No se cambió el precio." };
+  const fila = Array.isArray(r1.data) ? r1.data[0] : null;
+  if (!fila) return { error: "Mientras corregías, ya no falta nada por facturar de " + nombre + " (ya se facturó): no se cambió el precio." };
+  const isMaq = vivo.order_type === "maquila", col = isMaq ? "maq_price" : "price", antes = Number(vivo[col]) || 0, restoAntes = Number(fila.amount_portion) || 0;
+  if (Math.round(restoAntes * 100) === Math.round(resto * 100)) return { error: "Ya faltan " + formato(resto) + " por facturar de " + nombre + " (quizá alguien lo corrigió mientras tanto): no hay nada que cambiar." };
+  // lo ya facturado es lo que queda de quitarle al precio lo que falta: si sale negativo, el precio y las partes no cuadran y no hay de dónde partir
+  if (Math.round(antes * 100) < Math.round(restoAntes * 100)) return { error: nombre + " vale " + formato(antes) + " y le faltan " + formato(restoAntes) + ": no cuadra. No se cambió el precio; revisa sus partes." };
+  const precio = (Math.round(antes * 100) + Math.round(resto * 100) - Math.round(restoAntes * 100)) / 100;
+  const upd = { [col]: precio, ...quien };
+  const { data: g, error } = await supabase.from("orders").update(upd).eq("id", orden.id).is("invoice_folio", null).is("grouped_invoice_folio", null).is("oc_invoice_group_id", null)
+    .is("credit_applied_at", null).not("stage", "in", ETAPAS_SIN_CORREGIR_RESTO).eq(col, vivo[col]).select("id," + col);
+  if (error) return { error: "La base no aceptó el precio (" + enPalabras(error) + "): no se cambió." };
+  const guardada = Array.isArray(g) ? g[0] : g;
+  if (!guardada || Math.round(Number(guardada[col]) * 100) !== Math.round(precio * 100))
+    return { error: "Mientras corregías, " + nombre + " cambió (otro precio, un folio o su etapa) o la base no dejó cambiarla: no se cambió el precio. Ciérrala y vuelve a abrirla." };
+  // el precio ya cambió: de aquí en adelante nada es un «no se cambió»
+  const r3 = await leerResto();
+  const relectura = !r3.error && Array.isArray(r3.data) ? r3.data[0] : null;
+  const restoSinConfirmar = !!r3.error;
+  const restoFinal = relectura ? Number(relectura.amount_portion) : null;
+  const restoDistinto = !restoSinConfirmar && Math.round((restoFinal ?? 0) * 100) !== Math.round(resto * 100);
+  const deRestoQuedo = restoSinConfirmar ? "lo que falta: " + formato(restoAntes) + " → " + formato(resto) + " (sin confirmar)"
+    : restoDistinto ? "lo que falta quedó en " + formato(restoFinal ?? 0) + ", no en " + formato(resto) : "lo que falta: " + formato(restoAntes) + " → " + formato(resto);
+  const delPrecio = formato(antes) + " → " + formato(precio) + " sin IVA" + (isMaq ? " (maquila)" : "");
+  let anotado = true;
+  if (anotar) { try { await anotar("💰 Precio corregido: " + delPrecio + " · " + deRestoQuedo + " · " + m); } catch (e) { anotado = false; } }
+  let avisado = true;
+  const destinos = avisar ? destinosDelAviso(vivo, rol, usuario) : [];
+  if (avisar) {
+    const mensaje = "💰 Precio corregido · " + nombre + (vivo.client ? " · " + vivo.client : "") + ": " + delPrecio + " · " + deRestoQuedo + " · por " + (usuario || rol || "?") + " · «" + m + "»";
+    for (const d of destinos) { try { await avisar(d, mensaje); } catch (e) { avisado = false; } }
+  }
+  return { upd, antes, isMaq, precio, restoId: fila.id, restoAntes, resto: restoSinConfirmar ? resto : (restoFinal ?? 0), restoDistinto, restoSinConfirmar, anotado, avisado, avisados: destinos.length, fueraDeHorario: !enHorarioDeAvisos(ahora()) };
+}
 // v10.84.115 — «Capturar precio» (la orden sin precio al asignar folio, PriceCaptureModal): con quién lo capturó (el historial de la base decía
 //   «sistema»), sólo si sigue sin precio ni folio (si mientras tanto alguien le puso uno, no se pisa) y confirmado con lo que la base devolvió.
 //   Devuelve { error } en palabras, o { ok, precio, col }.

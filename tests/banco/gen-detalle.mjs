@@ -67,6 +67,8 @@ const partes = [
   multi(/^const vuelveAlDeshacer = /, "vuelveAlDeshacer"), multi(/^const liquidadaConSaldoAFavor = /, "liquidadaConSaldoAFavor", /\)\);\s*$/),
   // v10.84.112 — quién corrige el precio y de qué orden (si el App.jsx lo trae)
   ...(L.some(l => /^const foliadaParaCorregir = /.test(l)) ? [multi(/^const foliadaParaCorregir = /, "foliadaParaCorregir")] : []),   // v10.84.118
+  // v10.84.174 — lo que falta de una orden por partes: sólo Dirección (si el App.jsx lo trae)
+  ...(L.some(l => /^const restoParaCorregir = /.test(l)) ? [line(/^const restoPorFacturar = /, "restoPorFacturar"), multi(/^const restoParaCorregir = /, "restoParaCorregir")] : []),
   ...(L.some(l => /^const puedeCorregirPrecio = /.test(l)) ? [multi(/^const puedeCorregirPrecio = /, "puedeCorregirPrecio")] : []),
   // v10.84.113 — lo que Lupita puede cancelar (si el App.jsx lo trae)
   ...(L.some(l => /^const cancelaLaSecretaria = /.test(l)) ? [multi(/^const cancelaLaSecretaria = /, "cancelaLaSecretaria")] : []),
@@ -193,7 +195,7 @@ const ORDEN = { ...(CASOS[CASO] || CASOS.factura), ...(Q.get("etapa") ? { stage:
 // v10.84.53 — la ventana que abre la app para una acción (folio, cancelar, regresar…), como las de verdad: encima del detalle
 //   (zIndex 999), Esc por la pila (useEscClose), el foco en su panel; «Hecho» la termina (a la orden le ponen folio y se
 //   entrega). ventana=sinrol: sin role="dialog", como seis de las ventanas de la app.
-const ENCIMA_BANCO = new Set(["corregir_precio", "deliver_with_invoice", "deliver_covered", "deliver_only", "split_invoice", "pre_invoice", "apply_historic_folio", "refacturar",
+const ENCIMA_BANCO = new Set(["corregir_precio", "facturar_siguiente_parte", "deliver_with_invoice", "deliver_covered", "deliver_only", "split_invoice", "pre_invoice", "apply_historic_folio", "refacturar",
   "deshacer_saldo", "deshacer_cancelacion", "cancel_with_nc", "cancel_order", "revert", "snooze", "waste", "send_maquila", "delete",
   "jalar_a_salidas"]);   // v10.84.67 — la pregunta de «pasar a Salidas» (App) sale encima del detalle
 function VentanaDeAccion({ nombre, onClose, onHecho }) {

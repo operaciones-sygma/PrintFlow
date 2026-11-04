@@ -237,6 +237,13 @@ contestaría a Karla (con la cuenta de pruebas, la de verdad diría «sólo Karl
 - **C**: lo que la base rechaza se dice dentro de la ventana, con «Volver a revisar»;
 - **D**: P-9912 recibe su folio con la ventana abierta: la ventana se vuelve a abrir revisando F-9912 y guarda por la base.
 
+- **E** (v10.84.174): como Dirección, desde el Archivo, lo que falta de una orden entregada y por partes (P-9913: RS-9913 por $10,000 y faltan $14,000; sus partes también existen sólo
+  en ese navegador y el disparador de la base se simula): «Más» lo ofrece con lo que falta; con $12,600 escribe UNA vez el precio de la orden ($22,600), con sus condiciones y sin excluir la
+  entregada; anota, avisa a quien capturó y el detalle lo dice sin recargar;
+- **F**: a Karla, en el mismo lugar, no se le ofrece (por tabla, la base se lo rechaza);
+- **G**: si lo que falta se factura con la ventana abierta, lo dice y no escribe;
+- **H**: desde el mismo detalle del Archivo, «Facturar siguiente parte» sale encima, con el tipo de la última parte, lo que falta y sus piezas; Esc regresa al detalle y nada se escribe.
+
 Contra v10.84.117 fallaban A y C (B pasaba); con el cambio, 11 de 11. Se corre a mano antes de subir algo de «Corregir precio».
 
 ### Karla pasa a Salidas lo que ya está listo (`tests/recorrido/karla-planta.mjs`)

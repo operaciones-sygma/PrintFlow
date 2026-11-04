@@ -13,6 +13,13 @@
 //  C. si la base rechaza (el importe cambió mientras se revisaba), lo dice dentro de la ventana, que sigue abierta con «Volver a revisar»;
 //  D. (vuelta 4) si P-9912 recibe su folio con la ventana abierta, la ventana se vuelve a abrir revisando su factura y guarda por la base (no por el
 //     camino de antes, que escribiría la orden y avisaría por su cuenta).
+// v10.84.174 — LO QUE FALTA DE UNA ORDEN POR PARTES (Marcelo, 3-nov: «en printflow en el archivo no me deja editar el precio»; P-0430). P-9913, entregada: RS-9913 por $10,000 y faltan
+//   $14,000 de 70,000 pzas; sus partes también existen sólo en este navegador y el disparador de la base (el resto absorbe el cambio) se simula aquí. Para Dirección:
+//  E. desde el Archivo, «Más» ofrece «Corregir precio» con lo que falta; con $12,600 escribe UNA vez el precio de la orden ($22,600), con quién y sus condiciones y sin excluir la entregada; no pasa
+//     por la puerta de lo foliado; anota el porqué, avisa a quien capturó, dice en cuánto quedó y el detalle lo dice sin recargar;
+//  F. a Karla, desde el mismo lugar, no se le ofrece (por tabla, la base se lo rechaza);
+//  G. si lo que falta se factura con la ventana abierta, lo dice y no escribe;
+//  H. desde el mismo detalle del Archivo, «Facturar siguiente parte» abre su ventana ENCIMA, con la remisión, lo que falta y sus piezas; Esc regresa al detalle y nada se escribe.
 // Uso:  npm run build && node tests/recorrido/corregir-foliada.mjs            (sirve dist/ en 127.0.0.1:4279)
 //       node tests/recorrido/corregir-foliada.mjs https://produccion.sygma.mx (la app publicada)
 //       SOLO=AB corre sólo esos escenarios. Sale con 1 si algo sale MAL.
@@ -47,8 +54,14 @@ function fixtures(plantilla) {
   return [
     { ...comun, id: "PRUEBA-CP-1", production_number: "P-9911", product_type: "Lonas de prueba", price: 1000, invoice_folio: "F-9911", invoice_type: "factura", invoice_pre_assigned: true },
     { ...comun, id: "PRUEBA-CP-2", production_number: "P-9912", product_type: "Volantes de prueba", price: 2000, machine_queue_position: 4 },
+    { ...comun, id: "PRUEBA-CP-3", production_number: "P-9913", product_type: "Etiquetas de prueba", price: 24000, quantity: 120000, stage: "delivered", delivered_at: iso(24), invoiced_at: iso(24),
+      current_machine: null, machine_queue_position: null, invoice_reason: "Dividida en 1 facturas (splits) · resto por facturar despues" },
   ];
 }
+// (v10.84.174) las partes de P-9913, como las lee la app de order_invoice_splits
+const partesDePrueba = () => { const comun = { order_id: "PRUEBA-CP-3", invoice_pre_assigned: false, cancelled_at: null, cancellation_reason: null, cancelled_by: null, created_at: iso(24) };
+  return [{ ...comun, id: "prueba-rs", position: 1, qty_portion: 50000, amount_portion: 10000, doc_type: "remision", invoice_folio: "RS-9913", payment_status: "paid" },
+    { ...comun, id: "prueba-resto", position: 2, qty_portion: 70000, amount_portion: 14000, doc_type: "por_facturar", invoice_folio: null, payment_status: "unpaid" }]; };
 // lo que la base contestaría a Karla (corregir_precio_revisar) con F-9911 sin timbrar
 const revisar = (ordenes, args) => { const o = ordenes.find(x => x.id === args.p_order_id); if (!o) return { puede: false, codigo: "no_existe", porque: "No se encontró la orden." };
   if (!o.invoice_folio) return { puede: true, codigo: "sin_folio", caso: "sin_folio", folio: null, precio_hoy: o.price, factura: null, nuevo: null, avisos: [] };
@@ -60,7 +73,7 @@ const revisar = (ordenes, args) => { const o = ordenes.find(x => x.id === args.p
 async function entrar(estado = {}) {
   const ctx = await nav.newContext({ viewport: { width: 1366, height: 768 }, acceptDownloads: false, ...contextoDeSitio(base) });
   await ctx.addInitScript(() => { window.print = () => {}; window.open = () => null; });
-  const escritas = [], puertas = []; let ordenes = null;
+  const escritas = [], puertas = [], partes = partesDePrueba(); let ordenes = null;
   await ctx.route("**/*", async route => { try {
     const req = route.request(), url = req.url(), m = req.method();
     if (!/\.supabase\.co\//.test(url)) return route.continue();
@@ -74,6 +87,14 @@ async function entrar(estado = {}) {
         if (ordenes && /^PRUEBA-CP/.test(id)) j = ordenes.filter(o => o.id === id);
         else if (ordenes && (q.get("offset") || "0") === "0" && /created_at/.test(q.get("order") || "")) j = [...ordenes, ...j];
       }
+      return route.fulfill({ response: resp, json: j });
+    }
+    // (v10.84.174) las partes de P-9913: en la lista de todas, y cuando la app pregunta por lo que falta de esa orden
+    if (m === "GET" && tabla === "order_invoice_splits") {
+      if ((q.get("order_id") || "") === "eq.PRUEBA-CP-3") return route.fulfill({ status: 200, contentType: "application/json",
+        body: JSON.stringify(partes.filter(s => s.doc_type === "por_facturar" && !s.cancelled_at).map(({ id, amount_portion, qty_portion }) => ({ id, amount_portion, qty_portion }))) });
+      const resp = await route.fetch(); let j = await resp.json().catch(() => null);
+      if (Array.isArray(j) && (q.get("offset") || "0") === "0") j = [...partes, ...j];
       return route.fulfill({ response: resp, json: j });
     }
     if (m === "GET" || m === "HEAD" || m === "OPTIONS" || ruta === "/auth/v1/token") return route.continue().catch(() => {});
@@ -92,14 +113,16 @@ async function entrar(estado = {}) {
         nota: o.production_number + " quedó en $" + o.price.toLocaleString("en-US", { minimumFractionDigits: 2 }) + " sin IVA y " + o.invoice_folio + " en $"
           + (Math.round(o.price * 116) / 100).toLocaleString("en-US", { minimumFractionDigits: 2 }) + ", con el mismo folio: ya la puedes timbrar." }) }); }
     if (rpc && LECTURAS.has(rpc)) {
-      if (rpc === "get_user_session") { const resp = await route.fetch(); let j = await resp.json().catch(() => null); if (Array.isArray(j) && j[0]) j = [{ ...j[0], role: "karla" }]; return route.fulfill({ response: resp, json: j }); }
+      if (rpc === "get_user_session") { const resp = await route.fetch(); let j = await resp.json().catch(() => null); if (Array.isArray(j) && j[0]) j = [{ ...j[0], role: estado.rol || "karla" }]; return route.fulfill({ response: resp, json: j }); }
       return route.continue();
     }
     const e = { m, a: rpc ? "rpc/" + rpc : tabla || ruta, q: Object.fromEntries(q), cuerpo };
     escritas.push(e);
     // el camino de antes (sin folio): la escritura de la orden de prueba se contesta como la base (con las columnas que pidió)
     if (m === "PATCH" && tabla === "orders" && /^eq\.PRUEBA-CP/.test(q.get("id") || "")) {
-      const id = q.get("id").replace(/^eq\./, ""), o = ordenes.find(x => x.id === id); if (o) Object.assign(o, cuerpo || {});
+      const id = q.get("id").replace(/^eq\./, ""), o = ordenes.find(x => x.id === id), precioAntes = o?.price; if (o) Object.assign(o, cuerpo || {});
+      // (v10.84.174) el disparador de la base (sync_post_invoice_edit): lo que falta absorbe el cambio de precio
+      if (id === "PRUEBA-CP-3" && cuerpo?.price != null) { const r = partes.find(s => s.doc_type === "por_facturar" && !s.cancelled_at); if (r) r.amount_portion = Math.round((r.amount_portion + cuerpo.price - precioAntes) * 100) / 100; }
       const cols = (q.get("select") || "id").split(",");
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(o ? [Object.fromEntries(cols.map(cc => [cc, o[cc]]))] : []) });
     }
@@ -115,7 +138,7 @@ async function entrar(estado = {}) {
   await p.getByText("Operación", { exact: true }).first().waitFor({ timeout: 30000 });
   for (let i = 0; i < 2; i++) { await p.keyboard.press("Escape"); await p.waitForTimeout(200); }
   // `cambiar`: otra persona mueve una orden de prueba (la próxima lectura de la app ya la ve así)
-  return { ctx, p, escritas, puertas, cambiar: (id, x) => Object.assign(ordenes.find(o => o.id === id), x) };
+  return { ctx, p, escritas, puertas, partes, cambiar: (id, x) => Object.assign(ordenes.find(o => o.id === id), x) };
 }
 const texto = p => p.evaluate(() => document.body.innerText.replace(/\s+/g, " "));
 const ir = async (p, vista) => { for (let intento = 0; intento < 3; intento++) {
@@ -137,6 +160,28 @@ async function abrirCorregir(p, id, pn) {
   await p.getByRole("button", { name: /Más acciones/ }).click(); await p.waitForTimeout(300);
   const item = p.getByRole("menuitem", { name: /Corregir precio/ }); const menu = (await item.count()) ? (await item.innerText()).replace(/\s+/g, " ") : "";
   if (menu) { await item.click(); await dlgCorr(p).waitFor({ timeout: 8000 }); await p.waitForTimeout(900); }
+  return menu;
+}
+// (v10.84.174) al «Archivo» → año → mes → semana → la orden → «Más»; devuelve lo que dice «Corregir precio» (vacío si no está) y, si está, abre su ventana
+async function abrirDelArchivo(p, pn) {
+  await despertador(p); await ir(p, "Archivo"); await p.waitForTimeout(500);
+  const d = new Date(ahora - 24 * 3600000), y = d.getFullYear(), MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+  // si no llega, dice en qué paso se quedó y qué botones veía (una caída de 15 s en «un clic» no dice nada)
+  const paso = async (nombre, loc) => { if (!(await loc.count())) { await p.screenshot({ path: path.join(OUT, "archivo-sin-" + nombre + ".png") });
+      throw new Error("no encontré «" + nombre + "» en el Archivo; veía: " + (await p.getByRole("button").allInnerTexts()).map(t => t.replace(/\s+/g, " ").trim()).filter(t => /\d/.test(t)).slice(0, 12).join(" | ")); }
+    await loc.first().click(); await p.waitForTimeout(250); };
+  const cargar = p.getByRole("button", { name: /Cargar Archivo Completo/ });   // el Archivo lee el historial completo hasta que se pide
+  if (await cargar.count()) { await cargar.click(); await p.getByRole("button", { name: new RegExp("^" + y + "\\b") }).first().waitFor({ timeout: 45000 }); await p.waitForTimeout(300); }
+  const semanas = p.getByRole("button", { name: /^(Del|El) \d+/ }), tarjeta = p.locator('[aria-label^="Orden ' + pn + '"]'), mes = p.getByRole("button", { name: new RegExp("^" + MESES[d.getMonth()] + " " + y) });
+  // el año y el mes más recientes pueden venir abiertos: tocarlos los cerraría
+  if (!(await mes.count())) await paso("el año", p.getByRole("button", { name: new RegExp("^" + y + "\\b") }));
+  if (!(await semanas.count())) await paso("el mes", mes);
+  for (let i = 0, n = await semanas.count(); i < n && !(await tarjeta.count()); i++) { await semanas.nth(i).click(); await p.waitForTimeout(250); }
+  await paso("la orden " + pn, tarjeta); await p.waitForTimeout(600);
+  const mas = p.getByRole("button", { name: /Más acciones/ }); if (!(await mas.count())) return "";
+  await mas.click(); await p.waitForTimeout(300);
+  const item = p.getByRole("menuitem", { name: /Corregir precio/ }); const menu = (await item.count()) ? (await item.innerText()).replace(/\s+/g, " ") : "";
+  if (menu) { await item.click(); await dlgCorr(p).waitFor({ timeout: 8000 }); await p.waitForTimeout(500); }
   return menu;
 }
 const corre = l => !process.env.SOLO || process.env.SOLO.includes(l);
@@ -210,6 +255,81 @@ try {
         JSON.stringify({ orden: orden.map(x => x.args), porSuCuenta: porSuCuenta.map(e => e.m + " " + e.a) }));
       await p.screenshot({ path: path.join(OUT, "D-folio-en-medio.png") });
     } catch (e) { ok("D (se cayó)", false, e.message.split("\n")[0]); } finally { await ctx.close(); } }
+
+  // ── E (v10.84.174): Dirección, desde el Archivo, corrige lo que falta de una orden entregada y por partes ──
+  if (corre("E")) { const { ctx, p, escritas, puertas } = await entrar({ rol: "admin" });
+    try {
+      const menu = await abrirDelArchivo(p, "P-9913");
+      ok("E1 el detalle abierto desde el Archivo ofrece «Corregir precio» con lo que falta", /Corregir precio/.test(menu) && /Faltan \$14,000\.00 por facturar/.test(menu), "«" + menu + "»");
+      const al = await textoCorr(p);
+      ok("E2 la ventana dice lo que falta y que lo ya facturado no cambia", /Falta por facturar: \$14,000\.00 sin IVA · 70,000 pzas · \$0\.20 la pieza/.test(al) && /\$10,000\.00\) no cambia/.test(al), "«" + al.slice(0, 260) + "»");
+      await p.screenshot({ path: path.join(OUT, "E-lo-que-falta.png") });
+      await dlgCorr(p).getByLabel(/Lo que falta, sin IVA/).fill("12600"); await dlgCorr(p).getByLabel(/Por qué cambia/).fill("Lo que falta se cobra a $0.18 la pieza"); await p.waitForTimeout(400);
+      const con = await textoCorr(p);
+      ok("E3 con $12,600 dice en cuánto queda la orden y a cuánto la pieza", /La orden queda en \$22,600\.00 · \$0\.18 la pieza/.test(con), "«" + con.slice(0, 320) + "»");
+      await dlgCorr(p).getByRole("button", { name: /^Cambiar a/ }).click();
+      const a = await esperaAviso(p, /P-9913/);
+      const parche = escritas.filter(e => e.m === "PATCH" && e.a === "orders" && e.q.id === "eq.PRUEBA-CP-3");
+      ok("E4 escribe UNA vez el precio de la orden ($22,600, no $12,600), con quién y sus condiciones, sin excluir la entregada y sin pasar por la puerta de lo foliado",
+        parche.length === 1 && parche[0].cuerpo?.price === 22600 && !!parche[0].cuerpo?.last_edited_by && !!parche[0].cuerpo?.last_edited_at && parche[0].q.invoice_folio === "is.null"
+        && parche[0].q.price === "eq.24000" && /cancelled/.test(parche[0].q.stage || "") && !/delivered/.test(parche[0].q.stage || "") && !puertas.length, JSON.stringify({ parche, puertas }));
+      const tl = escritas.filter(e => e.a === "order_timeline" && /PRUEBA-CP-3/.test(JSON.stringify(e.cuerpo))), av = escritas.filter(e => e.a === "notifications" && /PRUEBA-CP-3/.test(JSON.stringify(e.cuerpo)));
+      ok("E5 anota de cuánto a cuánto, lo que falta y el porqué en el historial, y avisa a quien capturó la orden (no a Dirección, que es quien corrige)",
+        tl.length === 1 && /\$24,000\.00 → \$22,600\.00/.test(JSON.stringify(tl[0].cuerpo)) && /lo que falta: \$14,000\.00 → \$12,600\.00/.test(JSON.stringify(tl[0].cuerpo)) && /a \$0\.18 la pieza/.test(JSON.stringify(tl[0].cuerpo))
+        && av.length === 1 && av[0].cuerpo?.target_role === "secretaria", JSON.stringify({ tl: tl.map(e => e.cuerpo), av: av.map(e => e.cuerpo) }));
+      ok("E6 dice en cuánto quedó y la ventana se cierra", /lo que falta quedó en \$12,600\.00 y la orden en \$22,600\.00/.test(a) && !(await dlgCorr(p).count()), "aviso «" + a + "»");
+      // una recarga ya en vuelo al guardar puede traer el precio de antes (salió una vez de cuatro). En producción la corrige la recarga del tiempo real que dispara el UPDATE; la orden de
+      //   prueba no emite ese evento, así que aquí se hace lo mismo que él: si no dice lo nuevo, que la app relea
+      const NUEVO = /Facturado \$10,000\.00 de \$22,600\.00 · faltan \$12,600\.00/; let det = await texto(p);
+      if (!NUEVO.test(det)) { await p.evaluate(() => document.dispatchEvent(new Event("visibilitychange"))); await esperaTexto(p, NUEVO, 15); det = await texto(p); }
+      ok("E7 el detalle ya dice lo nuevo, sin cerrarlo", NUEVO.test(det), det.match(/Facturado.{0,80}/)?.[0] || "(no dice «Facturado»)");
+      await p.screenshot({ path: path.join(OUT, "E-corregida.png") });
+    } catch (e) { ok("E (se cayó)", false, e.message.split("\n")[0]); } finally { await ctx.close(); } }
+
+  // ── F (v10.84.174): a Karla no se le ofrece ──
+  if (corre("F")) { const { ctx, p } = await entrar();
+    try {
+      const menu = await abrirDelArchivo(p, "P-9913");
+      ok("F1 a Karla, en el mismo lugar, no se le ofrece (por tabla, la base se lo rechaza)", !menu, "«" + menu + "»");
+    } catch (e) { ok("F (se cayó)", false, e.message.split("\n")[0]); } finally { await ctx.close(); } }
+
+  // ── G (v10.84.174): lo que falta se factura con la ventana abierta ──
+  if (corre("G")) { const { ctx, p, escritas, partes } = await entrar({ rol: "admin" });
+    try {
+      await abrirDelArchivo(p, "P-9913");
+      await dlgCorr(p).getByLabel(/Lo que falta, sin IVA/).fill("12600"); await dlgCorr(p).getByLabel(/Por qué cambia/).fill("Lo que falta se cobra a $0.18 la pieza"); await p.waitForTimeout(300);
+      const r = partes.find(s => s.doc_type === "por_facturar");   // Karla (en otra pestaña) facturó todo lo que faltaba
+      r.cancelled_at = new Date().toISOString(); r.cancellation_reason = "Consumida: facturada completa como parte 3 (RS-9914)";
+      partes.push({ ...r, id: "prueba-rs2", position: 3, doc_type: "remision", invoice_folio: "RS-9914", cancelled_at: null, cancellation_reason: null });
+      await p.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+      let t = ""; for (let k = 0; k < 40; k++) { t = await textoCorr(p); if (/Ya no falta nada por facturar/.test(t)) break; await p.waitForTimeout(500); }
+      const apagado = await dlgCorr(p).getByRole("button", { name: /^Cambiar a/ }).isDisabled();
+      const parches = escritas.filter(e => e.m === "PATCH" && e.a === "orders");
+      ok("G1 si lo que falta se facturó con la ventana abierta, lo dice, no deja guardar y no escribe", /Ya no falta nada por facturar/.test(t) && apagado && !parches.length, "«" + t.slice(0, 240) + "» · apagado " + apagado);
+      await p.screenshot({ path: path.join(OUT, "G-ya-no-falta.png") });
+    } catch (e) { ok("G (se cayó)", false, e.message.split("\n")[0]); } finally { await ctx.close(); } }
+
+  // ── H (v10.84.174): «es que está en archivo, ¿la regreso a salidas?»: lo que falta se factura desde el mismo detalle ──
+  if (corre("H")) { const { ctx, p, escritas } = await entrar({ rol: "admin" });
+    try {
+      await abrirDelArchivo(p, "P-9913");   // abre «Corregir precio»; se cierra y se usa el «Más» otra vez
+      await p.keyboard.press("Escape"); await p.waitForTimeout(400);
+      await p.getByRole("button", { name: /Más acciones/ }).click(); await p.waitForTimeout(300);
+      const item = p.getByRole("menuitem", { name: /Facturar siguiente parte/ }), menu = (await item.count()) ? (await item.innerText()).replace(/\s+/g, " ") : "";
+      ok("H1 el detalle abierto desde el Archivo ofrece «Facturar siguiente parte» con lo que falta", /Faltan \$14,000\.00 por facturar/.test(menu), "«" + menu + "»");
+      await item.click(); const dlg = p.getByRole("dialog", { name: /Facturar siguiente parte/ }); await dlg.waitFor({ timeout: 8000 }); await p.waitForTimeout(600);
+      // lo que se ve de verdad: el centro de la ventana es de la ventana, no del detalle que quedó abajo
+      const arriba = await dlg.evaluate(d => { const r = d.getBoundingClientRect(), e = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !!e && d.contains(e); });
+      const tipo = await dlg.getByLabel("Tipo de documento").inputValue(), monto = await dlg.locator("#sp-subtotal").inputValue();
+      const tx = ((await dlg.innerText()) || "").replace(/\s+/g, " ");
+      ok("H2 la ventana sale ENCIMA del detalle, con la remisión (el tipo de RS-9913), lo que falta y sus piezas", arriba && tipo === "remision" && Number(monto) === 14000 && /70,?000/.test(await dlg.evaluate(d => [...d.querySelectorAll("input")].map(i => i.value).join(" ") + " " + d.innerText)),
+        JSON.stringify({ arriba, tipo, monto, tx: tx.slice(0, 160) }));
+      await p.screenshot({ path: path.join(OUT, "H-siguiente-parte.png") });
+      await p.keyboard.press("Escape"); await p.waitForTimeout(500);
+      const cerrada = !(await dlg.count()), detalle = /Facturado \$10,000\.00 de \$24,000\.00/.test(await texto(p));
+      const escribio = escritas.filter(e => /facturar_siguiente_parte/.test(e.a) || (e.m === "PATCH" && /PRUEBA-CP-3/.test(JSON.stringify(e.q))));
+      ok("H3 Esc cierra la ventana, el detalle sigue y nada se escribió", cerrada && detalle && !escribio.length, JSON.stringify({ cerrada, detalle, escribio }));
+    } catch (e) { ok("H (se cayó)", false, e.message.split("\n")[0]); } finally { await ctx.close(); } }
 } finally {
   await nav.close();
   if (servidor) await new Promise(r => servidor.httpServer.close(r));

@@ -1675,6 +1675,100 @@ await caso("inv-183 Corona: sin saldo, con factura sí", "cliente=corona", async
   ok("inv-183 con saldo que no alcanza, «Aplicar saldo» no deja seguir, pero con factura sí (no pagada)", apagado && !(await continuar(p).isDisabled()) && !(await ve(p, /No alcanza/)));
 });
 
+// ── v10.84.174: lo que falta de una orden por partes (Marcelo, 3-nov, P-0430: RS-12 ya pagada y «restan $12,600»). La misma ventana de «Corregir precio», con lo que falta. Vuelta 1: contra v10.84.172. ──
+const abrirResto = async p => { await p.click("#abrir-resto"); await dlgCorr(p).waitFor({ timeout: 3000 }); await espera(p, 200); };
+const campoFalta = p => dlgCorr(p).getByLabel(/Lo que falta, sin IVA/), campoPorque = p => dlgCorr(p).getByLabel(/Por qué cambia/);
+const textoR = async p => ((await dlgCorr(p).innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+const MOTIVO_R = "Lo que falta se cobra a $0.18 la pieza";
+await caso("rst-01 dice lo que falta y lo que no cambia", "resto=1", async p => {
+  await abrirResto(p); const t = await textoR(p);
+  ok("rst-01 al abrir: falta $14,000.00 sin IVA de 70,000 pzas a $0.20, la orden vale $24,000.00 y lo ya facturado ($10,000.00) no cambia; el subtítulo dice las 120,000 de la orden",
+    /Falta por facturar: \$14,000\.00 sin IVA · 70,000 pzas · \$0\.20 la pieza/.test(t) && /La orden vale \$24,000\.00; lo ya facturado \(\$10,000\.00\) no cambia/.test(t) && /120,000 pzas/.test(t)
+    && !/Hoy:/.test(t) && !/con IVA/.test(t) && (await campoFalta(p).count()) === 1, `«${t.slice(0, 300)}»`);
+});
+await caso("rst-02 de P-0430: 12,600", "resto=1", async p => {
+  await abrirResto(p); await campoFalta(p).fill("12600"); await espera(p, 150); const t = await textoR(p);
+  await campoPorque(p).fill(MOTIVO_R); await espera(p, 150); await guardarCorr(p).click(); await espera(p, 700);
+  const l = await log(p);
+  ok("rst-02 con $12,600 dice «La orden queda en $22,600.00 · $0.18 la pieza»; guarda lo que falta (no el precio de la orden), con su porqué y sin lo «visto» de la foliada, y se cierra",
+    /La orden queda en \$22,600\.00 · \$0\.18 la pieza/.test(t) && /corregir:guardar 12600 Lo que falta se cobra a \$0\.18 la pieza visto=null/.test(l) && (await dlgCorr(p).count()) === 0, `«${t.slice(0, 280)}» · ${l.slice(-120)}`);
+});
+await caso("rst-03 lo mismo de hoy no se guarda", "resto=1", async p => {
+  await abrirResto(p); let r = [];
+  for (const v of ["14000", "14,000.00", "$14,000"]) { await campoFalta(p).fill(v); await campoPorque(p).fill(MOTIVO_R); await espera(p, 120); r.push(await guardarCorr(p).isDisabled() && /Es lo que falta hoy/.test(await textoR(p))); }
+  ok("rst-03 $14,000 (también con comas o con «$»): «Es lo que falta hoy» y no deja guardar", r.every(Boolean), JSON.stringify(r));
+});
+await caso("rst-04 lo que no es un monto no se guarda", "resto=1", async p => {
+  await abrirResto(p); const r = {};
+  for (const v of ["0", "-5", "abc", "", "1e", "١٢٣"]) { await campoFalta(p).fill(v); await campoPorque(p).fill(MOTIVO_R); await espera(p, 100); r[v || "(vacío)"] = await guardarCorr(p).isDisabled(); }
+  await campoFalta(p).fill("12,600.00"); await campoPorque(p).fill("mal"); await espera(p, 100); r["porqué corto"] = await guardarCorr(p).isDisabled();
+  await campoPorque(p).fill(MOTIVO_R); await espera(p, 100); const conComas = !(await guardarCorr(p).isDisabled());
+  ok("rst-04 0, negativo, letras, vacío o un porqué de menos de 8 letras no dejan guardar; «12,600.00» con comas sí", Object.values(r).every(Boolean) && conComas, JSON.stringify({ r, conComas }));
+});
+await caso("rst-05 el dedazo del IVA y el del cero", "resto=1", async p => {
+  await abrirResto(p); await campoFalta(p).fill("16240"); await espera(p, 150); const iva = await textoR(p);
+  await campoFalta(p).fill("1260"); await espera(p, 150); const poco = await textoR(p);
+  await campoFalta(p).fill("126000"); await espera(p, 150); const mucho = await textoR(p);
+  ok("rst-05 $16,240 pregunta «¿Tecleaste el total con IVA?» (es lo que falta hoy con IVA; aquí va $14,000.00) y un cero de más o de menos dice «Cambia mucho»",
+    /¿Tecleaste el total con IVA\? \$16,240\.00 es lo que falta hoy con IVA; aquí va sin IVA: \$14,000\.00/.test(iva) && /Cambia mucho/.test(poco) && /Cambia mucho/.test(mucho), `«${iva.slice(120, 420)}»`);
+});
+await caso("rst-06 Esc y clic fuera", "resto=1", async p => {
+  await abrirResto(p); await campoFalta(p).fill("12600"); await espera(p, 150);
+  await p.keyboard.press("Escape"); await espera(p, 350); const pregunta = /Salir sin cambiar el precio/.test(await p.locator("body").innerText()), sigue = (await dlgCorr(p).count()) === 1;
+  await p.keyboard.press("Escape"); await espera(p, 300); const valor = await campoFalta(p).inputValue();
+  await p.mouse.click(8, 8); await espera(p, 350); const fuera = /Salir sin cambiar el precio/.test(await p.locator("body").innerText()); await p.keyboard.press("Escape"); await espera(p, 300);
+  await campoFalta(p).fill(""); await espera(p, 120); await p.keyboard.press("Escape"); await espera(p, 350);
+  ok("rst-06 Esc o clic fuera con algo escrito preguntan y no lo tiran; sin nada escrito, Esc cierra", pregunta && sigue && valor === "12600" && fuera && (await dlgCorr(p).count()) === 0, `pregunta ${pregunta} · sigue ${sigue} · «${valor}» · fuera ${fuera}`);
+});
+await caso("rst-07 el doble clic guarda una vez", "resto=1", async p => {
+  await abrirResto(p); await campoFalta(p).fill("12600"); await campoPorque(p).fill(MOTIVO_R); await espera(p, 150); await guardarCorr(p).dblclick(); await espera(p, 900);
+  ok("rst-07 doble clic en «Cambiar a $12,600.00»: se guarda una vez", (await cuenta(p, "corregir:guardar")) === 1, (await cuenta(p, "corregir:guardar")) + " veces");
+});
+await caso("rst-08 Ctrl+Enter guarda una vez", "resto=1", async p => {
+  await abrirResto(p); await campoFalta(p).fill("12600"); await campoPorque(p).fill(MOTIVO_R); await espera(p, 150);
+  await p.keyboard.press("Control+Enter"); await p.keyboard.press("Control+Enter"); await espera(p, 900);
+  ok("rst-08 Ctrl+Enter dos veces: se guarda una vez", (await cuenta(p, "corregir:guardar")) === 1, (await cuenta(p, "corregir:guardar")) + " veces");
+});
+await caso("rst-09 el rechazo se queda en la ventana", "resto=falla", async p => {
+  await abrirResto(p); await campoFalta(p).fill("12600"); await campoPorque(p).fill(MOTIVO_R); await espera(p, 150); await guardarCorr(p).click(); await espera(p, 800);
+  const dice = (await dlgCorr(p).getByRole("alert").innerText().catch(() => "")) || "", valor = await campoFalta(p).inputValue(), porque = await campoPorque(p).inputValue(), vuelve = await guardarCorr(p).isEnabled();
+  ok("rst-09 si la base no acepta, lo dice dentro de la ventana, conserva lo escrito y deja reintentar", /no aceptó el precio/.test(dice) && valor === "12600" && porque === MOTIVO_R && vuelve && !/Volver a revisar/.test(dice), `«${dice}» · «${valor}» · reintenta ${vuelve}`);
+});
+await caso("rst-10 facturan un pedazo con la ventana abierta", "resto=1", async p => {
+  await abrirResto(p); await campoFalta(p).fill("5000"); await campoPorque(p).fill(MOTIVO_R); await espera(p, 150);
+  await p.evaluate(() => window.__restoCambia()); await espera(p, 200); const t = await textoR(p), valor = await campoFalta(p).inputValue();
+  ok("rst-10 si facturan un pedazo con la ventana abierta, dice lo de ahora ($7,000.00 de 35,000 pzas, y la orden queda en $22,000.00) y no tira lo escrito",
+    /Falta por facturar: \$7,000\.00 sin IVA · 35,000 pzas/.test(t) && /La orden queda en \$22,000\.00/.test(t) && valor === "5000", `«${t.slice(0, 320)}» · «${valor}»`);
+});
+await caso("rst-11 facturan todo con la ventana abierta", "resto=1", async p => {
+  await abrirResto(p); await campoFalta(p).fill("12600"); await campoPorque(p).fill(MOTIVO_R); await espera(p, 150);
+  await p.evaluate(() => window.__restoSeAcaba()); await espera(p, 200);
+  const t = await textoR(p), alerta = (await dlgCorr(p).getByRole("alert").innerText().catch(() => "")) || "", apagado = await guardarCorr(p).isDisabled(), cerrado = await campoFalta(p).isDisabled();
+  await guardarCorr(p).click({ force: true }).catch(() => {}); await p.keyboard.press("Control+Enter"); await espera(p, 500);
+  ok("rst-11 si ya se facturó todo con la ventana abierta, lo dice, se cierra a escribir y no guarda ni con Ctrl+Enter", /Ya no falta nada por facturar/.test(alerta) && apagado && cerrado && (await cuenta(p, "corregir:guardar")) === 0 && !/La orden queda en/.test(t),
+    `«${alerta}» · apagado ${apagado} · cerrado ${cerrado} · guardó ${await cuenta(p, "corregir:guardar")}`);
+});
+await caso("rst-12 una sola pieza", "resto=1&piezas=1", async p => {
+  await abrirResto(p); const t = await textoR(p);
+  ok("rst-12 si falta una pieza dice «1 pza» y su precio", /· 1 pza · \$14,000\.00 la pieza/.test(t) && !/1 pzas/.test(t), `«${t.slice(0, 220)}»`);
+});
+await caso("rst-13 se lee", "resto=1", async p => {
+  await abrirResto(p); await campoFalta(p).fill("12600"); await espera(p, 150);
+  const xs = await dlgCorr(p).evaluate(d => [...d.querySelectorAll("div,b,label,p,h3")].filter(e => [...e.childNodes].some(n => n.nodeType === 3 && n.textContent.trim())).map(e => {
+    let f = e, bg = "rgba(0, 0, 0, 0)"; while (f && (bg === "rgba(0, 0, 0, 0)" || bg === "transparent")) { bg = getComputedStyle(f).backgroundColor; f = f.parentElement; }
+    return { t: e.innerText.slice(0, 40), fg: getComputedStyle(e).color, bg }; }));
+  const malos = xs.filter(x => contraste(x.fg, x.bg) < 4.5).map(x => "«" + x.t + "» " + contraste(x.fg, x.bg).toFixed(2));
+  ok("rst-13 todo lo que dice la ventana se lee (≥ 4.5:1)", xs.length > 5 && malos.length === 0, malos.slice(0, 5).join(" | ") || xs.length + " textos");
+});
+// lo que entra raro por el dato (el catálogo de break-ui): un nombre sin cortes de verdad, acentos con guiones, de derecha a izquierda, emoji
+for (const [n, nombre] of [["sin-cortes", "IMG_20260815_143022_FINAL_v3_RETOCADA_CLIENTE_ETIQUETAS_STEVE_MADDEN_NUEVA_MEDIDA.HEIC"], ["acentos", "Aleksandra Wiśniewska-Kowalczyk y Seán O'Brien-Ó Súilleabháin"], ["rtl", "نور الهدى عبد الرحمن"], ["emoji", "👩🏽‍💻 Priya 🦊"]])
+  for (const [w, h] of [[1366, 768], [1920, 1080], [683, 384]])
+    await caso(`rst-14 ${n} a ${w}`, "resto=1&nombre=" + encodeURIComponent(nombre), async p => {
+      await abrirResto(p);
+      const m = await dlgCorr(p).evaluate(d => ({ sw: d.scrollWidth, cw: d.clientWidth, top: d.getBoundingClientRect().top, bottom: d.getBoundingClientRect().bottom, vh: innerHeight, texto: d.innerText }));
+      ok(`rst-14 ${n} a ${w}: la ventana cabe, no se desborda a lo ancho y dice el nombre`, m.sw <= m.cw && m.top >= 0 && m.bottom <= m.vh && m.texto.includes(nombre), JSON.stringify({ sw: m.sw, cw: m.cw, top: m.top, bottom: m.bottom, vh: m.vh }));
+    }, { width: w, height: h });
+
 await browser.close();
 const fallas = res.filter(r => r.startsWith("FALLA")).length;
 console.log(res.join("\n"));
