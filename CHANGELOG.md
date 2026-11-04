@@ -38,8 +38,16 @@ un dato de `res-06` que no ejercía los decimales (lo vio el sabotaje). 32 sabot
 una inestable revisada (det-81, `ERR_NO_BUFFER_SPACE`; sola, 3 de 3). Con la app real (`tests/recorrido/corregir-foliada.mjs`, sin escribir): A a D como antes; E a H, los nuevos, desde el Archivo. Build,
 alcance y los 33 bancos generados sin nombres sin declarar. La escritura de verdad, como `authenticated` con la sesión de Marcelo y sus disparadores, es la de v10.84.172b.
 
-**Cómo subió.** 🔥 **Sin el candado completo, a pedido de Marcelo** (3-nov: «hagámoslo y después corremos el candado, es que urge»): lo anterior corrió antes de subir y la suite completa corre enseguida
-después. Su resultado va en el renglón LIVE de `CLAUDE.md`.
+**En producción** 3-nov-2026, ~19:27 (READY `dpl_4QaTmy1oT6jPRNWkoVFaoPctMAbj`, commit `8cd9c95`). 🔥 **Subió sin el candado, a pedido de Marcelo** (3-nov: «podemos subirlo? si ya paso hagamoslo y despues corremos
+el candado es que urge»; `git push --no-verify`, sólo esta vez): lo anterior corrió antes de subir. La suite completa, justo después (desde la copia principal y con el mismo commit): **2820 de 2820** (64 nuevas), de
+a 4, 1372 s, sin regresiones, con una inestable revisada (fic-03, `ERR_NO_BUFFER_SPACE` al abrir la página; sola, 3 de 3; la 174 no toca la ficha). Revisado en producción sin escribir: `corregir-foliada` E a H contra
+produccion.sygma.mx, 12 de 12. Y 11 sabotajes con navegador de lo que pasaba contra el código de antes: todos caen.
+
+**Sin probar.** Guardar de verdad desde la pantalla: la ventana se probó con la base simulada, y la escritura real (como `authenticated`, con los disparadores) corrió igual en P-0430, por SQL.
+
+**Vuelta atrás.** `git revert --no-edit 8cd9c95`; se detiene en `CHANGELOG.md`: `git checkout --ours CHANGELOG.md && git add CHANGELOG.md && git revert --continue`; y subir (ensayada en un worktree, con el commit de
+documentos encima: deja `src`, `scripts` y `tests` como 681f0f6, el código de v10.84.173, y conserva esta entrada). De urgencia, en Vercel: Redeploy de `dpl_4sbAXYWrfSydo7FFczVEWB2xzcR6` (681f0f6), que ya no es de un
+clic y deja `main` con la 174. La base no cambió.
 
 **Para Marcelo.** ¿Karla también? Necesitaría una puerta en la base, como `corregir_precio_orden`; hoy sólo Dirección.
 

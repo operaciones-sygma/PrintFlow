@@ -45,7 +45,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
   abrir, la sesión guardada se le confirma a Auth y la entrada la vuelve a mirar antes de abrir (si se cerró a media entrada, la app
   abría como anónima); una falla al comprobar (red, 503) **no saca a nadie**: «Reintentar». Tanda `tests/romper/sesion.mjs`.
 - **Marcelo** es dueño y único desarrollador; **Karla** factura (y desde v10.84.112 corrige el precio de lo que todavía no se factura; desde v10.84.118 también de lo ya foliado sin timbrar, por la puerta de la base de
-  CobranzaFlow v3.7.1010: `corregir_precio_revisar`/`_orden`, que también avisan; el precio de lo facturado, POR FUERA, sólo lo cambia Dirección); **Lupita** captura; **Gerardo/Noemí/
+  CobranzaFlow v3.7.1010: `corregir_precio_revisar`/`_orden`, que también avisan; el precio de lo facturado, POR FUERA, sólo lo cambia Dirección: desde v10.84.174, lo que falta de una orden por partes, con «Corregir precio»); **Lupita** captura; **Gerardo/Noemí/
   Germán** producción/pre-prensa/CTP (desde v10.84.119 **Gerardo acomoda la planta en «Planta»**: el plano de la planta baja con las máquinas,
   versiones en `public.plano_versiones` y la hoja a 1:100; también Dirección); **Genaro** vende (ve sólo lo suyo); rol `visor` sólo lectura.
   Desde v10.84.67 **Karla también pasa a Salidas** lo que ya está listo y Gerardo no ha pasado, **sólo desde Empaque o una
@@ -130,7 +130,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2756 pruebas, ~23 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2820 pruebas, ~23 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Las tandas con banco van de a 7 a la vez (`PROBAR_PARALELO`; con 11 juntas,
@@ -219,7 +219,13 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.173 (3-nov, ~19:01, READY `dpl_BgN6VjyyQ1oPWbYvcmXr3LsUfQAd`, commit `875128c`; vuelta atrás: `git revert 875128c` y subir (ensayada en
+- **LIVE:** v10.84.174 (3-nov, ~19:27, READY `dpl_4QaTmy1oT6jPRNWkoVFaoPctMAbj`, commit `8cd9c95`; vuelta atrás: `git revert --no-edit 8cd9c95` (se detiene en `CHANGELOG.md`: `git checkout --ours CHANGELOG.md && git add CHANGELOG.md && git revert --continue`) y subir (ensayada en un
+  worktree: deja `src`, `scripts` y `tests` como 681f0f6, el código de la 173); la base no cambió. 🔥 Subió SIN el candado, a pedido de Marcelo («hagámoslo y después corremos el candado, es que urge»): antes, build, alcance, bancos, 810 de 810 en las tandas de
+  lo tocado y la app real; la suite completa, justo después: 2820 de 2820 (64 nuevas), de a 4, 1372 s, sin regresiones, con una inestable revisada (fic-03); revisado en producción sin escribir: `corregir-foliada` E a H, 12
+  de 12). 🔑 **Dirección corrige lo que falta de una orden por partes** (Marcelo, 3-nov, P-0430: «en printflow en el archivo no me deja editar el precio»; entregada y partida no tenía salida): «Corregir precio» en
+  «Más» del detalle (`restoParaCorregir`, sólo admin: por tabla, a Karla la base se lo rechaza) captura lo que falta, y el precio de la orden sale de ahí (`corregirRestoEnLaBase`; `sync_post_invoice_edit` mueve el
+  resto). Y «Facturar siguiente parte» también en «Más»: el Archivo abre el detalle, sin ficha. Y los datos **v10.84.172b** (3-nov 18:14, con su OK): P-0430 de $24,000 a $22,600, restan $12,600.
+  v10.84.173 (3-nov, ~19:01, READY `dpl_BgN6VjyyQ1oPWbYvcmXr3LsUfQAd`, commit `875128c`; vuelta atrás: `git revert 875128c` y subir (ensayada en
   un worktree: deja `src`, `scripts` y `tests` como 256b343, el código de la 172), o promover `dpl_7sKLnMXz9jJJhTUG9dwTJk6S1Uzc` (el código de la 172); la base no
   cambió; candado 2756 de 2756 (20 nuevas), de a 4, 1375 s, a la primera y sin inestables; revisado en producción sin escribir). 🔑 **La factura ligada del plan se ve
   ligada, y se desliga** (en las capturas de Karla del 3-nov, las 11 de Hotsson sin su etiqueta): `reload` no pedía `ligada` ni `bill_to_name`, y a Dirección le ofrecía
