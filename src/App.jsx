@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect, lazy, Suspense, Component } from "react";
 import { corregirPrecioEnLaBase, capturarPrecioEnLaBase, revisarPrecioFoliado, corregirPrecioFoliado, corregirRestoEnLaBase } from "./lib/corregirPrecio.js"; // v10.84.112 — «Corregir precio» contra la base, probado con Node (v10.84.115: y «Capturar precio»; v10.84.174: y lo que falta de una orden por partes)
-import { tiempoPorEtapa, duracion, HORAS_DE_UN_DIA } from "./lib/tiempoPorEtapa.js"; // v10.84.175 — «Tiempo por etapa», probado con Node contra las bitácoras de producción
+import { tiempoPorEtapa, duracion, HORAS_DE_UN_DIA, HORARIO_EN_PALABRAS } from "./lib/tiempoPorEtapa.js"; // v10.84.175 — «Tiempo por etapa», probado con Node contra las bitácoras de producción
 import { cancelarUnaDelLote } from "./lib/cancelarEnLote.js"; // v10.84.113 — «Cancelaciones» cancela cada orden completa, probado con Node
 import { cuadrarPartes } from "./lib/cuadrarPartes.js"; // v10.84.3 — aritmetica del reparto, probada con Node
 import { proponerPiezas, descripcionDeOrden } from "./lib/proponerPiezas.js"; // v10.84.102 — casar los conceptos de un CFDI con las órdenes del plan, probado con Node
@@ -3377,9 +3377,13 @@ function bizDaysSince(date){
 // (neteando pausas "En espera" y fines de semana), el día/hora de cada paso, quién la movió, y las regresiones.
 // Vuelve objetivo el "se echan la bolita": el registro muestra exactamente cuándo entró/salió de cada etapa y quién.
 // v10.84.175 — la cuenta se fue a src/lib/tiempoPorEtapa.js (ahí está por qué): quién tardó en Validar, Noemí o Gerardo; una etapa con sus pasos (cada máquina, CTP y Procesadora); la razón de lo que
-//   regresó; lo entregado se cierra; y las horas son de jornada. Cada tiempo va en su columna a la derecha y en Geist Mono: el panel se recorre de arriba abajo buscando el mayor.
+//   regresó; lo entregado se cierra; y sólo cuenta el horario de trabajo, y lo dice arriba. Cada tiempo va en su columna a la derecha y en Geist Mono: el panel se recorre de arriba abajo buscando el mayor.
 function StageFlowHistory({order:o}){
   const [open,setOpen]=useState(false);
+  // v10.84.176 — al abrirlo se ve (Marcelo, 4-nov: «para que sea visible»): el botón queda hasta abajo del cuerpo del detalle y el panel se abría abajo de la orilla. Sin animar (regla 19c); `nearest` no mueve
+  //   nada si ya cabe y, si es más alto que el cuerpo, deja el botón arriba.
+  const raizRef=useRef(null);
+  useLayoutEffect(()=>{if(open)raizRef.current?.scrollIntoView({block:"nearest",behavior:"instant"});},[open]);
   const data=useMemo(()=>{
     // v10.73.44b — tope de una pausa AÚN ABIERTA: el más TEMPRANO entre (a) vencimiento snooze_until y (b) auto-lift far_due
     // (due − 5 días hábiles, v10.73.44). Si el instante de lift es futuro (aún lejana), no topa (falla el test <end=ahora) → la
@@ -3390,7 +3394,7 @@ function StageFlowHistory({order:o}){
     return tiempoPorEtapa(o,{ahora:new Date().toISOString(),topePausa,secuencia:STAGE_SEQUENCE,responsable:stage=>orderResponsible({...o,stage})?.name,persona:q=>AUTHOR_NAME[q]||q});
   },[o]);
   if(!data.bloques.length) return null;
-  // v10.84.175 — un día son las horas de una jornada: de color lo que ya pasó de un día (ámbar) y de dos (rojo), como antes con días de 24 h
+  // v10.84.175 — un día son las horas de un día de trabajo: de color lo que ya pasó de un día (ámbar) y de dos (rojo), como antes con días de 24 h
   const tono=h=>h>=2*HORAS_DE_UN_DIA?C.dn:h>=HORAS_DE_UN_DIA?C.amb:C.t2;
   const cifra={fontFamily:"'Geist Mono',monospace",whiteSpace:"nowrap"};
   const nombreDe=q=>q?(q==="system"?"Sistema":AUTHOR_NAME[q]||q):null;
@@ -3401,9 +3405,14 @@ function StageFlowHistory({order:o}){
     <span style={{gridColumn:2,gridRow:n+1,fontSize:10,color:C.t2,minWidth:0,overflowWrap:"anywhere"}}>{meta}</span>
   </div>;
   const rejilla={display:"grid",gridTemplateColumns:"fit-content(45%) minmax(0,1fr) auto",columnGap:10,rowGap:3,alignItems:"baseline",marginTop:4};
-  return <div onClick={e=>e.stopPropagation()} style={{marginTop:6}}>
+  return <div ref={raizRef} onClick={e=>e.stopPropagation()} style={{marginTop:6,scrollMarginTop:8}}>
     <button aria-expanded={open} onClick={()=>setOpen(!open)} style={{...bs(C.sf,C.t2),boxShadow:"0 0 0 0.5px "+C.bd,padding:"4px 10px",fontSize:11,gap:4}}><FastForwardIcon size={11} weight="bold"/>Tiempo por etapa{data.regs>0?<span style={{color:C.dnInk,fontWeight:700}}> · {data.regs} regresi{data.regs===1?"ón":"ones"}</span>:null} {open?<CaretUpIcon size={10} weight="bold"/>:<CaretDownIcon size={10} weight="bold"/>}</button>
     {open&&<div style={{marginTop:8}}>
+      {/* v10.84.176 — qué cuentan los tiempos, ANTES de leerlos (Marcelo, 4-nov: «si las horas sólo cuenta el tiempo en esa ventana agrega un texto que lo aclare»). Hasta abajo y en cursivas no se veía: con un panel largo quedaba fuera de la pantalla, y sin esto «2d» se lee como 48 horas. */}
+      <div style={{marginBottom:10,lineHeight:1.45}}>
+        <div style={{fontSize:11,fontWeight:600,color:C.tx}}>Los tiempos sólo cuentan el horario de trabajo: lunes a viernes, {HORARIO_EN_PALABRAS}.</div>
+        <div style={{fontSize:10,color:C.t2,marginTop:2}}>No cuentan la comida, las noches, los fines de semana ni las pausas «En espera». «1d» son {HORAS_DE_UN_DIA} horas de trabajo.{data.bloques.some(b=>b.validaciones)?" En Validar, cada quien cuenta desde que la orden entró.":""}</div>
+      </div>
       {data.bloques.map((b,i)=>{ const st=SM[b.stage]; const c=b.isReg?C.dn:(st?.c||C.t3); const durC=tono(b.hours); const ultimo=i===data.bloques.length-1;
         const varios=b.pasos.length>1, solo=b.pasos[0], quien=nombreDe(b.by);
         // cómo llegó: quién la capturó, la pasó o la regresó (de ese tiempo responde quien dice el nombre de la etapa)
@@ -3433,7 +3442,6 @@ function StageFlowHistory({order:o}){
           </div>
         </div>;
       })}
-      <div style={{fontSize:10,color:C.t2,marginTop:8,fontStyle:"italic",lineHeight:1.45}}>Horas de jornada: lunes a viernes de 9:00 a 14:00 y de 15:00 a 19:30, sin pausas «En espera». «1d» son {HORAS_DE_UN_DIA} horas. En Validar, cada quien cuenta desde que la orden entró.</div>
     </div>}
   </div>;
 }

@@ -2491,11 +2491,13 @@ await caso("ses-164-tiempo-por-etapa-en-la-ficha-abierta", async ({ p, s }) => {
   await ficha.getByRole("button", { name: /Tiempo por etapa/ }).click(); await p.waitForTimeout(250);
   const medir = () => ficha.evaluate(f => { const c = f.getBoundingClientRect(); const fuera = [...f.querySelectorAll("span,div")].filter(e => [...e.childNodes].some(x => x.nodeType === 3 && x.textContent.trim()) && e.getClientRects().length).filter(e => { const q = document.createRange(); q.selectNodeContents(e); return q.getBoundingClientRect().right > c.right + 1; }).map(e => e.textContent.trim().slice(0, 30));
     return { fuera, pagina: document.documentElement.scrollWidth > document.documentElement.clientWidth, ancho: Math.round(c.width) }; });
+  // v10.84.176 — y al abrirlo se ve: ninguna barra de arriba lo tapa (elementFromPoint: lo que un recorte tapa, un boundingBox no lo ve)
+  const seVeLaEtapa = await ficha.evaluate(f => { const e = f.querySelector('[data-etapa="draft"]'); if (!e) return false; const r = e.getBoundingClientRect(), h = document.elementFromPoint(r.left + 20, r.top + 8); return !!h && (e === h || e.contains(h)); });
   const a1366 = await medir(), t = (await ficha.innerText()).replace(/\s+/g, " "), detalle = await p.getByRole("dialog").count();
   await p.setViewportSize({ width: 1920, height: 1080 }); await p.waitForTimeout(400);
   const a1920 = await medir();
   const bien = a => !a.fuera.length && !a.pagina;
-  ok("ses-164-tiempo-por-etapa-en-la-ficha-abierta", bien(a1366) && bien(a1920) && detalle === 0 && /Noemí[^·]{0,40}validó/.test(t) && /Gerardo[^·]{0,40}validó/.test(t) && /Printmaster 52/.test(t) && /Müller Martini/.test(t), `1366: ${JSON.stringify(a1366)} · 1920: ${JSON.stringify(a1920)} · diálogos: ${detalle} · «${(t.match(/Tiempo por etapa.{0,200}/) || [""])[0]}»`);
+  ok("ses-164-tiempo-por-etapa-en-la-ficha-abierta", seVeLaEtapa && bien(a1366) && bien(a1920) && detalle === 0 && /Noemí[^·]{0,40}validó/.test(t) && /Gerardo[^·]{0,40}validó/.test(t) && /Printmaster 52/.test(t) && /Müller Martini/.test(t), `1366: ${JSON.stringify(a1366)} · 1920: ${JSON.stringify(a1920)} · diálogos: ${detalle} · «${(t.match(/Tiempo por etapa.{0,200}/) || [""])[0]}»`);
 });
 
 await browser.close();

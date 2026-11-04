@@ -2,7 +2,7 @@
 // pero no sé quién tardó» y «en algunas órdenes se repite el proceso varias veces, diseño o CTP aparece varias veces, eso no lo entiendo». Cada caso afirma lo que
 // DEBERÍA leer Dirección en el panel: una FALLA es un bug. Las bitácoras son las de producción, copiadas tal cual (P-0726, P-0721, P-0712, P-0527, P-0609, P-0563,
 // P-0669, P-0702). Vuelta 1: escritas antes del arreglo, sólo con lo que se lee en pantalla. Reloj fijo: miércoles 4-nov-2026 a las 16:00, hora de México.
-// Las cuentas de cada caso se hicieron a mano con la jornada medida de la bitácora de 120 días: lunes a viernes, 9:00 a 14:00 y 15:00 a 19:30.
+// Las cuentas de cada caso se hicieron a mano con el horario de trabajo que dio Marcelo (4-nov, v10.84.176): lunes a viernes, de 9 a 2 y de 3 a 7.
 // Uso: node tiempos.mjs <dir-capturas> [puerto=5493]   ·   SOLO=<regex> corre sólo los casos que coinciden
 import { chromium } from "playwright";
 import { deFuera } from "../consola.mjs";
@@ -178,8 +178,8 @@ await caso("tie-01-validar-dice-quien-tardo", P0726(), async p => {
 });
 await caso("tie-02-la-noche-no-cuenta", P0721(), async p => {
   const t = await texto(p);
-  // P-0721: capturada el jueves a las 18:40. Noemí validó a las 18:54 (14 m). Gerardo al día siguiente a las 15:08: de reloj son 20 h 28 m, de jornada 49 m + 5 h + 8.6 m = 6 h
-  ok("tie-02-la-noche-no-cuenta", /Noemí\D{0,12}14m/.test(t) && /Gerardo\D{0,12}6\.0h/.test(t) && !/\b2[01]h\b/.test(t), `panel: «${t.slice(0, 200)}»`);
+  // P-0721: capturada el jueves a las 18:40. Noemí validó a las 18:54 (14 m). Gerardo al día siguiente a las 15:08: de reloj son 20 h 28 m, de horario de trabajo 19 m + 5 h + 8.6 m = 5.5 h
+  ok("tie-02-la-noche-no-cuenta", /Noemí\D{0,12}14m/.test(t) && /Gerardo\D{0,12}5\.5h/.test(t) && !/\b2[01]h\b/.test(t), `panel: «${t.slice(0, 200)}»`);
 });
 await caso("tie-03-el-que-falta-se-dice", ENVALIDAR(), async p => {
   const t = await texto(p);
@@ -199,13 +199,13 @@ await caso("tie-05-otra-vuelta-a-validar-con-sus-tiempos", P0609(), async p => {
 // ════════════════════════ Lo que se repite: lo dice, o ya no se repite ════════════════════════
 await caso("tie-06-ctp-es-una-etapa-con-sus-pasos", P0726(), async p => {
   const t = await texto(p);
-  // la orden pasó una vez por CTP: 1 h 20 m en fila (de 19:04 a 19:30 y de 9:00 a 9:53) y los dos pasos que Germán marcó de golpe. Antes salían tres renglones «CTP» sin decir qué era cada uno
-  ok("tie-06-ctp-es-una-etapa-con-sus-pasos", /En fila\D{0,12}1\.3h/.test(t) && /Procesadora/.test(t) && cuenta(t, /\bCTP\b/g) <= 2, `«CTP» sale ${cuenta(t, /\bCTP\b/g)} veces; panel: «${t.slice(0, 420)}»`);
+  // la orden pasó una vez por CTP: 54 m en fila (llegó a las 19:04, ya acabado el horario; de 9:00 a 9:53) y los dos pasos que Germán marcó de golpe. Antes salían tres renglones «CTP» sin decir qué era cada uno
+  ok("tie-06-ctp-es-una-etapa-con-sus-pasos", /En fila\D{0,12}54m/.test(t) && /Procesadora/.test(t) && cuenta(t, /\bCTP\b/g) <= 2, `«CTP» sale ${cuenta(t, /\bCTP\b/g)} veces; panel: «${t.slice(0, 420)}»`);
 });
 await caso("tie-07-maquina-dice-cual", P0527(), async p => {
   const t = await texto(p);
-  // de lunes 16:07 a jueves 10:26 en la Printmaster 52: 2 días 5 h de jornada; luego la Polar 115, 8.7 h. Una sola etapa «Máquina»: 3 días 4 h
-  ok("tie-07-maquina-dice-cual", cuenta(t, /Máquina/g) === 1 && /Printmaster 52\D{0,12}2d 5h/.test(t) && /Polar 115\D{0,12}8\.7h/.test(t) && /3d 4h/.test(t), `«Máquina» sale ${cuenta(t, /Máquina/g)} veces; panel: «${t.slice(0, 420)}»`);
+  // de lunes 16:07 a jueves 10:26 en la Printmaster 52: 2.9 + 9 + 9 + 1.4 = 22.3 h, 2 días 4 h; luego la Polar 115, 3.6 + 4 + 0.7 = 8.2 h. Una sola etapa «Máquina»: 30.6 h, 3 días 4 h
+  ok("tie-07-maquina-dice-cual", cuenta(t, /Máquina/g) === 1 && /Printmaster 52\D{0,12}2d 4h/.test(t) && /Polar 115\D{0,12}8\.2h/.test(t) && /3d 4h/.test(t), `«Máquina» sale ${cuenta(t, /Máquina/g)} veces; panel: «${t.slice(0, 420)}»`);
 });
 await caso("tie-08-la-doble-de-la-bitacora-no-se-repite", P0712(), async p => {
   const t = await texto(p);
@@ -232,8 +232,8 @@ await caso("tie-12-cada-etapa-con-su-responsable", P0726(), async p => {
 });
 await caso("tie-13-entregada-no-sigue-en-salidas", P0609(), async p => {
   const t = await texto(p);
-  // entregada el 29-oct: Salidas se cierra ahí (sin la pausa: 2 días 4 h) y no sigue «en curso»
-  ok("tie-13-entregada-no-sigue-en-salidas", !/en curso|aquí ahora/.test(t) && /Entregada/.test(t) && /Salidas[^]{0,30}2d 4h/.test(t), `panel: «${t.slice(-260)}»`);
+  // entregada el 29-oct: Salidas se cierra ahí (sin la pausa: 2.7 + 9 + 9 + 0.6 = 21.3 h, 2 días 3 h) y no sigue «en curso»
+  ok("tie-13-entregada-no-sigue-en-salidas", !/en curso|aquí ahora/.test(t) && /Entregada/.test(t) && /Salidas[^]{0,30}2d 3h/.test(t), `panel: «${t.slice(-260)}»`);
 });
 await caso("tie-14-entregada-con-otro-texto", P0563(), async p => {
   const t = await texto(p);
@@ -245,7 +245,40 @@ await caso("tie-15-maquila-entregada", P0702(), async p => {
 });
 await caso("tie-16-la-nota-dice-que-cuenta", P0726(), async p => {
   const t = await texto(p);
-  ok("tie-16-la-nota-dice-que-cuenta", /9:00/.test(t) && /19:30/.test(t) && !/Tiempo hábil/.test(t), `panel: «${t.slice(-200)}»`);
+  // v10.84.176 — Marcelo, 4-nov: «si las horas sólo cuenta el tiempo en esa ventana agrega un texto que lo aclare»
+  ok("tie-16-la-nota-dice-que-cuenta", t.includes("Los tiempos sólo cuentan el horario de trabajo: lunes a viernes, de 9 a 2 y de 3 a 7.") && t.includes("No cuentan la comida, las noches, los fines de semana ni las pausas «En espera».")
+    && t.includes("«1d» son 9 horas de trabajo.") && t.includes("En Validar, cada quien cuenta desde que la orden entró.") && !/Tiempo hábil|jornada/i.test(t), `panel: «${t.slice(0, 320)}»`);
+});
+// se lee ANTES que los tiempos: va arriba de la primera etapa, sin cursivas, y se ve al abrir aunque el panel sea largo
+await caso("tie-61-la-nota-va-antes-de-los-tiempos", P0609(), async p => {
+  const m = await p.evaluate(() => { const caja = document.getElementById("caja"), nota = [...caja.querySelectorAll("div")].find(d => !d.children.length && /^Los tiempos sólo cuentan/.test(d.textContent)), etapa = caja.querySelector("[data-etapa]");
+    if (!nota || !etapa) return { hay: false };
+    const r = nota.getBoundingClientRect(), h = document.elementFromPoint(r.left + 10, r.top + r.height / 2);
+    return { hay: true, antes: r.bottom <= etapa.getBoundingClientRect().top, seVe: h === nota || nota.contains(h), cursiva: getComputedStyle(nota).fontStyle === "italic", px: parseFloat(getComputedStyle(nota).fontSize) }; });
+  ok("tie-61-la-nota-va-antes-de-los-tiempos", m.hay && m.antes && m.seVe && !m.cursiva && m.px >= 11, JSON.stringify(m));
+});
+// lo que no aplica no se dice: una maquila no pasa por Validar
+await caso("tie-62-la-maquila-no-habla-de-validar", P0702(), async p => {
+  const t = await texto(p);
+  ok("tie-62-la-maquila-no-habla-de-validar", /Los tiempos sólo cuentan el horario de trabajo/.test(t) && !/En Validar/.test(t), `panel: «${t.slice(0, 240)}»`);
+});
+// después de las 7 ya no cuenta, aunque se esté trabajando: las 19:10 a 19:40 son cero, y al día siguiente corre desde las 9
+await caso("tie-64-despues-de-las-7-no-cuenta", orden("P-0757", { stage: "design", created_at: H("2026-11-02 19:10:00") }, [
+  ["2026-11-02 19:10:00", "draft", "secretaria", "📋 Orden creada"],
+  ["2026-11-02 19:40:00", null, "preprensa", "✅ Validada por Pre-prensa"],
+  ["2026-11-03 09:20:00", null, "produccion", "✅ Validada por Producción"],
+  ["2026-11-03 09:20:00", "design", "produccion", "📝 → 🎨 Ambos validaron → Diseño"],
+]), async p => {
+  const t = await texto(p);
+  ok("tie-64-despues-de-las-7-no-cuenta", /Noemí\s*<1m/.test(t) && /Gerardo\D{0,12}20m/.test(t), `panel: «${t.slice(0, 320)}»`);
+});
+// y de 2 a 3 tampoco: lo capturado a la 1:50 y validado a las 3:05 son 15 minutos
+await caso("tie-65-la-comida-no-cuenta-en-pantalla", orden("P-0758", { stage: "draft", created_at: H("2026-11-02 13:50:00"), validated_by_production: false }, [
+  ["2026-11-02 13:50:00", "draft", "secretaria", "📋 Orden creada"],
+  ["2026-11-02 15:05:00", null, "preprensa", "✅ Validada por Pre-prensa"],
+]), async p => {
+  const t = await texto(p);
+  ok("tie-65-la-comida-no-cuenta-en-pantalla", /Noemí\D{0,12}15m/.test(t), `panel: «${t.slice(0, 320)}»`);
 });
 
 // ════════════════════════ Vuelta 2: por donde no se diseñó ════════════════════════
@@ -399,6 +432,15 @@ await caso("tie-48-firmada-por-el-sistema", conEventos("H-3609", {}, [
   const t = await texto(p);
   ok("tie-48-firmada-por-el-sistema", /la pasó Sistema/.test(t) && !/system/.test(t), `panel: «${t.slice(0, 240)}»`);
 });
+// v10.84.176 — lo encontró la vuelta 3 sobre la bitácora: P-0059, una maquila que nació como `draft`: las maquilas no se validan, y el panel decía «validó · la bitácora no guardó la hora»
+await caso("tie-49-la-maquila-no-se-valida", orden("P-0059", { stage: "maq_delivered", order_type: "maquila", created_at: H("2026-11-02 09:30:00"), delivered_at: H("2026-11-02 12:00:00") }, [
+  ["2026-11-02 09:30:00", "draft", "secretaria", "📋 Orden creada"],
+  ["2026-11-02 10:00:00", "maq_sent", "secretaria", "📋 Creada → 🚚 Enviada"],
+  ["2026-11-02 12:00:00", null, "karla", "✅ Entregada (Maquila)"],
+]), async p => {
+  const t = await texto(p);
+  ok("tie-49-la-maquila-no-se-valida", !/Noemí|Gerardo|validó|falta validar/.test(t) && /Enviada a Maquila/.test(t), `panel: «${t.slice(0, 240)}»`);
+});
 await caso("tie-35-la-que-paso-sin-validar-lo-dice", conEventos("P-0750", { stage: "design" }, [
   ["2026-11-02 10:00:00", "design", "admin", "📝 Validar → 🎨 Diseño"],
 ]), async p => {
@@ -502,12 +544,13 @@ await browser.close();
 
 // ── la cuenta, sin pantalla (con la hora de México) ──
 process.env.TZ = "America/Mexico_City";
-const { horasDeJornada, duracion, HORAS_DE_UN_DIA, tiempoPorEtapa } = await import("../../src/lib/tiempoPorEtapa.js");
+const { horasDeJornada, duracion, HORAS_DE_UN_DIA, HORARIO_EN_PALABRAS, tiempoPorEtapa } = await import("../../src/lib/tiempoPorEtapa.js");
 const cuenta2 = (n, a, b, esperado, pausas) => { const h = horasDeJornada(H(a), H(b), pausas); ok(n, Math.abs(h - esperado) < 1e-6, `${a} a ${b}: ${h} h (debía ${esperado})`); };
 if (!process.env.SOLO || new RegExp(process.env.SOLO).test("tie-50")) {
-  cuenta2("tie-50-un-dia-entero", "2026-11-02 00:00:00", "2026-11-03 00:00:00", 9.5);
+  cuenta2("tie-50-un-dia-entero", "2026-11-02 00:00:00", "2026-11-03 00:00:00", 9);
   cuenta2("tie-51-el-fin-de-semana-no-cuenta", "2026-10-31 00:00:00", "2026-11-02 00:00:00", 0);
-  cuenta2("tie-52-de-viernes-a-lunes", "2026-10-30 19:00:00", "2026-11-02 09:30:00", 1);
+  cuenta2("tie-52-de-viernes-a-lunes", "2026-10-30 18:30:00", "2026-11-02 09:30:00", 1);
+  ok("tie-63-el-horario-en-palabras-sale-de-la-cuenta", HORARIO_EN_PALABRAS === "de 9 a 2 y de 3 a 7" && HORAS_DE_UN_DIA === 9, `«${HORARIO_EN_PALABRAS}», ${HORAS_DE_UN_DIA} h`);
   cuenta2("tie-53-la-comida-no-cuenta", "2026-11-02 14:10:00", "2026-11-02 14:50:00", 0);
   cuenta2("tie-54-de-antes-de-la-comida-a-despues", "2026-11-02 13:30:00", "2026-11-02 15:30:00", 1);
   cuenta2("tie-55-al-reves-es-cero", "2026-11-03 10:00:00", "2026-11-02 10:00:00", 0);
@@ -515,7 +558,7 @@ if (!process.env.SOLO || new RegExp(process.env.SOLO).test("tie-50")) {
   cuenta2("tie-57-una-pausa-mas-larga-que-el-tramo-da-cero", "2026-11-02 10:00:00", "2026-11-02 11:00:00", 0, [{ start: H("2026-10-01 10:00:00"), end: H("2026-12-01 11:00:00") }]);
   const t0 = performance.now(); const anio = horasDeJornada(H("2024-01-01 09:00:00"), H("2026-01-01 09:00:00")), ms = Math.round(performance.now() - t0);
   ok("tie-58-dos-anos-no-se-traba", anio > 4000 && anio < 5200 && ms < 200, `${Math.round(anio)} h en ${ms} ms`);
-  const d = [[null, "—"], [0, "<1m"], [0.005, "<1m"], [0.5, "30m"], [59.6 / 60, "1.0h"], [2.34, "2.3h"], [9.49, "9.5h"], [HORAS_DE_UN_DIA, "1d"], [18.99, "1d 9h"], [19, "2d"], [23.82, "2d 5h"], [1284 * 9.5, "1284d"]];
+  const d = [[null, "—"], [0, "<1m"], [0.005, "<1m"], [0.5, "30m"], [59.6 / 60, "1.0h"], [2.34, "2.3h"], [8.94, "8.9h"], [HORAS_DE_UN_DIA, "1d"], [9.4, "1d"], [17.4, "1d 8h"], [17.6, "2d"], [18, "2d"], [22.32, "2d 4h"], [1284 * 9, "1284d"]];
   const malas = d.filter(([h, s]) => duracion(h) !== s).map(([h, s]) => `${h} → ${duracion(h)} (debía ${s})`);
   ok("tie-59-como-se-dice-cada-duracion", malas.length === 0, malas.join(" · ") || "todas");
   const sinOrden = tiempoPorEtapa(null, { ahora: H("2026-11-04 16:00:00") });

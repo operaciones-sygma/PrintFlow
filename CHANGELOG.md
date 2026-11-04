@@ -12,6 +12,27 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.176 — «Tiempo por etapa»: el horario de trabajo de verdad, y un texto que lo aclara — 4-nov-2026
+
+**Qué pasaba.** v10.84.175 dedujo la jornada de la bitácora y contaba hasta las 19:30. Marcelo, 4-nov: «es de 9 a 2, 1 hora de descanso y de 3 a 7. Si las horas sólo cuenta el tiempo en esa ventana agrega un texto que lo aclare» (`/impeccable`). La nota iba hasta abajo y en cursivas: en un panel largo quedaba fuera de
+la pantalla, y sin ella «2d» se lee como 48 horas. Además, de lo que dejó la vuelta 3 de la 175: el botón queda hasta abajo del cuerpo del detalle y el panel se abría abajo de la orilla; y P-0059, una maquila que nació como `draft`, decía «validó» (las maquilas no se validan).
+
+**Qué se cambió** (la pantalla; la base no).
+- 🔑 **El horario** (`JORNADA_TRAMOS`): lunes a viernes, de 9 a 2 y de 3 a 7. Un día son 9 horas: «2d» son 18. Lo que pasa después de las 7 no cuenta, aunque se esté trabajando (la bitácora de 120 días trae ~5% de sus movimientos después de las 7).
+- **El texto, ARRIBA de los tiempos**: «Los tiempos sólo cuentan el horario de trabajo: lunes a viernes, de 9 a 2 y de 3 a 7.» Y abajo: «No cuentan la comida, las noches, los fines de semana ni las pausas «En espera». «1d» son 9 horas de trabajo. En Validar, cada quien cuenta desde que la orden
+  entró.» Sin «jornada», sin cursivas; lo de Validar sólo cuando la orden pasó por ahí. El horario del texto sale de los tramos (`HORARIO_EN_PALABRAS`): no se puede quedar atrás de la cuenta.
+- **`duracion` por horas enteras**: con días de 9 h, 17.6 h decía «1d 9h»; ahora «2d».
+- **Al abrir el panel se ve** (`scrollIntoView` con `nearest`, sin animar): sin otro desplazamiento para llegar a Noemí y Gerardo, y con un panel más alto que el cuerpo el botón sigue a la vista.
+- **Las maquilas no enseñan validaciones.**
+
+**Cómo se probó.** **Vuelta 1**, antes del arreglo: det-238 (Noemí y Gerardo fuera de la vista al abrir) y tie-49 (P-0059 con «validó») caían. Las cuentas de `tiempos` se rehicieron a mano con el horario de Marcelo (P-0721: Gerardo 5.5 h; P-0527: Printmaster 52 2d 4h, Polar 115 8.2h; P-0609: Salidas 2d 3h).
+**Vuelta 2**: después de las 7, la comida en pantalla, el horario en palabras, la maquila sin «En Validar», el texto arriba de los tiempos, 17.6 h. **Sabotaje**: sin cada arreglo caen 19 de `tiempos`. 🔑 **det-238 no cayó**: su `elementFromPoint` aceptaba un contenedor que envuelve al renglón, y con el texto nuevo el punto caía ahí. Prueba corregida:
+con el arreglo pasa, sin él cae, `{"boton":true,"etapa":false,"noemi":false,"gerardo":false}`. **Barrido de sólo lectura** con el horario de verdad (1,126 órdenes): ninguna negativa ni terminada abierta.
+
+**Lo que dice la bitácora, con el horario de verdad** (740 órdenes de 180 días con las dos validaciones): Noemí, mediana 1.2 h, promedio 2.0, al último en 504 (68%); Gerardo, mediana 0.4 h, promedio 1.0, al último en 224 (30%); 12 empates de menos de un minuto.
+
+**Sin descontar.** Los días festivos cuentan como día normal: la app no tiene calendario de festivos, y el texto no promete lo contrario.
+
 ## v10.84.175 — «Tiempo por etapa»: quién tardó en Validar, cada etapa con sus pasos, y horas de jornada — 4-nov-2026
 
 **Qué pasaba.** Marcelo, 4-nov: «la etapa de validación tiene 2, Noemí y Gerardo, veo que tardan horas en aprobarla, pero no sé quién tardó» y «en algunas órdenes se repite el proceso varias

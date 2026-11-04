@@ -8,13 +8,16 @@
 //      mismo destino sin máquina nueva no abre renglón.
 //   3. VALIDAR LO HACEN DOS A LA VEZ, y se pintaba un solo tiempo. Cada quien cuenta desde que la orden entró a Validar hasta su «✅ Validada por…».
 //   4. LO ENTREGADO SEGUÍA «EN CURSO» EN SALIDAS (508 de 120 días; 40 de maquila): la entrega no lleva `to_stage`. La orden terminada se cierra con su fecha.
-//   5. LAS NOCHES CONTABAN COMO HORAS HÁBILES: lo capturado a las 18:40 y validado a las 15:08 del día siguiente decía 20 h. Las horas son de JORNADA.
+//   5. LAS NOCHES CONTABAN COMO HORAS HÁBILES: lo capturado a las 18:40 y validado a las 15:08 del día siguiente decía 20 h. Sólo cuenta el horario de trabajo.
 //   También quién responde de cada etapa (`responsable`): el renglón de CTP decía «Noemí», la que la pasó, y de ese tiempo responde Germán.
 
-// La jornada, medida de la bitácora (120 días, ~10,000 eventos, 3-nov): de 9:00 a 19:30, con la comida de 14:00 a 15:00 (un quinto de los movimientos de las demás
-//   horas); antes de las 8:30 y después de las 20:30, ninguno; los sábados, 35 en total. En horas del día, cada tramo [desde, hasta).
-export const JORNADA_TRAMOS = [[9, 14], [15, 19.5]];
+// v10.84.176 — el horario de trabajo, de Marcelo (4-nov: «de 9 a 2, 1 hora de descanso y de 3 a 7»), de lunes a viernes. La bitácora de 120 días lo confirma, con movimientos hasta las 19:30 que
+//   ya no cuentan; la v10.84.175 lo había deducido de ahí y contaba hasta las 19:30. En horas del día, cada tramo [desde, hasta).
+export const JORNADA_TRAMOS = [[9, 14], [15, 19]];
 export const HORAS_DE_UN_DIA = JORNADA_TRAMOS.reduce((s, [a, b]) => s + b - a, 0);
+// «de 9 a 2 y de 3 a 7», como se dice en la planta. Sale de los tramos: el texto del panel no se puede quedar atrás de la cuenta
+const aLaHora = h => { const m = Math.round((h % 1) * 60), h12 = Math.floor(h) > 12 ? Math.floor(h) - 12 : Math.floor(h); return h12 + (m ? ":" + String(m).padStart(2, "0") : ""); };
+export const HORARIO_EN_PALABRAS = JORNADA_TRAMOS.map(([a, b]) => "de " + aLaHora(a) + " a " + aLaHora(b)).join(" y ");
 
 const aMs = d => new Date(d).getTime();
 const alReloj = (dia, h) => new Date(dia.getFullYear(), dia.getMonth(), dia.getDate(), Math.floor(h), Math.round((h % 1) * 60)).getTime();
@@ -49,7 +52,7 @@ export function duracion(h) {
   if (m < 1) return "<1m";
   if (m < 60) return m + "m";
   if (h < HORAS_DE_UN_DIA) return h.toFixed(1) + "h";
-  const d = Math.floor(h / HORAS_DE_UN_DIA), r = Math.round(h - d * HORAS_DE_UN_DIA);
+  const H = Math.round(h), d = Math.floor(H / HORAS_DE_UN_DIA), r = H - d * HORAS_DE_UN_DIA;   // por horas enteras: 17.6 h son «2d», no «1d 9h»
   return d + "d" + (r ? " " + r + "h" : "");
 }
 
@@ -133,7 +136,7 @@ export function tiempoPorEtapa(o, { ahora, topePausa = null, secuencia = [], res
       p.hours = horas(p.at, ultPaso ? fin : b.pasos[j + 1].at);
       p.current = b.current && ultPaso;
       p.etiqueta = p.maquina || (b.pasos.length > 1 ? "En fila" : null); });
-    if (b.stage !== "draft") return;
+    if (b.stage !== "draft" || o.order_type === "maquila") return;   // v10.84.176 — las maquilas no se validan, aunque hayan nacido como `draft` (P-0059)
     const salio = esUltimo ? null : trans.find(t => aMs(t.date) === aMs(fin) && aDonde(t) === bloques[i + 1].stage);
     b.validaciones = VALIDADORES.map(v => {
       const ev = tl.find(t => v.patron.test(t.action || "") && aMs(t.date) >= aMs(b.at) && aMs(t.date) <= aMs(fin));

@@ -572,6 +572,17 @@ for (const [n, viewport] of [["1366", { width: 1366, height: 768 }], ["1920", { 
       `contraste: ${m.slice(0, 3).join(" · ") || "bien"}; se sale: ${fuera.slice(0, 3).join(" · ") || "nada"}; ${(t.match(/Tiempo por etapa.{0,160}/) || [""])[0]}`);
   }, viewport);
 }
+// v10.84.176 — al abrirlo se ve (Marcelo, 4-nov: «para que sea visible»): el botón queda hasta abajo del cuerpo del detalle y el panel se abría abajo de la orilla; otro desplazamiento para llegar a Noemí y Gerardo.
+//   Medido con elementFromPoint: lo que un recorte tapa, un boundingBox no lo ve. Y el botón sigue a la vista: con un panel más alto que el cuerpo, el panel no lo saca de la pantalla.
+await caso("det-238-al-abrir-tiempo-por-etapa-se-ve", "caso=tiempos&rol=admin", async p => {
+  const b = dlg(p).getByRole("button", { name: /Tiempo por etapa/ });
+  await b.evaluate(x => x.scrollIntoView({ block: "end", behavior: "instant" })); await espera(p, 200);
+  await b.click(); await espera(p, 300);
+  const visto = await dlg(p).evaluate(d => { const seVe = e => { if (!e) return false; const r = e.getBoundingClientRect(), x = r.left + Math.min(r.width, 40) / 2, y = r.top + r.height / 2; const h = document.elementFromPoint(x, y); return !!h && (e === h || e.contains(h)); };   /* el renglón o algo suyo: un contenedor que lo envuelve no dice que se vea (lo destapó el sabotaje) */
+    const pinta = re => [...d.querySelectorAll("span")].find(s => re.test(s.textContent.trim()) && !s.children.length);
+    return { boton: seVe([...d.querySelectorAll("button")].find(x => /Tiempo por etapa/.test(x.textContent))), etapa: seVe(d.querySelector('[data-etapa="draft"]')), noemi: seVe(pinta(/^Noemí$/)), gerardo: seVe(pinta(/^Gerardo$/)) }; });
+  ok("det-238-al-abrir-tiempo-por-etapa-se-ve", visto.boton && visto.etapa && visto.noemi && visto.gerardo, JSON.stringify(visto));
+});
 // «Más» es un menú: las flechas se mueven, y Tab lo cierra sin perder el foco
 await caso("det-92-flechas-en-mas", "caso=salidas&rol=admin", async p => {
   await abrirMas(p);
