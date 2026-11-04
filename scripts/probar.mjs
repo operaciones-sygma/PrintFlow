@@ -81,7 +81,10 @@ const TANDAS = [
   { nombre: "cliente", gen: "tests/banco/gen-cliente.mjs", romper: "tests/romper/cliente.mjs", puerto: 5192 },
   // la sesión: entrar, abrir con la sesión guardada, «Salir» y la que se cierra sola (v10.84.71; lo de CobranzaFlow v3.7.999f/o). Sin
   // banco: la tanda compila la app REAL contra una Supabase de mentira y simula Auth y la base en el navegador (nada sale a producción)
-  { nombre: "sesion", romper: "tests/romper/sesion.mjs" },
+  { nombre: "sesion", romper: "tests/romper/sesion.mjs", env: { SESION_PARTE: "1" } },
+  // v10.84.173 — la misma tanda, partida en dos, como `orden`: con ses-140 a ses-158 pasó de los 12 minutos y el tope la detenía sin reportar nada. `sesion`
+  //   hasta ses-119 y `sesion-2` desde ses-120 (lo del plan de la OC). Cada una compila en su carpeta y sirve en su puerto: corren a la vez.
+  { nombre: "sesion-2", romper: "tests/romper/sesion.mjs", env: { SESION_PARTE: "2" } },
   // las puertas de cancelar: la orden, la orden con folio, una parte y el plan matriz (v10.84.73, la critique de la noche del 12-oct);
   // el banco extrae las cuatro ventanas con extraer.mjs y simula lo que hace App al confirmar
   { nombre: "cancelar", gen: "tests/banco/gen-cancelar.mjs", romper: "tests/romper/cancelar.mjs", puerto: 5187 },

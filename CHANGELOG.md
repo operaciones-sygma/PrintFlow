@@ -12,6 +12,56 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.173 — La factura ligada del plan se ve ligada, y se desliga (no «se cancela») — 3-nov-2026
+
+**Qué pasaba.** En las capturas de Karla del 3-nov (OC-0966, Hotsson) las 11 facturas del plan no traían su etiqueta «LIGADA». `reload` lee
+`oc_invoice_split_groups` con columnas explícitas y nunca pidió `ligada` (ni `bill_to_name`): desde v10.84.89 la vista del plan y su ventana dependían de
+un dato que en producción no llegaba. Hay 13 ligadas, todas vivas (OC-0960 y OC-0966); nadie ha usado esa ventana sobre ellas.
+- **A Dirección le ofrecía «Cancelar factura» y «Cancelar» por renglón**, y la ventana decía «F-169 se cancela en CobranzaFlow, con saldo 0», «No se
+  deshace», y luego «F-169 cancelada». La base no hace eso: `cancel_oc_invoice_split_group` con `ligada` sólo la desliga (ni la cancela ni toca sus cobros)
+  y `cancel_oc_split_line_internal` rechaza quitarle un renglón. No había riesgo de dinero; el riesgo era creer cancelada una factura que sigue viva.
+- **«Paga: … (tercero)» nunca salía**, por lo mismo (hoy ninguna factura del plan lleva tercero).
+- **Por qué no se vio:** el banco del plan le da `ligada` por props, y el simulador de `sesion` contestaba la fila entera aunque la app pidiera menos.
+
+Lo que destaparon las vueltas:
+- **Sin leer las facturas del plan, sin aviso:** con esa lectura caída y la de sus líneas bien, «Marcar como Entregada» salía sin plan a la vista y
+  diciendo «0 facturas». `matrixFallo` sólo miraba las líneas.
+- **La desligada habría salido «CANCELADA» y «LIGADA» a la vez**, en rojo, con «(cancelada)» en sus renglones y contada como cancelada.
+- **Ya hecha en otra sesión, con la ventana abierta:** «con sus 0 líneas: .» y todo lo que iba a pasar (también en la que no es ligada).
+- **«y sus 1 líneas» y «(1 líneas)»** con un solo renglón.
+- **Un motivo sin dónde cortar** (el campo admite 500) sacaba la página de la pantalla, a 1366 y a 1920; lo mismo la etiqueta, «CFDI a nombre de» y «Paga».
+- **La ventana mandaba a «Facturas esperando orden»**, un nombre que CobranzaFlow no enseña: allá es «facturas sin orden de producción», en Documentos.
+
+**Qué se cambió** (sólo la pantalla; la base no cambió).
+- **`reload` pide `ligada` y `bill_to_name`.** Con eso, lo de v10.84.89 ya funciona: la etiqueta «LIGADA · ya existía», «Desligar factura» y sin «Cancelar»
+  por renglón; las que no se ligaron siguen igual.
+- **`matrixFallo` también con las facturas del plan:** avisa y cierra las puertas de folio y de entrega, como con las líneas; al volver la lectura, regresan solas.
+- **La desligada se dice desligada:** «DESLIGADA» en gris, «(desligada)» en sus renglones y «· 1 desligada» aparte de las canceladas.
+- **La ventana usa la palabra de principio a fin:** `desliga` en `VentanaDeCancelar` y `BotonQueCancela`, `pregunta` en `CampoMotivo` («¿Por qué se desliga?»,
+  «¿Cerrar sin desligar?», «Desligando…», «revisa si quedó desligada»), «No se desligó F-169» y «F-169 desligada del plan (2 líneas): no se canceló». Por
+  omisión, igual que antes en las otras tres ventanas que la comparten.
+- **Ya hecha en otra sesión,** la ventana dice lo que pasó y nada de lo que iba a pasar. «y su línea», «(1 línea)». `overflowWrap: "anywhere"` en la
+  etiqueta, «CFDI a nombre de», «Paga» y el motivo. El nombre de verdad: «facturas sin orden de producción» (Documentos, en CobranzaFlow).
+- **El simulador de `sesion` contesta como PostgREST: sólo las columnas que la app pidió** (con «*» o una relación, la fila tal cual). `HOTSSON_PLAN`
+  trae el renglón completo de producción, con `ligada: true`.
+
+**Cómo se probó.** Tres vueltas en `sesion` (ses-140 a ses-158, 20 resultados), con los datos de la OC-0966 y la app real.
+- **Vuelta 1, escrita antes del cambio:** de 16, 14 fallaban; pasaban las dos de control (ses-145, la que no se ligó; ses-149, el doble clic). Una falla era de
+  la prueba: ses-148 esperaba el texto crudo de la base y la app lo traduce («la base no lo aceptó»); se corrigió la prueba.
+- **Vuelta 2, por donde no se diseñó:** la lectura que cae y vuelve (ses-155), la remisión ligada de un renglón (ses-156), la que no es ligada cancelada en otra
+  sesión (ses-157), un motivo de 459 caracteres sin cortes (ses-158), lista de break-ui (acentos, derecha a izquierda, sin cortes), Esc y clic afuera con
+  el motivo escrito, la base que rechaza, las dos pantallas.
+- **Vuelta 3, sobre las pruebas:** ses-152 y ses-158 medían la caja, no el texto, y con un dato corto pasaban sin probar nada: ahora miden el texto (`Range`) con
+  datos que de verdad no caben. Fue lo que destapó el motivo que sacaba la página.
+- **Corrida doble:** contra el código de antes (256b343) 18 de 20 fallan y sólo pasan las dos de control; con el cambio, 20 de 20.
+- **Lo compartido:** `VentanaDeCancelar`, `BotonQueCancela` y `CampoMotivo` los usan cancelar orden, cancelar parte y cancelar folio (tandas `cancelar`,
+  `cancelaciones`, `partes`, en el candado); el simulador, las 146 de antes de `sesion`.
+- **La tanda va en dos, como `orden`:** con las nuevas, `sesion` pasó del tope de 12 minutos y se detenía sin reportar nada. `sesion` hasta ses-119 y `sesion-2`
+  desde ses-120 (`SESION_PARTE`, cada una compila en su carpeta y sirve en su puerto).
+- **Sin probar:** desligar de verdad en producción (se probó contra la base simulada; lo que hace la base se leyó de `pg_get_functiondef` y no cambió).
+
+**Permisos.** `authenticated` lee las dos columnas (`has_column_privilege`), así que la lectura no se cae para ningún rol.
+
 ## v10.84.172 — Lo facturado en el plan de su OC se entrega (Hotsson, OC-0966) — 3-nov-2026
 
 **Qué pasaba.** Karla, 3-nov 10:27 (WhatsApp, con dos capturas): «¿Cómo puedo cerrar ya estas órdenes de producción con esas facturas? ¿Por qué me

@@ -7729,7 +7729,8 @@ function useEnvioDeCancelar(){
   };
   return {trabajando,error,enviar};
 }
-function VentanaDeCancelar({tituloId,titulo,subtitulo,capturado,trabajando,bloqueada,onClose,error,falta,ancho=500,accion,describedBy,children}){
+// v10.84.173 — `desliga`: lo que hace no es cancelar sino desligar (la factura ligada del plan matriz), y la ventana lo dice con esa palabra de principio a fin
+function VentanaDeCancelar({tituloId,titulo,subtitulo,capturado,trabajando,bloqueada,onClose,error,falta,ancho=500,accion,describedBy,desliga,children}){
   const [pregunta,setPregunta]=useState(null);
   const panelRef=useRef(null), volverRef=useRef(null), cuerpoRef=useRef(null), pulsoEnFondo=useRef(false), antesDePregunta=useRef(null), errRef=useRef(null);
   const vivo=useRef(null); vivo.current={capturado,trabajando,onClose,pregunta};
@@ -7750,7 +7751,7 @@ function VentanaDeCancelar({tituloId,titulo,subtitulo,capturado,trabajando,bloqu
     if(v.trabajando||v.pregunta)return;
     if(!v.capturado){v.onClose();return}
     antesDePregunta.current=document.activeElement; escudoDeClics(400);
-    setPregunta({title:"¿Cerrar sin cancelar?",message:"Se pierde lo que escribiste o elegiste aquí. No se cancela nada.",confirmLabel:"Cerrar sin cancelar",confirmColor:C.ac,cancelLabel:"Seguir aquí",onConfirm:()=>{setPregunta(null);v.onClose()}});
+    setPregunta({title:desliga?"¿Cerrar sin desligar?":"¿Cerrar sin cancelar?",message:"Se pierde lo que escribiste o elegiste aquí. No se "+(desliga?"desliga":"cancela")+" nada.",confirmLabel:desliga?"Cerrar sin desligar":"Cerrar sin cancelar",confirmColor:C.ac,cancelLabel:"Seguir aquí",onConfirm:()=>{setPregunta(null);v.onClose()}});
   };
   useEscClose(pedirCerrar);
   // al cerrar la pregunta, el foco regresa a donde estaba (el campo, una opción), no al <body>
@@ -7762,7 +7763,7 @@ function VentanaDeCancelar({tituloId,titulo,subtitulo,capturado,trabajando,bloqu
   },[pregunta]);
   // el rechazo de la base se lleva el foco a su aviso: el botón apretado se apaga mientras trabaja y el foco caía al <body>
   useEffect(()=>{if(error)errRef.current?.focus()},[error]);
-  const renglon=tarda?"La base está tardando. Si no contesta en un momento, recarga la página y revisa si quedó cancelada.":trabajando?"Cancelando… no cierres la ventana.":falta;
+  const renglon=tarda?"La base está tardando. Si no contesta en un momento, recarga la página y revisa si quedó "+(desliga?"desligada":"cancelada")+".":trabajando?(desliga?"Desligando":"Cancelando")+"… no cierres la ventana.":falta;
   return <>
     <div onMouseDown={e=>{pulsoEnFondo.current=e.target===e.currentTarget}} onClick={e=>{if(e.target!==e.currentTarget||!pulsoEnFondo.current)return;pulsoEnFondo.current=false;if(Date.now()-abierta.current<500)return;pedirCerrar()}}
       style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"flex-start",justifyContent:"center",zIndex:1000,padding:"8vh 16px 16px"}}>
@@ -7788,16 +7789,16 @@ function VentanaDeCancelar({tituloId,titulo,subtitulo,capturado,trabajando,bloqu
   </>;
 }
 // el botón que cancela dice QUÉ cancela; apagado va hueco (no gemelo de «Volver») y lo describe el renglón que dice qué falta
-function BotonQueCancela({listo,trabajando,onClick,describedBy,children}){
+function BotonQueCancela({listo,trabajando,onClick,describedBy,desliga,children}){
   const vivo=listo&&!trabajando;
   return <button onClick={onClick} disabled={!vivo} aria-describedby={describedBy} style={listo?{...bt(C.dnInk),cursor:trabajando?"wait":"pointer"}:{...bt("transparent",C.t2),border:"1px dashed "+C.bdSt,cursor:"not-allowed"}}>
-    {trabajando?<><HourglassIcon size={14} weight="bold"/>Cancelando…</>:<><XCircleIcon size={14} weight="bold"/>{children}</>}</button>;
+    {trabajando?<><HourglassIcon size={14} weight="bold"/>{desliga?"Desligando…":"Cancelando…"}</>:<><XCircleIcon size={14} weight="bold"/>{children}</>}</button>;
 }
-function CampoMotivo({id,valor,onChange,trabajando,bloqueada,autoFocus,ejemplo}){
+function CampoMotivo({id,valor,onChange,trabajando,bloqueada,autoFocus,ejemplo,pregunta="¿Por qué se cancela?"}){
   const ref=useRef(null);
   useEffect(()=>{ if(autoFocus) ref.current?.focus({preventScroll:true}); },[]);   // v10.84.75 — sin desplazar el cuerpo (no autoFocus)
   return <div style={{marginTop:14}}>
-    <label htmlFor={id} style={{display:"block",fontSize:12,fontWeight:600,color:C.tx,marginBottom:4}}>¿Por qué se cancela?</label>
+    <label htmlFor={id} style={{display:"block",fontSize:12,fontWeight:600,color:C.tx,marginBottom:4}}>{pregunta}</label>
     <textarea ref={ref} id={id} value={valor} onChange={e=>onChange(e.target.value)} rows={2} maxLength={500} disabled={trabajando||bloqueada} placeholder={ejemplo} style={{...inp,outline:undefined,resize:"vertical",minHeight:56,lineHeight:1.4,opacity:bloqueada?.6:1}}/>
   </div>;
 }
@@ -9889,32 +9890,33 @@ function MatrixCancelConfirmModal({kind, line, group, order, oc, orders, onConfi
   const cae = !isLine || esLaUltima;   // se cancela el documento entero
   // v10.84.89 — la factura LIGADA ya existía (sin orden, en CobranzaFlow): cancelarla del plan la DESLIGA (no la cancela, ni sus
   //   cobros) y a un renglón suyo no se le quita nada (su importe no cambiaría): la base lo frena, aquí se dice antes
-  const ligada = !!group?.ligada, noSePuede = isLine && ligada;
+  const ligada = !!group?.ligada, noSePuede = isLine && ligada, desliga = !isLine && ligada;
   const pagada = pagoEnPalabras(group?.payment_status);
   const yaCancelado = !!group?.cancelled_at || (isLine && !!line?.cancelled_at);   // v10.84.74 — el plan vivo
   const motivoOk = reason.trim().length>=MOTIVO_MIN;
   const piezas = n => Number(n||0).toLocaleString("es-MX")+" pzas";
   const confirmar = () => { if(!motivoOk||yaCancelado||noSePuede)return; enviar(()=>onConfirm(reason.trim()), isLine?"No se canceló la línea":ligada?"No se desligó "+doc:"No se canceló "+doc); };
-  return <VentanaDeCancelar tituloId="dlg-cancelar-matriz-titulo" ancho={520} bloqueada={yaCancelado||noSePuede} describedBy="dlg-cancelar-matriz-hechos"
+  return <VentanaDeCancelar tituloId="dlg-cancelar-matriz-titulo" ancho={520} desliga={desliga} bloqueada={yaCancelado||noSePuede} describedBy="dlg-cancelar-matriz-hechos"
     titulo={isLine ? "Cancelar la línea de "+pn(line?.order_id)+" en "+doc : (ligada?"Desligar ":"Cancelar ")+doc+" del plan de "+(oc?.id||"la OC")}
     subtitulo={[oc?.id,oc?.client].filter(Boolean).join(" · ")}
-    capturado={!!reason.trim()} trabajando={trabajando} onClose={onClose} error={error} falta={noSePuede?"A una factura ligada no se le quita un renglón.":yaCancelado?"Ya está cancelada.":motivoOk?null:"Escribe por qué (mínimo 5 caracteres)."}
-    accion={<BotonQueCancela listo={motivoOk&&!yaCancelado&&!noSePuede} trabajando={trabajando} describedBy="dlg-cancelar-matriz-titulo-falta" onClick={confirmar}>{!isLine ? (ligada?"Desligar ":"Cancelar ")+doc+" y sus "+vivas.length+" líneas" : esLaUltima ? "Cancelar la línea y "+doc : "Cancelar la línea"}</BotonQueCancela>}>
+    capturado={!!reason.trim()} trabajando={trabajando} onClose={onClose} error={error} falta={noSePuede?"A una factura ligada no se le quita un renglón.":yaCancelado?(desliga?"Ya está desligada.":"Ya está cancelada."):motivoOk?null:"Escribe por qué (mínimo 5 caracteres)."}
+    accion={<BotonQueCancela desliga={desliga} listo={motivoOk&&!yaCancelado&&!noSePuede} trabajando={trabajando} describedBy="dlg-cancelar-matriz-titulo-falta" onClick={confirmar}>{!isLine ? (ligada?"Desligar ":"Cancelar ")+doc+(vivas.length>1?" y sus "+vivas.length+" líneas":vivas.length===1?" y su línea":"") : esLaUltima ? "Cancelar la línea y "+doc : "Cancelar la línea"}</BotonQueCancela>}>
     <ul id="dlg-cancelar-matriz-hechos" style={listaDeHechos}>
-      {yaCancelado&&<HechoDeCancelar tono="grave">Mientras tenías la ventana abierta, se canceló en otra sesión: ya no hay nada que cancelar aquí.</HechoDeCancelar>}
+      {/* v10.84.173 — ya hecha en otra sesión, se dice qué pasó y nada de lo que iba a pasar (ni «con sus 0 líneas») */}
+      {yaCancelado&&<HechoDeCancelar tono="grave">Mientras tenías la ventana abierta, se {desliga?"desligó":"canceló"} en otra sesión: ya no hay nada que {desliga?"desligar":"cancelar"} aquí.</HechoDeCancelar>}
       {isLine
         ? <HechoDeCancelar icono={ScissorsIcon}>{pn(line?.order_id)} sale de {doc}: {piezas(line?.qty_portion)} · {pesosMx(cIva(montoLinea))}{sufijo}.</HechoDeCancelar>
-        : <HechoDeCancelar icono={FileTextIcon}>{mayus(doc)} por {pesosMx(cIva(total))}{sufijo}{conIva?" ("+pesosMx(total)+" sin IVA)":""}, con {vivas.length===1?"su línea":"sus "+vivas.length+" líneas"}: {vivas.map(l=>pn(l.order_id)+" ("+pesosMx(cIva(l.amount_portion))+")").join(" · ")}.</HechoDeCancelar>}
+        : <HechoDeCancelar icono={FileTextIcon}>{mayus(doc)} por {pesosMx(cIva(total))}{sufijo}{conIva?" ("+pesosMx(total)+" sin IVA)":""}{vivas.length>0&&<>, con {vivas.length===1?"su línea":"sus "+vivas.length+" líneas"}: {vivas.map(l=>pn(l.order_id)+" ("+pesosMx(cIva(l.amount_portion))+")").join(" · ")}</>}.</HechoDeCancelar>}
       {noSePuede&&<HechoDeCancelar tono="grave" icono={LinkIcon}>{mayus(doc)} ya existía (se hizo sin orden en CobranzaFlow) y se ligó al plan: quitarle un renglón no cambiaría su importe. Se desliga entera («Desligar», en el plan) o se corrige en CobranzaFlow.</HechoDeCancelar>}
-      {!isLine&&ligada&&<HechoDeCancelar tono="aviso" icono={LinkIcon}>{mayus(doc)} no se cancela: ya existía (se hizo sin orden en CobranzaFlow) y sólo se ligó. Se desliga y vuelve a «Facturas esperando orden», con sus cobros como estén; si ese trabajo ya no se cobra, se cancela allá.</HechoDeCancelar>}
-      {isLine&&!esLaUltima&&!ligada&&<HechoDeCancelar>{mayus(doc)} baja de {pesosMx(cIva(total))} a {pesosMx(cIva(total-montoLinea))}{sufijo} y se queda con {quedan.map(l=>pn(l.order_id)).join(", ")}. {pagada?"Ya está "+pagada+": lo cobrado no se toca, y si queda cobrada de más, CobranzaFlow lo marca para devolverlo o dejarlo a favor.":"Lo cobrado no se toca."}</HechoDeCancelar>}
-      {cae&&!esCorona&&!ligada&&<HechoDeCancelar tono="aviso">{isLine?"Es la única línea que le queda a "+doc+": "+nombreDoc+" se cancela":mayus(doc)+" se cancela"} en CobranzaFlow, con saldo 0.{pagada?" Ya está "+pagada+": ese dinero se revisa ahí, para devolverlo o dejarlo a favor del cliente.":""}</HechoDeCancelar>}
-      {esCorona&&<HechoDeCancelar tono="aviso" icono={WalletIcon}>Se pagó con saldo de Corona: {pesosMx(isLine?montoLinea:total)} regresan a la bolsa del cliente.</HechoDeCancelar>}
-      {!esCorona&&!ligada&&<HechoDeCancelar tono="aviso">Si {doc} ya está timbrada ante el SAT, la base no deja {cae?"cancelarla":"cambiarle el importe"}: primero se cancela su CFDI en CobranzaFlow.</HechoDeCancelar>}
-      <HechoDeCancelar>{isLine ? "La orden "+pn(line?.order_id)+" no se cancela: si se queda sin factura, regresa a Salidas para volver a facturarse." : "Las órdenes no se cancelan: las que se queden sin factura regresan a Salidas."}</HechoDeCancelar>
+      {desliga&&!yaCancelado&&<HechoDeCancelar tono="aviso" icono={LinkIcon}>{mayus(doc)} no se cancela: ya existía (se hizo sin orden en CobranzaFlow) y sólo se ligó. Se desliga y vuelve a las «facturas sin orden de producción» (Documentos, en CobranzaFlow), con sus cobros como estén; si ese trabajo ya no se cobra, se cancela allá.</HechoDeCancelar>}
+      {isLine&&!esLaUltima&&!ligada&&!yaCancelado&&<HechoDeCancelar>{mayus(doc)} baja de {pesosMx(cIva(total))} a {pesosMx(cIva(total-montoLinea))}{sufijo} y se queda con {quedan.map(l=>pn(l.order_id)).join(", ")}. {pagada?"Ya está "+pagada+": lo cobrado no se toca, y si queda cobrada de más, CobranzaFlow lo marca para devolverlo o dejarlo a favor.":"Lo cobrado no se toca."}</HechoDeCancelar>}
+      {cae&&!esCorona&&!ligada&&!yaCancelado&&<HechoDeCancelar tono="aviso">{isLine?"Es la única línea que le queda a "+doc+": "+nombreDoc+" se cancela":mayus(doc)+" se cancela"} en CobranzaFlow, con saldo 0.{pagada?" Ya está "+pagada+": ese dinero se revisa ahí, para devolverlo o dejarlo a favor del cliente.":""}</HechoDeCancelar>}
+      {esCorona&&!yaCancelado&&<HechoDeCancelar tono="aviso" icono={WalletIcon}>Se pagó con saldo de Corona: {pesosMx(isLine?montoLinea:total)} regresan a la bolsa del cliente.</HechoDeCancelar>}
+      {!esCorona&&!ligada&&!yaCancelado&&<HechoDeCancelar tono="aviso">Si {doc} ya está timbrada ante el SAT, la base no deja {cae?"cancelarla":"cambiarle el importe"}: primero se cancela su CFDI en CobranzaFlow.</HechoDeCancelar>}
+      {!yaCancelado&&<HechoDeCancelar>{isLine ? "La orden "+pn(line?.order_id)+" no se cancela: si se queda sin factura, regresa a Salidas para volver a facturarse." : "Las órdenes no se cancelan: las que se queden sin factura regresan a Salidas."}</HechoDeCancelar>}
       {!yaCancelado&&!noSePuede&&<HechoDeCancelar tono="grave">{ligada?"Para volver a ligarla, se arma un plan nuevo.":"No se deshace desde PrintFlow."}</HechoDeCancelar>}
     </ul>
-    <CampoMotivo id="cancelar-matriz-motivo" autoFocus={!yaCancelado&&!noSePuede} valor={reason} onChange={setReason} trabajando={trabajando} bloqueada={yaCancelado||noSePuede} ejemplo={isLine?"El cliente devolvió 2,000 piezas":ligada?"Se ligó la factura equivocada":"El cliente canceló el pedido completo"}/>
+    <CampoMotivo id="cancelar-matriz-motivo" pregunta={desliga?"¿Por qué se desliga?":undefined} autoFocus={!yaCancelado&&!noSePuede} valor={reason} onChange={setReason} trabajando={trabajando} bloqueada={yaCancelado||noSePuede} ejemplo={isLine?"El cliente devolvió 2,000 piezas":ligada?"Se ligó la factura equivocada":"El cliente canceló el pedido completo"}/>
   </VentanaDeCancelar>;
 }
 
@@ -9934,13 +9936,16 @@ function OCMatrixPlanView({matrixPlan, ocOrders, role, onCancelLine, onCancelGro
   if(!matrixPlan || !matrixPlan.groups || matrixPlan.groups.length === 0) return null;
   const fmtMx = n => Number(n||0).toLocaleString("es-MX", {minimumFractionDigits:2, maximumFractionDigits:2});
   const orderById = Object.fromEntries((ocOrders||[]).map(o => [o.id, o]));
-  const cancelledCount = (matrixPlan.total_count||0) - (matrixPlan.alive_count||0);
+  // v10.84.173 — la ligada que se desligó queda con cancelled_at, pero no se canceló: se cuenta y se dice aparte
+  const desligadasCount = (matrixPlan.groups||[]).filter(g => g.cancelled_at && g.ligada).length;
+  const cancelledCount = (matrixPlan.total_count||0) - (matrixPlan.alive_count||0) - desligadasCount;
   const isAdmin = role === "admin";
   return <div style={{background:C.fac+"08",border:"1px solid "+C.fac+"25",borderRadius:10,padding:12,marginBottom:10}}>
     <div onClick={()=>setExpanded(p=>!p)} style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",userSelect:"none"}}>
       <span style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:13,fontWeight:700,color:C.fac}}>
         <ChartBarIcon size={14} weight="bold"/>{matrixPlan.alive_count||0} factura{matrixPlan.alive_count===1?"":"s"} del plan
         {cancelledCount > 0 && <span style={{color:C.t2,fontWeight:500,marginLeft:6,fontSize:11}}>· {cancelledCount} cancelada{cancelledCount===1?"":"s"}</span>}
+        {desligadasCount > 0 && <span style={{color:C.t2,fontWeight:500,marginLeft:6,fontSize:11}}>· {desligadasCount} desligada{desligadasCount===1?"":"s"}</span>}
       </span>
       <span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,color:C.t2,marginLeft:"auto"}}>{expanded?<><CaretDownIcon size={11} weight="bold"/>ocultar</>:<><CaretRightIcon size={11} weight="bold"/>ver detalle</>}</span>
     </div>
@@ -9949,20 +9954,22 @@ function OCMatrixPlanView({matrixPlan, ocOrders, role, onCancelLine, onCancelGro
     {expanded && <div style={{marginTop:10,display:"flex",flexDirection:"column",gap:8}}>
       {(matrixPlan.groups||[]).map(g => {
         const cancelled = !!g.cancelled_at;
+        const desligada = cancelled && !!g.ligada;
         const totalAmt = Number(g.total_amount||0);
         const totalWithIva = g.doc_type === "factura" ? Math.round(totalAmt * 1.16 * 100) / 100 : totalAmt;
         const docColor = g.doc_type === "factura" ? C.fac : g.doc_type === "remision" ? C.live : C.emr;
         const DocIcon = g.doc_type === "factura" ? FileTextIcon : g.doc_type === "remision" ? ReceiptIcon : DiamondIcon;
-        return <div key={g.id} style={{background:C.bg,borderRadius:8,padding:10,border:"0.5px solid "+(cancelled?C.dn+"40":C.bd),opacity:cancelled?0.6:1}}>
+        return <div key={g.id} style={{background:C.bg,borderRadius:8,padding:10,border:"0.5px solid "+(cancelled&&!desligada?C.dn+"40":C.bd),opacity:cancelled?0.6:1}}>
           <div style={{display:"flex",alignItems:"flex-start",gap:8,flexWrap:"wrap"}}>
             <div style={{flex:1,minWidth:140}}>
               <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
                 <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:13,fontWeight:800,color:docColor,fontFamily:"'Geist Mono',monospace"}}><DocIcon size={13} weight="bold"/>{g.folio || "(corona_saldo)"}</span>
-                {g.label && <span style={{fontSize:11,color:C.tx,fontWeight:600,background:C.sf,padding:"2px 6px",borderRadius:4}}>{g.label}</span>}
+                {g.label && <span style={{fontSize:11,color:C.tx,fontWeight:600,background:C.sf,padding:"2px 6px",borderRadius:4,overflowWrap:"anywhere"}}>{g.label}</span>}
                 {g.invoice_pre_assigned && <span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:9,color:C.wn,fontWeight:700,background:C.wn+"15",padding:"1px 5px",borderRadius:3}}><LightningIcon size={9} weight="fill"/>ANTICIPADA</span>}
-                {cancelled && <span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:9,color:C.dn,fontWeight:700,background:C.dn+"15",padding:"1px 5px",borderRadius:3}}><XIcon size={9} weight="bold"/>CANCELADA</span>}
+                {cancelled && !desligada && <span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:9,color:C.dn,fontWeight:700,background:C.dn+"15",padding:"1px 5px",borderRadius:3}}><XIcon size={9} weight="bold"/>CANCELADA</span>}
+                {desligada && <span title="Se desligó de este plan: no se canceló. Su estado, en CobranzaFlow (Documentos, «facturas sin orden de producción»)." style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:9,color:C.t2,fontWeight:700,background:C.t2+"15",padding:"1px 5px",borderRadius:3}}><LinkIcon size={9} weight="bold"/>DESLIGADA</span>}
                 {/* v10.84.89 — la que ya existía (sin orden, en CobranzaFlow) y se ligó al plan */}
-                {g.ligada && <span title="Esta factura ya existía (se hizo sin orden en CobranzaFlow) y se ligó al plan" style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:9,color:C.fac,fontWeight:700,background:C.fac+"15",padding:"1px 5px",borderRadius:3}}><LinkIcon size={9} weight="bold"/>LIGADA · ya existía</span>}
+                {g.ligada && !cancelled && <span title="Esta factura ya existía (se hizo sin orden en CobranzaFlow) y se ligó al plan" style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:9,color:C.fac,fontWeight:700,background:C.fac+"15",padding:"1px 5px",borderRadius:3}}><LinkIcon size={9} weight="bold"/>LIGADA · ya existía</span>}
                 {/* v10.84.89 — el estado de pago es 'paid'/'partial' (sync_badge_pago_plan_matriz): con «pagada», PAGADA nunca salía */}
                 {g.payment_status==="paid" && <span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:9,color:C.okInk,fontWeight:700,background:C.ok+"15",padding:"1px 5px",borderRadius:3}}><CheckCircleIcon size={9} weight="fill"/>PAGADA</span>}
                 {g.payment_status==="partial" && <span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:9,color:C.wnInk,fontWeight:700,background:C.wn+"15",padding:"1px 5px",borderRadius:3}}>CON ABONO</span>}
@@ -9972,10 +9979,11 @@ function OCMatrixPlanView({matrixPlan, ocOrders, role, onCancelLine, onCancelGro
                 {g.doc_type==="factura" && <span> · ${fmtMx(totalWithIva)} c/IVA</span>}
               </div>
               {(() => { const r = receptores[String(g.folio||"").trim().toUpperCase()]; return <>
-                {r?.a_nombre_de && <div data-a-nombre-de style={{fontSize:11,color:C.tx,marginTop:3}}>CFDI a nombre de <b>{r.a_nombre_de}</b>{r.paga ? <> · lo paga <b>{r.paga}</b></> : null}</div>}
-                {g.bill_to_name && <div data-tercero style={{fontSize:11,color:C.tx,marginTop:3}}>Paga: <b>{g.bill_to_name}</b> (tercero)</div>}
+                {r?.a_nombre_de && <div data-a-nombre-de style={{fontSize:11,color:C.tx,marginTop:3,overflowWrap:"anywhere"}}>CFDI a nombre de <b>{r.a_nombre_de}</b>{r.paga ? <> · lo paga <b>{r.paga}</b></> : null}</div>}
+                {g.bill_to_name && <div data-tercero style={{fontSize:11,color:C.tx,marginTop:3,overflowWrap:"anywhere"}}>Paga: <b>{g.bill_to_name}</b> (tercero)</div>}
               </>; })()}
-              {cancelled && g.cancellation_reason && <div style={{fontSize:10,color:C.dn,marginTop:2,fontStyle:"italic"}}>Motivo: {g.cancellation_reason}</div>}
+              {/* v10.84.173 — con overflowWrap: un motivo sin dónde cortar (el campo admite 500) sacaba la página de la pantalla */}
+              {cancelled && g.cancellation_reason && <div style={{fontSize:10,color:desligada?C.t2:C.dn,marginTop:2,fontStyle:"italic",overflowWrap:"anywhere"}}>Motivo: {g.cancellation_reason}</div>}
             </div>
             {!cancelled && isAdmin && <button onClick={()=>onCancelGroup&&onCancelGroup(g)} disabled={busy}
               style={{...bs(C.bg,C.dnInk),fontSize:12,padding:"6px 12px",border:"1px solid "+C.dn+"55"}}
@@ -10002,7 +10010,7 @@ function OCMatrixPlanView({matrixPlan, ocOrders, role, onCancelLine, onCancelGro
                   <td style={{padding:"4px 6px",color:lineCancelled?C.t3:C.tx}}>
                     <span style={{fontWeight:700}}>{orderLabel}</span>
                     {productLabel && <span style={{color:C.t2,marginLeft:6,fontSize:9}}>· {productLabel}</span>}
-                    {lineCancelled && <span style={{color:C.dn,marginLeft:6,fontSize:9,fontStyle:"italic"}}>(cancelada)</span>}
+                    {lineCancelled && <span style={{color:desligada?C.t2:C.dn,marginLeft:6,fontSize:9,fontStyle:"italic"}}>({desligada?"desligada":"cancelada"})</span>}
                   </td>
                   <td style={{padding:"4px 6px",textAlign:"right",fontFamily:"'Geist Mono',monospace"}}>{Number(l.qty_portion||0).toLocaleString("es-MX")}</td>
                   <td style={{padding:"4px 6px",textAlign:"right",fontFamily:"'Geist Mono',monospace"}}>${fmtMx(l.amount_portion)}</td>
@@ -21391,8 +21399,10 @@ export default function PrintFlow() {
         .select("id,order_id,position,qty_portion,amount_portion,doc_type,invoice_folio,invoice_pre_assigned,payment_status,cancelled_at,cancellation_reason,cancelled_by,created_at")
         .order("created_at",{ascending:false}).order("id")),   // v10.84.61 — por páginas: el .limit(5000) no pasaba del tope de 1,000
       // v10.58.40 Día 1: plan matriz por OC
+      // v10.84.173 — con `ligada` y `bill_to_name`: la vista del plan y su ventana las usan (v10.84.89) y aquí nunca se pedían. Las 13 ligadas de producción salían sin
+      //   su etiqueta (Karla, 3-nov: Hotsson) y a Dirección le ofrecían «Cancelar factura», «se cancela en CobranzaFlow», cuando la base sólo la desliga.
       todasLasFilas(()=>supabase.from("oc_invoice_split_groups")
-        .select("id,purchase_order_id,position,label,folio,doc_type,total_amount,invoice_pre_assigned,invoice_reason,payment_status,invoiced_at,invoiced_by,cancelled_at,cancellation_reason,cancelled_by,created_at")
+        .select("id,purchase_order_id,position,label,folio,doc_type,total_amount,invoice_pre_assigned,invoice_reason,payment_status,invoiced_at,invoiced_by,cancelled_at,cancellation_reason,cancelled_by,created_at,ligada,bill_to_name")
         .order("created_at",{ascending:false}).order("id")),
       todasLasFilas(()=>supabase.from("oc_invoice_split_lines")
         .select("id,oc_invoice_split_group_id,order_id,qty_portion,amount_portion,cancelled_at,cancellation_reason,cancelled_by,created_at")
@@ -21407,9 +21417,10 @@ export default function PrintFlow() {
     // ordenes ya facturadas por partes o por plan matriz.
     // Se falla CERRADO: si no se pudo saber, no se afirma que no hay splits.
     const splitsFallo = !!splitsResp?.error;
-    const matrixFallo = !!matrixLinesResp?.error;
+    // v10.84.173 — también sin las facturas del plan: con sólo sus líneas, «Marcar como Entregada» salía sin aviso, sin plan a la vista y diciendo «0 facturas»
+    const matrixFallo = !!matrixLinesResp?.error || !!matrixGroupsResp?.error;
     if (splitsFallo || matrixFallo) {
-      console.error("reload: splits/matriz no cargaron", splitsResp?.error || matrixLinesResp?.error);
+      console.error("reload: splits/matriz no cargaron", splitsResp?.error || matrixLinesResp?.error || matrixGroupsResp?.error);
       try {
         showToast("No se pudo verificar la facturación por partes/matriz. Se ocultan las acciones de folio hasta recargar.", "error");
       } catch { /* el toast no puede tapar el problema real */ }
@@ -24984,6 +24995,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         onConfirm={async(reason)=>{
           // v10.84.73 — el rechazo vuelve a la ventana como {error} (antes: aviso abajo con el foco en el <body>), y el éxito dice qué
           const doc = matrixCancelModal.group.folio||matrixCancelModal.group.label||"la factura "+matrixCancelModal.group.position;
+          const desliga = matrixCancelModal.kind !== "line" && !!matrixCancelModal.group.ligada;   // v10.84.173 — la ligada no se cancela: se desliga, y así se dice
           try {
             const actor = userLogin || user;
             if(matrixCancelModal.kind === "line") {
@@ -24992,13 +25004,14 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
               showToast(r?.group_cancelled ? `Línea de ${pn} cancelada · era la última: ${doc} se canceló` : `Línea de ${pn} cancelada · ${doc} baja a lo que queda`, "success");
             } else {
               const r = await db.cancelOCInvoiceSplitGroup(matrixCancelModal.group.id, reason, actor);
-              showToast(`${doc} cancelada (${r?.lines_cancelled||0} líneas)`, "success");
+              const n = r?.lines_cancelled||0, lineas = n+(n===1?" línea":" líneas");
+              showToast(desliga ? `${doc} desligada del plan (${lineas}): no se canceló` : `${doc} cancelada (${lineas})`, "success");
             }
             setMatrixCancelModal(null);
             reload();
           } catch(e) {
             console.error("[cancelMatrix] Error:", e);
-            return {error:(matrixCancelModal.kind==="line"?"No se canceló la línea":"No se canceló "+doc)+": "+motivoDeLaBase(e)+"."};
+            return {error:(matrixCancelModal.kind==="line"?"No se canceló la línea":(desliga?"No se desligó ":"No se canceló ")+doc)+": "+motivoDeLaBase(e)+"."};
           }
         }}
         onClose={()=>setMatrixCancelModal(null)}/>}

@@ -11,6 +11,7 @@
 // diciendo por qué; la que se cierra MIENTRAS se entra no deja la app abierta como anónima; y la prueba nunca da la entrada por
 // hecha con un tiempo fijo: espera la señal (la app abierta, o la pantalla de entrar sin «Verificando…»).
 // Uso: node tests/romper/sesion.mjs [dir-capturas]   (lo corre scripts/probar.mjs)   ·   SOLO=<regex> corre sólo esos casos
+//   SESION_PARTE=1 hasta ses-119, 2 desde ses-120 (v10.84.173: ya no cabía en los 12 minutos de una tanda; cada parte compila aparte y en su puerto); sin SESION_PARTE, todos
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,7 +19,8 @@ import { chromium } from "playwright";
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const OUT = process.argv[2] || path.join(RAIZ, "tests", "salida", "sesion");
-const DIST = path.join(RAIZ, "tests", "salida", "sesion-dist");
+const PARTE = process.env.SESION_PARTE || "";
+const DIST = path.join(RAIZ, "tests", "salida", "sesion-dist" + (PARTE === "2" ? "-2" : ""));
 fs.mkdirSync(OUT, { recursive: true });
 const SIMULADA = "https://simulada.supabase.co";
 const ANON = "llave-anon-simulada";
@@ -45,7 +47,7 @@ try {
 }
 // (16-oct, la auditoría del candado: era el 5190, el del banco de «plan»; de a 6 tandas corrieron juntas y «plan» no pudo servir su banco. Ahora un
 //   puerto fuera de los de los bancos, 5183-5199; can-g10 lo vigila)
-const servidor = await preview({ root: RAIZ, logLevel: "error", build: { outDir: DIST }, preview: { host: "127.0.0.1", port: 5470, strictPort: false } });
+const servidor = await preview({ root: RAIZ, logLevel: "error", build: { outDir: DIST }, preview: { host: "127.0.0.1", ...(PARTE === "2" ? { port: 5471 } : { port: 5470 }), strictPort: false } });
 const BASE = String(servidor.resolvedUrls?.local?.[0] || "http://127.0.0.1:5470/").replace(/\/$/, "");
 const ORIGEN = new URL(BASE).origin;
 
@@ -176,7 +178,10 @@ async function rutear(ctx, s) {
         if (!filas) return J(200, [], { "content-range": "*/0" });
         // por páginas, como PostgREST (la app pide de 1,000 en 1,000 hasta que una página llega vacía)
         const desde = Number(url.searchParams.get("offset") || 0), cuantas = Number(url.searchParams.get("limit") || 1000);
-        const pag = filas.slice(desde, desde + cuantas);
+        // v10.84.173 — y como PostgREST, sólo las columnas que la app pidió: con la fila entera, ninguna prueba podía ver una columna que la pantalla usa y la
+        //   lectura no pide (`ligada`, desde v10.84.89). Con «*» o una relación, la fila tal cual.
+        const sel = url.searchParams.get("select"), columnas = sel && /^\w+(,\w+)*$/.test(sel) ? sel.split(",") : null;
+        const pag = filas.slice(desde, desde + cuantas).map(f => columnas ? Object.fromEntries(columnas.filter(c => c in f).map(c => [c, f[c]])) : f);
         return J(200, pag, { "content-range": pag.length ? desde + "-" + (desde + pag.length - 1) + "/" + filas.length : "*/" + filas.length });
       }
       if (s.rpcFalla && ruta === "/rest/v1/rpc/" + s.rpcFalla) return J(500, { code: "XX000", message: "falla de prueba en " + s.rpcFalla });
@@ -261,6 +266,7 @@ const cualesAnonimas = (s, t0) => s.peticiones.filter(x => x.t >= t0 && x.quien 
   .map(x => x.m + " " + x.ruta.replace("/rest/v1/", "") + " +" + (x.t - t0) + "ms").join(", ");
 
 async function caso(nombre, fn, { viewport = { width: 1366, height: 768 } } = {}) {
+  if (PARTE && (Number((/^ses-(\d+)/.exec(nombre) || [])[1]) >= 120 ? "2" : "1") !== PARTE) return;
   if (process.env.SOLO && !new RegExp(process.env.SOLO).test(nombre)) return;
   const s = simulada();
   const ctx = await browser.newContext({ viewport });
@@ -1860,8 +1866,8 @@ const PLAN_HOTSSON = [   // [folio, piezas y monto sin IVA de P-0621, de P-0623,
   ["F-165", 50, 6107.14, 50, 3958.92, "paid"], ["F-166", 70, 8550, 30, 2375.35, "paid"], ["F-167", 50, 6107.14, 50, 3958.92, "paid"],
   ["F-168", 50, 6107.14, 50, 3958.92, "paid"], ["F-169", 16, 1954.29, 16, 1266.85, "unpaid"]];
 const LIGADO = "2026-10-14T21:26:00Z";
-// `etapa`: la de las dos (o { "P-0623": "packaging" }); `sinPlan`: las que NO van en el plan (la OC queda mixta); `extra`: campos por orden
-const HOTSSON_PLAN = ({ etapa = "salidas", sinPlan = [], extra = {}, plan = PLAN_HOTSSON } = {}) => {
+// `etapa`: la de las dos (o { "P-0623": "packaging" }); `sinPlan`: las que NO van en el plan (la OC queda mixta); `extra`: campos por orden; `grupos`: campos por folio
+const HOTSSON_PLAN = ({ etapa = "salidas", sinPlan = [], extra = {}, plan = PLAN_HOTSSON, grupos: porFolio = {} } = {}) => {
   const st = pn => typeof etapa === "string" ? etapa : (etapa[pn] || "salidas");
   const o = (pn, x) => ordenK(pn, { stage: st(pn), client: "INMOBILIARIA HOTSSON", client_company: "INMOBILIARIA HOTSSON", client_id: "c3", purchase_order_id: "OC-0966",
     created_by: "genaro", agent: "Genaro", due_date: "2026-11-16", created_at: "2026-10-09T16:00:00Z", ...x, ...(extra[pn] || {}) });
@@ -1870,7 +1876,8 @@ const HOTSSON_PLAN = ({ etapa = "salidas", sinPlan = [], extra = {}, plan = PLAN
   const enPlan = pn => !sinPlan.includes(pn);
   const groups = plan.map(([folio, , m1, , m2, pago], i) => ({ id: "g-" + (i + 1), purchase_order_id: "OC-0966", position: i + 1, label: null, folio, doc_type: "factura",
     total_amount: Math.round(((enPlan("P-0621") ? m1 : 0) + (enPlan("P-0623") ? m2 : 0)) * 100) / 100, invoice_pre_assigned: false, invoice_reason: null, payment_status: pago,
-    invoiced_at: LIGADO, invoiced_by: "karla", cancelled_at: null, cancellation_reason: null, cancelled_by: null, created_at: LIGADO }));
+    invoiced_at: LIGADO, invoiced_by: "karla", cancelled_at: null, cancellation_reason: null, cancelled_by: null, nc_invoice_id: null, created_at: LIGADO,
+    bill_to_client_id: null, bill_to_name: null, bill_to_rfc: null, ligada: true, ...(porFolio[folio] || {}) }));   // el renglón completo, como en producción
   const lines = plan.flatMap(([, q1, m1, q2, m2], i) => [
     enPlan("P-0621") && { id: "l-" + (i + 1) + "a", oc_invoice_split_group_id: "g-" + (i + 1), order_id: "OP-P-0621", qty_portion: q1, amount_portion: m1, cancelled_at: null, created_at: LIGADO },
     enPlan("P-0623") && { id: "l-" + (i + 1) + "b", oc_invoice_split_group_id: "g-" + (i + 1), order_id: "OP-P-0623", qty_portion: q2, amount_portion: m2, cancelled_at: null, created_at: LIGADO }]).filter(Boolean);
@@ -2146,6 +2153,255 @@ await caso("ses-139-oc-mixta-cada-ficha-lo-suyo-y-lo-que-falta", async ({ p, s }
     p0623: { foliar: await f3.getByRole("button", { name: /Asignar Folio y Entregar/ }).count(), noPide: await f3.getByRole("button", { name: /no pide factura/i }).count() } };
   ok("ses-139-oc-mixta-cada-ficha-lo-suyo-y-lo-que-falta", /F-171/.test(aviso) && /justo lo que falta/.test(aviso) && n.p0621.entregar === 1 && n.p0621.noPide === 0 && n.p0623.foliar === 1 && n.p0623.noPide === 1,
     `el aviso: «${aviso.slice(0, 200)}»; las fichas: ${JSON.stringify(n)}`);
+});
+
+// ════════════════════════ La factura ligada se ve ligada (v10.84.173) ════════════════════════
+// 3-nov, en la captura de Karla: las 11 facturas de Hotsson sin su etiqueta «LIGADA». `reload` no pedía la columna `ligada` (ni `bill_to_name`), así que la vista del
+// plan y su ventana nunca la vieron en producción (13 ligadas: OC-0960 y OC-0966): a Dirección le ofrecían «Cancelar factura» y le decían «se cancela en CobranzaFlow,
+// con saldo 0», cuando la base sólo la desliga (ni la cancela ni toca sus cobros). El banco del plan le da `ligada` por props, por eso pasaba; aquí va la lectura de verdad.
+// Vuelta 1: escritas antes del cambio.
+const CANCELA_GRUPO = "/rest/v1/rpc/cancel_oc_invoice_split_group";
+const RESPUESTAS_PLAN = { list_linkable_invoices_for_oc: [], cancel_oc_invoice_split_group: { oc_id: "OC-0966", doc_type: "factura", lines_cancelled: 2 } };
+const grupoDelPlan = p => p.getByRole("button", { name: /^(Desligar|Cancelar) factura$/ });
+const ventanaDelPlan = p => p.locator('[role="dialog"][aria-labelledby="dlg-cancelar-matriz-titulo"]');
+const motivoDelPlan = p => p.locator("#cancelar-matriz-motivo");
+const confirmarDelPlan = (p, folio) => ventanaDelPlan(p).getByRole("button", { name: new RegExp("^(Desligar|Cancelar) " + folio + "( y sus \\d+ líneas| y su línea)?$") });
+const delPlan = async p => ({ ligadas: await p.getByText("LIGADA · ya existía", { exact: true }).count(), desligar: await p.getByRole("button", { name: "Desligar factura", exact: true }).count(),
+  cancelar: await p.getByRole("button", { name: "Cancelar factura", exact: true }).count(), lineas: await p.locator('button[title^="Saca esta orden de la factura"]').count() });
+// lo que deja la base al desligar: la factura y sus líneas con cancelled_at, y `ligada` se queda
+const conDesligadas = (f, folios) => {
+  const ya = "2026-11-03T17:00:00Z", motivo = "Se ligó la factura equivocada", ids = new Set(f.oc_invoice_split_groups.filter(g => folios.includes(g.folio)).map(g => g.id));
+  return { ...f, oc_invoice_split_groups: f.oc_invoice_split_groups.map(g => ids.has(g.id) ? { ...g, cancelled_at: ya, cancellation_reason: motivo, cancelled_by: "marcelo" } : g),
+    oc_invoice_split_lines: f.oc_invoice_split_lines.map(l => ids.has(l.oc_invoice_split_group_id) ? { ...l, cancelled_at: ya, cancellation_reason: "Grupo cancelado: " + motivo, cancelled_by: "marcelo" } : l) };
+};
+for (const quien of ["karla", "lupita"]) await caso(`ses-140-ligadas-${quien}-las-ve-ligadas-sin-botones`, async ({ p, s }) => {
+  s.filas = HOTSSON_PLAN(); s.rpcRespuestas = RESPUESTAS_PLAN;
+  await abrirHotsson(p, s, quien);
+  const n = await delPlan(p);
+  ok(`ses-140-ligadas-${quien}-las-ve-ligadas-sin-botones`, n.ligadas === 11 && n.desligar === 0 && n.cancelar === 0 && n.lineas === 0, `${quien} en OC-0966: ${JSON.stringify(n)} (11 ligadas y sin botones: desligar es de Dirección)`);
+});
+await caso("ses-141-ligadas-direccion-desliga-no-cancela", async ({ p, s }) => {
+  s.filas = HOTSSON_PLAN(); s.rpcRespuestas = RESPUESTAS_PLAN;
+  await abrirHotsson(p, s, "marcelo");
+  const n = await delPlan(p);
+  ok("ses-141-ligadas-direccion-desliga-no-cancela", n.ligadas === 11 && n.desligar === 11 && n.cancelar === 0 && n.lineas === 0, `Dirección en OC-0966: ${JSON.stringify(n)} (a una ligada no se le quita un renglón)`);
+});
+await caso("ses-142-ligada-la-ventana-dice-que-se-desliga", async ({ p, s }) => {
+  s.filas = HOTSSON_PLAN(); s.rpcRespuestas = RESPUESTAS_PLAN;
+  await abrirHotsson(p, s, "marcelo");
+  await grupoDelPlan(p).last().click(); await p.waitForTimeout(500);
+  const v = await textoDe(ventanaDelPlan(p));
+  ok("ses-142-ligada-la-ventana-dice-que-se-desliga", /Desligar F-169 del plan de OC-0966/.test(v) && /F-169 no se cancela/.test(v) && /sin orden de producción/.test(v) && /Por qué se desliga/.test(v) && /Desligar F-169 y sus 2 líneas/.test(v)
+    && !/se cancela en CobranzaFlow/.test(v) && !/saldo 0/.test(v) && !/timbrada ante el SAT/.test(v) && !/No se deshace/.test(v) && !/Por qué se cancela/.test(v), `la ventana dice: «${v.slice(0, 420)}»`);
+});
+await caso("ses-143-desligar-llama-a-la-base-y-dice-desligada", async ({ p, s }) => {
+  s.filas = HOTSSON_PLAN(); s.rpcRespuestas = RESPUESTAS_PLAN;
+  await abrirHotsson(p, s, "marcelo");
+  await grupoDelPlan(p).last().click(); await p.waitForTimeout(500);
+  await motivoDelPlan(p).fill("Se ligó la factura equivocada");
+  s.filas = conDesligadas(s.filas, ["F-169"]);   // lo que hace la base: la recarga ya la trae desligada
+  await confirmarDelPlan(p, "F-169").click();
+  await esperarQue(() => escrito(s, CANCELA_GRUPO).length > 0, 6000); await p.waitForTimeout(900);
+  const rpc = escrito(s, CANCELA_GRUPO), t = await texto(p), sigue = await ventanaDelPlan(p).count(), n = await delPlan(p);
+  ok("ses-143-desligar-llama-a-la-base-y-dice-desligada", rpc.length === 1 && rpc[0].p_group_id === "g-11" && /equivocada/.test(rpc[0].p_reason) && /F-169 desligada/.test(t) && !/F-169 cancelada/.test(t) && sigue === 0 && n.desligar === 10,
+    `RPC ${rpc.length} (${rpc[0]?.p_group_id}); ventana abierta ${sigue}; aviso: ${(t.match(/F-169 [a-z]+[^.]{0,60}/) || ["ninguno"])[0]}; ${JSON.stringify(n)}`);
+});
+await caso("ses-144-la-desligada-no-dice-cancelada", async ({ p, s }) => {
+  s.filas = conDesligadas(HOTSSON_PLAN(), ["F-169"]); s.rpcRespuestas = RESPUESTAS_PLAN;
+  await abrirHotsson(p, s, "marcelo");
+  const n = await delPlan(p), t = await texto(p), c = { desligada: await p.getByText("DESLIGADA", { exact: true }).count(), cancelada: await p.getByText("CANCELADA", { exact: true }).count(),
+    enLineas: await p.getByText("(desligada)", { exact: true }).count(), lineasCanceladas: await p.getByText("(cancelada)", { exact: true }).count() };
+  const r = await entregarDesdeLaFicha(p, s, "P-0621", { confirmar: false });
+  ok("ses-144-la-desligada-no-dice-cancelada", n.ligadas === 10 && n.desligar === 10 && c.desligada === 1 && c.cancelada === 0 && c.enLineas === 2 && c.lineasCanceladas === 0 && /10 facturas del plan/.test(t) && /· 1 desligada/.test(t) && !/· 1 cancelada/.test(t)
+    && /10 facturas/.test(r.dice) && !/F-169/.test(r.dice), `${JSON.stringify(n)} ${JSON.stringify(c)}; la ventana de entrega: «${r.dice.slice(0, 120)}»`);
+});
+// la de control: pasa antes y después del cambio. La que no se ligó sigue siendo «Cancelar», con lo que eso hace
+await caso("ses-145-la-que-no-se-ligo-se-cancela-como-siempre", async ({ p, s }) => {
+  s.filas = HOTSSON_PLAN({ plan: PLAN_HOTSSON.slice(0, 2), grupos: { "F-159": { ligada: false }, "F-160": { ligada: false } } }); s.rpcRespuestas = RESPUESTAS_PLAN;
+  await abrirHotsson(p, s, "marcelo");
+  const n = await delPlan(p);
+  await grupoDelPlan(p).last().click(); await p.waitForTimeout(500);
+  const v = await textoDe(ventanaDelPlan(p));
+  await motivoDelPlan(p).fill("El cliente canceló el pedido");
+  await confirmarDelPlan(p, "F-160").click();
+  await esperarQue(() => escrito(s, CANCELA_GRUPO).length > 0, 6000); await p.waitForTimeout(900);
+  const t = await texto(p);
+  ok("ses-145-la-que-no-se-ligo-se-cancela-como-siempre", n.cancelar === 2 && n.desligar === 0 && n.lineas === 4 && n.ligadas === 0 && /Cancelar F-160 del plan de OC-0966/.test(v) && /se cancela en CobranzaFlow/.test(v) && /No se deshace/.test(v) && /Por qué se cancela/.test(v)
+    && !/sin orden de producción/.test(v) && /F-160 cancelada/.test(t), `${JSON.stringify(n)}; la ventana: «${v.slice(0, 240)}»; el aviso: ${(t.match(/F-160 [a-z]+[^.]{0,40}/) || ["ninguno"])[0]}`);
+});
+await caso("ses-146-cada-factura-del-plan-lo-suyo", async ({ p, s }) => {
+  s.filas = HOTSSON_PLAN({ plan: PLAN_HOTSSON.slice(0, 3), grupos: { "F-160": { ligada: false }, "F-161": { ligada: null } } }); s.rpcRespuestas = RESPUESTAS_PLAN;
+  await abrirHotsson(p, s, "marcelo");
+  const n = await delPlan(p);
+  ok("ses-146-cada-factura-del-plan-lo-suyo", n.ligadas === 1 && n.desligar === 1 && n.cancelar === 2 && n.lineas === 4, `F-159 ligada, F-160 no, F-161 sin dato: ${JSON.stringify(n)}`);
+});
+await caso("ses-147-el-tercero-que-paga-se-ve", async ({ p, s }) => {
+  s.filas = HOTSSON_PLAN({ plan: PLAN_HOTSSON.slice(0, 3), grupos: { "F-160": { ligada: false, bill_to_client_id: "c9", bill_to_name: "Aleksandra Wiśniewska-Kowalczyk", bill_to_rfc: "XAXX010101000" },
+    "F-161": { ligada: false, bill_to_client_id: "c10", bill_to_name: "نور الهدى عبد الرحمن", bill_to_rfc: "XAXX010101000" } } }); s.rpcRespuestas = RESPUESTAS_PLAN;
+  await abrirHotsson(p, s);
+  const t = await p.locator("[data-tercero]").allInnerTexts();
+  ok("ses-147-el-tercero-que-paga-se-ve", t.length === 2 && /Paga: Aleksandra Wiśniewska-Kowalczyk \(tercero\)/.test(t[0]) && /نور الهدى عبد الرحمن/.test(t[1]), `«Paga»: ${JSON.stringify(t)}`);
+});
+await caso("ses-148-la-base-no-deja-desligar", async ({ p, s }) => {
+  s.filas = HOTSSON_PLAN(); s.rpcRespuestas = RESPUESTAS_PLAN; s.rpcFalla = "cancel_oc_invoice_split_group";
+  await abrirHotsson(p, s, "marcelo");
+  await grupoDelPlan(p).last().click(); await p.waitForTimeout(500);
+  await motivoDelPlan(p).fill("Se ligó la factura equivocada");
+  await confirmarDelPlan(p, "F-169").click();
+  await p.waitForFunction(() => /la base no lo aceptó/.test(document.body.innerText), null, { timeout: 8000, polling: 200 }).catch(() => {});   // (`motivoDeLaBase`: lo técnico no se enseña)
+  const v = await textoDe(ventanaDelPlan(p)), valor = await motivoDelPlan(p).inputValue().catch(() => ""), t = await texto(p);
+  ok("ses-148-la-base-no-deja-desligar", /No se desligó F-169: la base no lo aceptó/.test(v) && !/No se canceló/.test(v) && valor === "Se ligó la factura equivocada" && !/F-169 desligada/.test(t),
+    `la ventana: «${v.slice(-170)}»; el motivo se queda: «${valor}»`);
+});
+await caso("ses-149-doble-clic-en-desligar-una-vez", async ({ p, s }) => {
+  s.filas = HOTSSON_PLAN(); s.rpcRespuestas = RESPUESTAS_PLAN;
+  await abrirHotsson(p, s, "marcelo");
+  await grupoDelPlan(p).last().click(); await p.waitForTimeout(500);
+  await motivoDelPlan(p).fill("Se ligó la factura equivocada");
+  await confirmarDelPlan(p, "F-169").evaluate(b => { b.click(); b.click(); }).catch(() => {});
+  await esperarQuieto(() => escrito(s, CANCELA_GRUPO).length, 2500, 10000);
+  ok("ses-149-doble-clic-en-desligar-una-vez", escrito(s, CANCELA_GRUPO).length === 1, `dos clics al confirmar: cancel_oc_invoice_split_group ${escrito(s, CANCELA_GRUPO).length} vez(es)`);
+});
+await caso("ses-150-esc-y-clic-afuera-con-motivo-no-desligan", async ({ p, s }) => {
+  s.filas = HOTSSON_PLAN(); s.rpcRespuestas = RESPUESTAS_PLAN;
+  await abrirHotsson(p, s, "marcelo");
+  await grupoDelPlan(p).last().click(); await p.waitForTimeout(700);
+  await motivoDelPlan(p).fill("Se ligó la factura equivocada");
+  await p.keyboard.press("Escape"); await p.waitForTimeout(400);
+  const pregunta = await texto(p);
+  await p.getByRole("button", { name: "Seguir aquí", exact: true }).click().catch(() => {}); await p.waitForTimeout(400);
+  const valor = await motivoDelPlan(p).inputValue().catch(() => "");
+  await p.mouse.click(4, 400); await p.waitForTimeout(400);
+  const cerrar = p.getByRole("button", { name: /^Cerrar sin (desligar|cancelar)$/ }), preguntaAfuera = await cerrar.count();
+  await cerrar.click().catch(() => {}); await p.waitForTimeout(400);
+  ok("ses-150-esc-y-clic-afuera-con-motivo-no-desligan", /¿Cerrar sin desligar\?/.test(pregunta) && /No se desliga nada/.test(pregunta) && !/sin cancelar/.test(pregunta) && valor === "Se ligó la factura equivocada" && preguntaAfuera === 1
+    && await ventanaDelPlan(p).count() === 0 && escrito(s, CANCELA_GRUPO).length === 0, `Esc: «${(pregunta.match(/¿Cerrar[^?]*\?[^.]*\.[^.]*\./) || ["sin pregunta"])[0]}»; el motivo sigue: «${valor}»; clic afuera pregunta ${preguntaAfuera}; RPC ${escrito(s, CANCELA_GRUPO).length}`);
+});
+await caso("ses-151-se-desliga-en-otra-sesion-con-la-ventana-abierta", async ({ p, s }) => {
+  s.filas = HOTSSON_PLAN(); s.rpcRespuestas = RESPUESTAS_PLAN;
+  await abrirHotsson(p, s, "marcelo");
+  await grupoDelPlan(p).last().click(); await p.waitForTimeout(500);
+  s.filas = conDesligadas(s.filas, ["F-169"]);
+  await regresaALaPestana(p);
+  const llego = await p.waitForFunction(() => /en otra sesión/.test(document.body.innerText), null, { timeout: 10000, polling: 200 }).then(() => true, () => false);
+  const v = await textoDe(ventanaDelPlan(p)), b = confirmarDelPlan(p, "F-169"), apagado = await b.isDisabled().catch(() => false);
+  await b.click({ force: true, timeout: 2000 }).catch(() => {}); await p.waitForTimeout(600);
+  ok("ses-151-se-desliga-en-otra-sesion-con-la-ventana-abierta", llego && /se desligó en otra sesión/.test(v) && /Ya está desligada/.test(v) && !/se canceló/.test(v) && !/0 líneas/.test(v) && apagado && escrito(s, CANCELA_GRUPO).length === 0,
+    `la ventana: «${v.slice(0, 300)}»; confirmar ${apagado ? "apagado" : "PRENDIDO"}; RPC ${escrito(s, CANCELA_GRUPO).length}`);
+});
+// lo raro de la lista de break-ui, por la base: una etiqueta y un tercero sin dónde cortar, en las dos pantallas de Marcelo
+await caso("ses-152-el-plan-ligado-cabe-en-las-dos-pantallas", async ({ p, s }) => {
+  s.filas = HOTSSON_PLAN({ grupos: { "F-159": { label: "IMG_20250914_183022_HDR_portrait_edited_edited.HEIC".repeat(4), bill_to_client_id: "c9", bill_to_name: "IMG_20250914_183022_HDR_portrait_edited_edited.HEIC".repeat(6) } } }); s.rpcRespuestas = RESPUESTAS_PLAN;
+  await abrirHotsson(p, s, "marcelo");
+  const medir = async () => {
+    await grupoDelPlan(p).last().scrollIntoViewIfNeeded().catch(() => {}); await p.waitForTimeout(300);
+    return p.evaluate(() => {
+      const botones = [...document.querySelectorAll("button")].filter(b => b.innerText.trim() === "Desligar factura"), ult = botones[botones.length - 1], r = ult?.getBoundingClientRect();
+      const hit = r ? document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) : null;
+      const raros = [...document.querySelectorAll("span,div")].filter(e => !e.children.length && /IMG_2025/.test(e.textContent)).concat([...document.querySelectorAll("[data-tercero]")]);
+      const seSalen = raros.filter(e => { const card = e.closest('div[style*="border-radius: 8px"]'), q = document.createRange(); q.selectNodeContents(e); return card && q.getBoundingClientRect().right > card.getBoundingClientRect().right + 1; }).length;   // el texto, no su caja
+      return { botones: botones.length, fuera: botones.filter(b => { const q = b.getBoundingClientRect(); return q.left < 0 || q.right > innerWidth; }).length, seVe: !!hit && (hit === ult || !!ult?.contains(hit)),
+        raros: raros.length, seSalen, pagina: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1 };
+    });
+  };
+  // su ventana también: el botón de confirmar se ve (lo que tapa o recorta, el renglón de hasta abajo)
+  const medirVentana = async () => {
+    await grupoDelPlan(p).last().click(); await p.waitForTimeout(400);
+    const r = await confirmarDelPlan(p, "F-169").evaluate(b => { const q = b.getBoundingClientRect(), hit = document.elementFromPoint(q.left + q.width / 2, q.top + q.height / 2); return !!hit && (hit === b || b.contains(hit)) && q.bottom <= innerHeight; }).catch(() => false);
+    await ventanaDelPlan(p).getByRole("button", { name: "Volver", exact: true }).click().catch(() => {}); await p.waitForTimeout(300);
+    return r;
+  };
+  const a1366 = await medir(), v1366 = await medirVentana();
+  await p.setViewportSize({ width: 1920, height: 1080 }); await p.waitForTimeout(400);
+  const a1920 = await medir(), v1920 = await medirVentana();
+  const bien = a => a.botones === 11 && a.fuera === 0 && a.seVe && a.raros >= 2 && a.seSalen === 0 && !a.pagina;
+  ok("ses-152-el-plan-ligado-cabe-en-las-dos-pantallas", bien(a1366) && bien(a1920) && v1366 && v1920, `1366: ${JSON.stringify(a1366)}, ventana ${v1366} · 1920: ${JSON.stringify(a1920)}, ventana ${v1920}`);
+});
+// la lectura de las facturas del plan se cae y la de sus líneas no: se sabe que hay plan, no con qué facturas. Nada de foliar ni de entregar «con 0 facturas»: se avisa
+await caso("ses-153-sin-leer-las-facturas-del-plan-no-ofrece-nada-de-folio", async ({ p, s }) => {
+  s.filas = { ...HOTSSON_PLAN(), oc_invoice_split_groups: "falla" }; s.rpcRespuestas = RESPUESTAS_PLAN;
+  await abrirYEntrar(p, s, "karla"); await esperarMenu(p, /^Pendientes/);
+  const aviso = await p.waitForFunction(() => /No se pudo verificar la facturación/.test(document.body.innerText), null, { timeout: 30000, polling: 200 }).then(() => true, () => false);
+  await despertar(p);
+  await p.locator('button[title^="Órdenes de Compra"]').first().click(); await p.waitForTimeout(800);
+  await p.getByText("OC-0966", { exact: false }).first().click(); await p.waitForTimeout(1500);
+  const f = fichaDe(p, "P-0621");
+  const n = { entregar: await f.getByRole("button", { name: "Marcar como Entregada", exact: true }).count(), foliar: await f.getByRole("button", { name: /Asignar Folio y Entregar/ }).count(),
+    noPide: await f.getByRole("button", { name: /no pide factura/i }).count(), oc: await p.getByRole("button", { name: "Asignar folio", exact: true }).count() };
+  ok("ses-153-sin-leer-las-facturas-del-plan-no-ofrece-nada-de-folio", aviso && n.entregar === 0 && n.foliar === 0 && n.noPide === 0 && n.oc === 0,
+    `con las facturas del plan sin leer (aviso: ${aviso ? "sí" : "NO"}), en P-0621 y su OC: ${JSON.stringify(n)} (todo en 0: no se sabe)`);
+});
+// todas desligadas: la orden ya no está facturada, así que le toca su folio; el plan lo cuenta como desligadas, no canceladas
+await caso("ses-154-toda-desligada-la-orden-vuelve-a-por-facturar", async ({ p, s }) => {
+  s.filas = conDesligadas(HOTSSON_PLAN(), PLAN_HOTSSON.map(x => x[0])); s.rpcRespuestas = RESPUESTAS_PLAN;
+  await abrirHotsson(p, s);
+  const f = fichaDe(p, "P-0621"), t = await texto(p);
+  const n = { entregar: await f.getByRole("button", { name: "Marcar como Entregada", exact: true }).count(), foliar: await f.getByRole("button", { name: /Asignar Folio y Entregar/ }).count(),
+    desligadas: await p.getByText("DESLIGADA", { exact: true }).count(), canceladas: await p.getByText("CANCELADA", { exact: true }).count() };
+  ok("ses-154-toda-desligada-la-orden-vuelve-a-por-facturar", n.entregar === 0 && n.foliar === 1 && n.desligadas === 11 && n.canceladas === 0 && /· 11 desligadas/.test(t) && !/11 canceladas/.test(t), JSON.stringify(n));
+});
+// ── vuelta 2: por donde no se diseñó ──
+// se cae la lectura de las facturas y vuelve: lo que se cerró por no saber regresa solo, sin F5
+await caso("ses-155-la-lectura-de-las-facturas-vuelve-y-se-puede-entregar", async ({ p, s }) => {
+  const bien = HOTSSON_PLAN();
+  s.filas = { ...bien, oc_invoice_split_groups: "falla" }; s.rpcRespuestas = RESPUESTAS_PLAN;
+  await abrirYEntrar(p, s, "karla"); await esperarMenu(p, /^Pendientes/);
+  await p.waitForFunction(() => /No se pudo verificar la facturación/.test(document.body.innerText), null, { timeout: 30000, polling: 200 }).catch(() => {});
+  await despertar(p);
+  await p.locator('button[title^="Órdenes de Compra"]').first().click(); await p.waitForTimeout(800);
+  await p.getByText("OC-0966", { exact: false }).first().click(); await p.waitForTimeout(1500);
+  const antes = await entregaDe(p, "P-0621").count();
+  s.filas = bien;
+  await regresaALaPestana(p);
+  const volvio = await entregaDe(p, "P-0621").waitFor({ timeout: 15000 }).then(() => true, () => false);
+  const n = await delPlan(p);
+  ok("ses-155-la-lectura-de-las-facturas-vuelve-y-se-puede-entregar", antes === 0 && volvio && n.ligadas === 11, `caída: «Marcar como Entregada» ${antes}; de vuelta: ${volvio ? "sí" : "NO"}, ${JSON.stringify(n)}`);
+});
+// una remisión ligada de un solo renglón: sin IVA, «y su línea» (no «sus 1 líneas») y «(1 línea)»
+await caso("ses-156-la-remision-ligada-de-una-linea", async ({ p, s }) => {
+  s.filas = HOTSSON_PLAN({ plan: [["R-0456", 110, 13435.71, 50, 3958.92, "unpaid"]], sinPlan: ["P-0623"], grupos: { "R-0456": { doc_type: "remision" } } });
+  s.rpcRespuestas = { ...RESPUESTAS_PLAN, cancel_oc_invoice_split_group: { oc_id: "OC-0966", doc_type: "remision", lines_cancelled: 1 } };
+  await abrirHotsson(p, s, "marcelo");
+  await grupoDelPlan(p).last().click(); await p.waitForTimeout(500);
+  const v = await textoDe(ventanaDelPlan(p));
+  await motivoDelPlan(p).fill("Se ligó la remisión equivocada");
+  await confirmarDelPlan(p, "R-0456").click();
+  await esperarQue(() => escrito(s, CANCELA_GRUPO).length > 0, 6000); await p.waitForTimeout(900);
+  const t = await texto(p);
+  ok("ses-156-la-remision-ligada-de-una-linea", /Desligar R-0456 del plan/.test(v) && /Desligar R-0456 y su línea/.test(v) && /con su línea/.test(v) && !/sus 1 líneas/.test(v) && !/con IVA/.test(v) && /R-0456 desligada del plan \(1 línea\)/.test(t),
+    `la ventana: «${v.slice(0, 200)}»; el aviso: ${(t.match(/R-0456 [a-z]+[^.]{0,50}/) || ["ninguno"])[0]}`);
+});
+// la que NO es ligada, cancelada en otra sesión con la ventana abierta: dice lo que pasó y nada de lo que iba a pasar
+await caso("ses-157-la-normal-cancelada-en-otra-sesion-con-la-ventana-abierta", async ({ p, s }) => {
+  const g = { ligada: false };
+  s.filas = HOTSSON_PLAN({ plan: PLAN_HOTSSON.slice(0, 2), grupos: { "F-159": g, "F-160": g } }); s.rpcRespuestas = RESPUESTAS_PLAN;
+  await abrirHotsson(p, s, "marcelo");
+  await grupoDelPlan(p).last().click(); await p.waitForTimeout(500);
+  s.filas = conDesligadas(s.filas, ["F-160"]);
+  await regresaALaPestana(p);
+  const llego = await p.waitForFunction(() => /en otra sesión/.test(document.body.innerText), null, { timeout: 10000, polling: 200 }).then(() => true, () => false);
+  const v = await textoDe(ventanaDelPlan(p));
+  ok("ses-157-la-normal-cancelada-en-otra-sesion-con-la-ventana-abierta", llego && /se canceló en otra sesión/.test(v) && /Ya está cancelada/.test(v) && !/desligó|desligada/.test(v) && !/se cancela en CobranzaFlow/.test(v) && !/timbrada ante el SAT/.test(v) && !/0 líneas/.test(v) && !/No se deshace/.test(v),
+    `la ventana: «${v.slice(0, 300)}»`);
+});
+// la desligada con un motivo sin dónde cortar: se queda dentro de su renglón, en las dos pantallas
+await caso("ses-158-el-motivo-sin-cortes-de-la-desligada-cabe", async ({ p, s }) => {
+  const LARGO_SIN_CORTES = "IMG_20250914_183022_HDR_portrait_edited_edited.HEIC".repeat(9);   // 459 caracteres: el campo admite 500
+  const f = conDesligadas(HOTSSON_PLAN(), ["F-169"]);
+  f.oc_invoice_split_groups = f.oc_invoice_split_groups.map(g => g.folio === "F-169" ? { ...g, cancellation_reason: LARGO_SIN_CORTES } : g);
+  s.filas = f; s.rpcRespuestas = RESPUESTAS_PLAN;
+  await abrirHotsson(p, s, "marcelo");
+  const medir = () => p.evaluate(() => {
+    const m = [...document.querySelectorAll("div")].find(e => !e.children.length && /^Motivo: IMG_2025/.test(e.textContent));
+    const card = m?.closest('div[style*="border-radius: 8px"]');
+    const q = document.createRange(); if (m) q.selectNodeContents(m);   // el texto, no su caja
+    return { hay: !!m, seSale: m && card ? q.getBoundingClientRect().right > card.getBoundingClientRect().right + 1 : null, pagina: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1 };
+  });
+  const a1366 = await medir();
+  await p.setViewportSize({ width: 1920, height: 1080 }); await p.waitForTimeout(400);
+  const a1920 = await medir();
+  const bien = a => a.hay && a.seSale === false && !a.pagina;
+  ok("ses-158-el-motivo-sin-cortes-de-la-desligada-cabe", bien(a1366) && bien(a1920), `1366: ${JSON.stringify(a1366)} · 1920: ${JSON.stringify(a1920)}`);
 });
 
 await browser.close();
