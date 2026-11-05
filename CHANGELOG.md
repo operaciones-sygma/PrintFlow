@@ -12,6 +12,18 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.179 — Una orden terminada abre con su bitácora, sus notas y su merma — 4-nov-2026
+
+**Qué pasaba.** Lo vio la revisión en producción de la 178, y su crítica independiente lo marcó P0: desde «Todas» o la búsqueda, una orden entregada o cancelada abría sin bitácora, notas ni merma. `loadOrders(true)` no las trae (1,092 de 1,127 órdenes) y sólo llegaban apretando «Cargar Archivo Completo» en otra pantalla. El panel «Tardó…» no salía y nadie decía por qué, y «Notas Rápidas» salía vacío aunque tuviera. Viene de v10.73.
+
+**Qué se cambió** (la pantalla; la base no).
+- 🔑 **Lo de esa orden se lee al abrir su detalle** (`db.loadRelacionadoDe`, `leerRelacionDe`): una vez por orden en la sesión, y se queda porque la recarga conserva lo de las terminadas (`ETAPAS_SIN_RELACION`).
+- **Mientras lee, lo dice; si falla, también**: «No se pudo leer la bitácora ni las notas de esta orden · Reintentar» (regla 12), y al volver a abrir lo intenta otra vez.
+- **Lo que no tiene movimientos lo dice en un renglón**: de las 259 sin bitácora, 238 son ventas de inventario («Venta de inventario: no pasó por la planta») y 21 históricas («Sin movimientos en la bitácora»).
+- **Lo que se escribe mientras lee no se pierde**: la respuesta pisaba la nota recién escrita.
+
+**Cómo se probó.** Con la app real (tanda `sesion-2`). **Vuelta 1**, antes del arreglo: caían 9 de 10; la que pasaba es un guardia (la activa no lee de más) y saboteada cae. **Vuelta 2** (3 casos): una nota escrita mientras leía desaparecía al llegar la respuesta (ses-180, se arregló); volver a abrir después de una falla y el doble clic en «Reintentar» pasaron.
+
 ## v10.84.178 — «Tiempo por etapa»: el P2 del color y lo menor de su crítica — 4-nov-2026
 
 **Qué pasaba.** Marcelo, 4-nov: «sí, sigamos haciendo pases de impeccable hasta dejarla lo más alta posible». Antes de pagar otro revisor, lo que la crítica ya dejó dicho y la 177 no hizo.
@@ -32,7 +44,7 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 **Lo que destapó esa revisión** (no es de esta versión): desde «Todas» o la búsqueda, una orden entregada o cancelada abre sin su bitácora, sus notas ni su merma hasta que alguien aprieta «Cargar Archivo Completo»; el panel «Tardó…» no sale. Son 1,092 de las 1,127 órdenes. Va en v10.84.179.
 
-**Vuelta atrás.** `git revert --no-edit 39c1d45` y subir, o promover `dpl_BRftuhkLhn5n341tUKzyF55bSRtA` (el código de la 177). La base no cambió.
+**Vuelta atrás.** `git revert --no-edit 39c1d45` (se detiene en `CHANGELOG.md`: `git checkout --ours CHANGELOG.md && git add CHANGELOG.md && git revert --continue`) y subir (ensayada en un worktree: deja `src`, `scripts`, `tests` y `DESIGN.md` como 3de884e, el código de la 177), o promover `dpl_BRftuhkLhn5n341tUKzyF55bSRtA` (el código de la 177). La base no cambió.
 
 **Sin probar.** En un teléfono de verdad y con un lector de pantalla de verdad. Los festivos se dedujeron de un solo día (16-sep); los cierres de Semana Santa o de diciembre no se conocen.
 

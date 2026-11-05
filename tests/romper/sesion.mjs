@@ -78,6 +78,7 @@ function simulada() {
     rpcFalla: null,    // v10.84.94 — el nombre de una RPC que contesta 500 (la base que falla al escribir)
     retraso: {},       // v10.84.95 — { tabla: ms }: la base tarda en contestar esa tabla (la primera lectura lenta)
     rpcRespuestas: {}, // v10.84.96 — { rpc: valor }: lo que contesta esa RPC (por omisión, null)
+    relacionFalla: false, // v10.84.179 — leer lo de UNA orden contesta 500 (la orden terminada, al abrir su detalle)
     escrituraFalla: null, // v10.84.150 — una tabla cuyas escrituras (PATCH, POST) contestan 503: la base que no guarda
     ordenesSeMueven: false, // v10.84.172 — un PATCH a una orden contesta su id (sin esto, vacío: «cambió de etapa en otra sesión»)
     validar: null,     // v10.84.175 — { hechas: Set }: como la base de verdad, recuerda lo validado: el UPDATE que lleva su condición y ya estaba no toca nada (contesta [] sin error)
@@ -158,7 +159,7 @@ async function rutear(ctx, s) {
       return route.fulfill({ status: 204, headers: cors, body: "" });
     }
     if (ruta.startsWith("/rest/v1/")) {
-      s.peticiones.push({ t: Date.now(), m, ruta, quien, viva, cuerpo });   // v10.84.172 — con su cuerpo: lo que se escribe en la bitácora y en los avisos
+      s.peticiones.push({ t: Date.now(), m, ruta, quien, viva, cuerpo, orderId: url.searchParams.get("order_id") });   // v10.84.172 — con su cuerpo: lo que se escribe en la bitácora y en los avisos
       if (ruta === "/rest/v1/rpc/get_user_session") {
         s.perfiles++;
         if (s.alPedirPerfil) { const f = s.alPedirPerfil; s.alPedirPerfil = null; await f(req.frame().page()); }
@@ -173,7 +174,11 @@ async function rutear(ctx, s) {
       if (quien !== "usuario") return J(401, { code: "42501", message: "permission denied for table " + ruta.split("/").pop(), details: null, hint: null });
       if (s.escrituraFalla && m !== "GET" && m !== "HEAD" && ruta === "/rest/v1/" + s.escrituraFalla) return J(503, { message: "upstream connect error (prueba)" });
       if (m === "GET" || m === "HEAD") {
-        const tabla = ruta.slice("/rest/v1/".length), filas = s.filas[tabla];
+        const tabla = ruta.slice("/rest/v1/".length), pedida = url.searchParams.get("order_id");
+        // v10.84.179 — lo relacionado de UNA orden, como PostgREST: sólo lo suyo
+        const deUna = RELACIONADAS.has(tabla) && /^eq\./.test(pedida || "");
+        if (deUna && s.relacionFalla) return J(500, { message: "falla de prueba al leer lo de una orden" });
+        const filas = deUna && Array.isArray(s.filas[tabla]) ? s.filas[tabla].filter(f => f.order_id === pedida.slice(3)) : s.filas[tabla];
         if (s.retraso[tabla]) await new Promise(r => setTimeout(r, s.retraso[tabla]));
         if (filas === "falla") return J(503, { message: "upstream connect error (prueba)" });
         if (!filas) return J(200, [], { "content-range": "*/0" });
@@ -243,6 +248,7 @@ async function entrar(p, s, usuario = "karla", pass = "buena") {
   await esperarQue(() => s.entradas > antes, 10000);   // Auth recibió la entrada (o la red la cortó)
   return esperarEntrada(p);
 }
+const RELACIONADAS = new Set(["order_timeline", "order_comments", "order_waste", "order_machine_log", "order_notes"]);
 async function abrirYEntrar(p, s, usuario = "karla") {
   const e0 = await abrir(p);
   if (e0 !== "login") throw new Error("al abrir no salió la pantalla de entrar (" + e0 + ")");
@@ -2534,6 +2540,155 @@ await caso("ses-166-el-teclado-en-el-panel-no-abre-el-detalle", async ({ p, s })
   await p.keyboard.press("Enter"); await p.waitForTimeout(250);
   const d2 = await p.getByRole("dialog").count();
   ok("ses-166-el-teclado-en-el-panel-no-abre-el-detalle", abierto === "true" && d1 === 0 && foco.rol === "region" && foco.anillo && d2 === 0, JSON.stringify({ abierto, d1, foco, d2 }));
+});
+
+// v10.84.179 — con la app real: desde «Todas» o la búsqueda, una orden terminada abría sin su bitácora, sus notas ni su merma hasta que alguien apretara «Cargar Archivo Completo» (`loadOrders(true)` no las trae:
+//   1,092 de 1,127 órdenes), y el panel «Tardó…» no salía. Lo vio la revisión en producción de la 178. Se leen al abrir su detalle.
+const TERMINADA = (pn, x = {}) => ordenK(pn, { stage: "delivered", created_at: haceH(200), delivered_at: haceH(20), validated_by_production: true, validated_by_preprensa: true, ...x });
+const bitacoraDe = (pn, extra = []) => { const ev = (h, to_stage, by_user, action) => ({ order_id: "OP-" + pn, action, by_user, color: "#8e8e93", created_at: haceH(h), to_stage });
+  return [ev(200, "draft", "secretaria", "📋 Orden creada"), ev(199, null, "preprensa", "✅ Validada por Pre-prensa"), ev(190, null, "produccion", "✅ Validada por Producción"), ev(190, "design", "produccion", "📝 → 🎨 Ambos validaron → Diseño"),
+    ...extra.map(e => ev(...e)), ev(150, "salidas", "produccion", "📦 Empaque → 📤 Salidas"), ev(20, "delivered", "karla", "🎉 Entregada")]; };
+const aTodas = async (p, s, usuario = "marcelo") => { await abrirYEntrar(p, s, usuario); await esperarMenu(p, /^Todas|^Pendientes/); await despertar(p); await p.locator('button[title="Todas"]').first().click(); await p.waitForTimeout(800); };
+const leerTexto = async l => (await l.innerText()).replace(/\s+/g, " ");
+const lecturasDe = (s, pn) => s.peticiones.filter(x => x.m === "GET" && x.ruta === "/rest/v1/order_timeline" && x.orderId === "eq.OP-" + pn).length;
+const esperaPanel = dlg => dlg.getByRole("button", { name: /Tiempo por etapa/ }).waitFor({ timeout: 6000 }).catch(() => {});
+await caso("ses-167-la-entregada-abre-con-su-bitacora-y-sus-notas", async ({ p, s }) => {
+  s.filas = { orders: [TERMINADA("P-0960")], order_timeline: bitacoraDe("P-0960"), order_notes: [{ id: "n1", order_id: "OP-P-0960", text: "Se entrega en la bodega de atrás", by_user: "karla", created_at: haceH(30) }] };
+  await aTodas(p, s);
+  await fichaDe(p, "P-0960").click();
+  const dlg = p.getByRole("dialog").first(); await esperaPanel(dlg);
+  const t = await leerTexto(dlg);
+  ok("ses-167-la-entregada-abre-con-su-bitacora-y-sus-notas", /Tardó [^·]*de trabajo/.test(t) && /Se entrega en la bodega de atrás/.test(t), `«${t.slice(0, 260)}»`);
+});
+await caso("ses-168-mientras-lee-lo-dice-y-no-dice-que-no-hay", async ({ p, s }) => {
+  s.filas = { orders: [TERMINADA("P-0961")], order_timeline: bitacoraDe("P-0961") };
+  await aTodas(p, s);
+  s.retraso.order_timeline = 2000;
+  await fichaDe(p, "P-0961").click(); await p.waitForTimeout(700);
+  const dlg = p.getByRole("dialog").first(), t1 = await leerTexto(dlg), estado = await dlg.getByRole("status").count();
+  await esperaPanel(dlg);
+  const t2 = await leerTexto(dlg);
+  ok("ses-168-mientras-lee-lo-dice-y-no-dice-que-no-hay", /Leyendo/.test(t1) && !/Sin movimientos|No se pudo/.test(t1) && estado > 0 && /Tardó/.test(t2) && !/Leyendo/.test(t2), `al abrir, ${estado} status: «${t1.slice(0, 200)}» · después: «${t2.slice(0, 200)}»`);
+});
+await caso("ses-169-si-no-se-pudo-leer-lo-dice-y-reintenta", async ({ p, s }) => {
+  s.filas = { orders: [TERMINADA("P-0962")], order_timeline: bitacoraDe("P-0962") };
+  await aTodas(p, s);
+  s.relacionFalla = true;
+  await fichaDe(p, "P-0962").click();
+  const dlg = p.getByRole("dialog").first();
+  await dlg.getByRole("alert").waitFor({ timeout: 8000 }).catch(() => {});
+  const t1 = await leerTexto(dlg);
+  s.relacionFalla = false;
+  await dlg.getByRole("button", { name: "Reintentar" }).click({ timeout: 2000 }).catch(() => {});
+  await esperaPanel(dlg);
+  const t2 = await leerTexto(dlg);
+  ok("ses-169-si-no-se-pudo-leer-lo-dice-y-reintenta", /No se pudo leer/.test(t1) && !/Sin movimientos|Leyendo/.test(t1) && /Tardó/.test(t2) && !/No se pudo leer/.test(t2), `con la falla: «${t1.slice(0, 200)}» · al reintentar: «${t2.slice(0, 200)}»`);
+});
+await caso("ses-170-sin-movimientos-lo-dice", async ({ p, s }) => {
+  s.filas = { orders: [TERMINADA("H-3499")], order_timeline: bitacoraDe("P-0960") };   // la bitácora de otra orden no se le cuela
+  await aTodas(p, s);
+  await fichaDe(p, "H-3499").click(); await p.waitForTimeout(1200);
+  const t = await leerTexto(p.getByRole("dialog").first());
+  ok("ses-170-sin-movimientos-lo-dice", /Sin movimientos/.test(t) && !/Leyendo|Tardó/.test(t), `«${t.slice(0, 220)}»`);
+});
+await caso("ses-171-la-venta-de-inventario-no-enseña-tiempos", async ({ p, s }) => {
+  s.filas = { orders: [TERMINADA("P-0964", { source: "stock" })] };
+  await aTodas(p, s);
+  s.retraso.order_timeline = 800;
+  await fichaDe(p, "P-0964").click(); await p.waitForTimeout(300);
+  const dlg = p.getByRole("dialog").first(), t1 = await leerTexto(dlg);
+  await p.waitForTimeout(1200);
+  const t2 = await leerTexto(dlg);
+  ok("ses-171-la-venta-de-inventario-no-enseña-tiempos", /Venta de inventario: no pasó por la planta/.test(t1) && /Venta de inventario: no pasó por la planta/.test(t2) && !/Leyendo|Sin movimientos|Tardó/.test(t1 + t2), `«${t2.slice(0, 200)}»`);
+});
+await caso("ses-172-la-recarga-no-se-la-lleva", async ({ p, s }) => {
+  s.filas = { orders: [TERMINADA("P-0965")], order_timeline: bitacoraDe("P-0965") };
+  await aTodas(p, s);
+  await fichaDe(p, "P-0965").click();
+  const dlg = p.getByRole("dialog").first(); await esperaPanel(dlg);
+  const lecturasOrdenes = () => s.peticiones.filter(x => x.m === "GET" && x.ruta === "/rest/v1/orders").length, antes = lecturasOrdenes();
+  await esperarQue(() => lecturasOrdenes() > antes, 25000); await p.waitForTimeout(800);
+  const t = await leerTexto(dlg);
+  ok("ses-172-la-recarga-no-se-la-lleva", lecturasOrdenes() > antes && /Tardó/.test(t) && !/Leyendo|Sin movimientos/.test(t) && lecturasDe(s, "P-0965") === 1, `${lecturasOrdenes() - antes} recargas, ${lecturasDe(s, "P-0965")} lecturas: «${t.slice(0, 200)}»`);
+});
+await caso("ses-173-abrirla-otra-vez-no-la-vuelve-a-leer", async ({ p, s }) => {
+  s.filas = { orders: [TERMINADA("P-0966")], order_timeline: bitacoraDe("P-0966") };
+  await aTodas(p, s);
+  await fichaDe(p, "P-0966").click();
+  const dlg = p.getByRole("dialog").first(); await esperaPanel(dlg);
+  await p.keyboard.press("Escape"); await p.waitForTimeout(350);
+  await fichaDe(p, "P-0966").click(); await p.waitForTimeout(120);
+  const t = await leerTexto(p.getByRole("dialog").first());
+  ok("ses-173-abrirla-otra-vez-no-la-vuelve-a-leer", lecturasDe(s, "P-0966") === 1 && /Tardó/.test(t) && !/Leyendo/.test(t), `${lecturasDe(s, "P-0966")} lecturas: «${t.slice(0, 200)}»`);
+});
+// se cierra mientras lee y se abre otra: la respuesta tarde cae en SU orden, no en la que se está viendo
+await caso("ses-174-la-respuesta-tarde-cae-en-su-orden", async ({ p, s }) => {
+  s.filas = { orders: [TERMINADA("P-0967"), TERMINADA("P-0968")], order_timeline: [
+    ...bitacoraDe("P-0967", [[170, "draft", "preprensa", "↩️ Regresada de 🎨 Diseño → 📝 Validar · Razón: sólo de la 67"], [160, "design", "produccion", "📝 → 🎨 Ambos validaron → Diseño"]]), ...bitacoraDe("P-0968")] };
+  await aTodas(p, s);
+  s.retraso.order_timeline = 1500;
+  await fichaDe(p, "P-0967").click(); await p.waitForTimeout(200);
+  await p.keyboard.press("Escape"); await p.waitForTimeout(250);
+  await fichaDe(p, "P-0968").click(); await p.waitForTimeout(2600);
+  const t68 = await leerTexto(p.getByRole("dialog").first());
+  await p.keyboard.press("Escape"); await p.waitForTimeout(350);
+  await fichaDe(p, "P-0967").click(); await p.waitForTimeout(300);
+  const t67 = await leerTexto(p.getByRole("dialog").first());
+  ok("ses-174-la-respuesta-tarde-cae-en-su-orden", /P-0968/.test(t68) && /Tardó/.test(t68) && !/regresó/.test(t68) && /P-0967/.test(t67) && /regresó 1 vez/.test(t67), `68: «${t68.slice(0, 160)}» · 67: «${t67.slice(0, 160)}»`);
+});
+// vuelta 2: la falla no se queda pegada al volver a abrir; un doble clic en «Reintentar» lee una vez; y lo que se escribe mientras lee no se pierde al llegar la respuesta
+await caso("ses-179-si-fallo-al-volver-a-abrir-la-vuelve-a-leer", async ({ p, s }) => {
+  s.filas = { orders: [TERMINADA("P-0973")], order_timeline: bitacoraDe("P-0973") };
+  await aTodas(p, s);
+  s.relacionFalla = true;
+  await fichaDe(p, "P-0973").click();
+  await p.getByRole("dialog").first().getByRole("alert").waitFor({ timeout: 8000 }).catch(() => {});
+  await p.keyboard.press("Escape"); await p.waitForTimeout(350);
+  s.relacionFalla = false;
+  await fichaDe(p, "P-0973").click();
+  const dlg = p.getByRole("dialog").first(); await esperaPanel(dlg);
+  const t = await leerTexto(dlg);
+  ok("ses-179-si-fallo-al-volver-a-abrir-la-vuelve-a-leer", /Tardó/.test(t) && !/No se pudo leer/.test(t) && lecturasDe(s, "P-0973") === 2, `${lecturasDe(s, "P-0973")} lecturas: «${t.slice(0, 200)}»`);
+});
+await caso("ses-180-la-nota-escrita-mientras-lee-no-se-pierde", async ({ p, s }) => {
+  s.filas = { orders: [TERMINADA("P-0974")], order_timeline: bitacoraDe("P-0974"), order_notes: [{ id: "n1", order_id: "OP-P-0974", text: "La de antes", by_user: "karla", created_at: haceH(30) }] };
+  await aTodas(p, s);
+  s.retraso.order_notes = 1500;
+  await fichaDe(p, "P-0974").click(); await p.waitForTimeout(250);
+  const dlg = p.getByRole("dialog").first(), campo = dlg.getByPlaceholder("Escribe una nota y Enter");
+  await campo.fill("La de ahorita"); await campo.press("Enter");
+  await p.waitForTimeout(2600);
+  const t = await leerTexto(dlg);
+  ok("ses-180-la-nota-escrita-mientras-lee-no-se-pierde", /La de antes/.test(t) && /La de ahorita/.test(t), `«${(t.match(/NOTAS RÁPIDAS.{0,160}/i) || [t.slice(0, 200)])[0]}»`);
+});
+await caso("ses-181-reintentar-con-doble-clic-lee-una-vez", async ({ p, s }) => {
+  s.filas = { orders: [TERMINADA("P-0975")], order_timeline: bitacoraDe("P-0975") };
+  await aTodas(p, s);
+  s.relacionFalla = true;
+  await fichaDe(p, "P-0975").click();
+  const dlg = p.getByRole("dialog").first();
+  await dlg.getByRole("alert").waitFor({ timeout: 8000 }).catch(() => {});
+  s.relacionFalla = false; s.retraso.order_timeline = 500;
+  await dlg.getByRole("button", { name: "Reintentar" }).dblclick({ timeout: 2000 }).catch(() => {});
+  await esperaPanel(dlg); await p.waitForTimeout(300);
+  const t = await leerTexto(dlg);
+  ok("ses-181-reintentar-con-doble-clic-lee-una-vez", /Tardó/.test(t) && lecturasDe(s, "P-0975") === 2, `${lecturasDe(s, "P-0975")} lecturas: «${t.slice(0, 160)}»`);
+});
+await caso("ses-175-la-activa-no-lee-de-mas", async ({ p, s }) => {
+  s.filas = { orders: [ordenK("P-0969", { stage: "ctp", created_at: haceH(50), validated_by_production: true, validated_by_preprensa: true })], order_timeline: bitacoraDe("P-0969").slice(0, 4) };
+  await aTodas(p, s);
+  await fichaDe(p, "P-0969").click(); await p.waitForTimeout(900);
+  const t = await leerTexto(p.getByRole("dialog").first());
+  ok("ses-175-la-activa-no-lee-de-mas", lecturasDe(s, "P-0969") === 0 && /Tiempo por etapa/.test(t), `${lecturasDe(s, "P-0969")} lecturas: «${t.slice(0, 160)}»`);
+});
+// Gerardo también: el panel le sale abajo, y la orden cancelada dice «Duró»
+await caso("ses-176-gerardo-ve-la-cancelada-con-su-bitacora", async ({ p, s }) => {
+  s.filas = { orders: [TERMINADA("P-0970", { stage: "cancelled", cancelled_at: haceH(20), delivered_at: null })], order_timeline: bitacoraDe("P-0970").slice(0, 4) };
+  await aTodas(p, s, "gerardo");
+  await fichaDe(p, "P-0970").click();
+  const dlg = p.getByRole("dialog").first(); await esperaPanel(dlg);
+  const t = await leerTexto(dlg);
+  ok("ses-176-gerardo-ve-la-cancelada-con-su-bitacora", /Duró [^·]*de trabajo/.test(t), `«${(t.match(/Tiempo por etapa.{0,140}/) || [t.slice(0, 200)])[0]}»`);
 });
 
 await browser.close();

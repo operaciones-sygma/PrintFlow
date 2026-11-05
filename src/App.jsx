@@ -1591,6 +1591,16 @@ async function todasLasFilas(armar){const filas=[];
     if(error)return {data:null,error};if(!data||!data.length)break;filas.push(...data);desde+=data.length;}
   return {data:filas,error:null};
 }
+// v10.84.179 — de estas etapas `loadOrders(true)` no trae lo relacionado (bitácora, notas, merma…): son la mayoría de las órdenes (1,092 de 1,127), y recargarlas cada vez eran ~11,000 renglones. Lo suyo se lee al abrir su detalle (`loadRelacionadoDe`)
+const ETAPAS_SIN_RELACION=["delivered","maq_delivered","cancelled","maq_cancelled","stocked"];
+// cómo se ve en la app cada renglón de lo relacionado: una sola vez, para la lectura de todas y para la de una
+const FILA_RELACIONADA={
+  timeline:t=>({ action: t.action, date: t.created_at, by: t.by_user, color: t.color, to: t.to_stage||undefined }),
+  comments:c=>({ text: c.text, by: c.by_user, date: c.created_at }),
+  waste_log:w=>({ qty: w.qty, pliegos: w.pliegos, note: w.note, date: w.created_at }),
+  machine_log:m=>({ machine: m.machine_id, started: m.started_at, ended: m.ended_at, minutes: m.minutes, _id: m.id }),
+  notes_log:n=>({ text: n.text, by: n.by_user, date: n.created_at, _id: n.id }),
+};
 const db = {
   async loadOrders(relatedOnly=false) {
     // Always load ALL order rows (fast, lightweight)
@@ -1605,7 +1615,7 @@ const db = {
     if (!orders || orders.length === 0) return [];
     // Only load related data (timeline, comments, etc) for target orders
     // When relatedOnly=true, skip delivered/cancelled to speed up initial load
-    const finalStages=["delivered","maq_delivered","cancelled","maq_cancelled","stocked"];
+    const finalStages=ETAPAS_SIN_RELACION;
     const target=relatedOnly?orders.filter(o=>!finalStages.includes(o.stage)):orders;
     const ids = target.map(o => o.id);
     const idSet = new Set(ids);
@@ -1631,12 +1641,26 @@ const db = {
       const hasRelated=idSet.has(o.id);
       return {
       ...o,
-      timeline: hasRelated?(tlBy.get(o.id)||[]).map(t => ({ action: t.action, date: t.created_at, by: t.by_user, color: t.color, to: t.to_stage||undefined })):[],
-      comments: hasRelated?(cmBy.get(o.id)||[]).map(c => ({ text: c.text, by: c.by_user, date: c.created_at })):[],
-      waste_log: hasRelated?(wlBy.get(o.id)||[]).map(w => ({ qty: w.qty, pliegos: w.pliegos, note: w.note, date: w.created_at })):[],
-      machine_log: hasRelated?(mlBy.get(o.id)||[]).map(m => ({ machine: m.machine_id, started: m.started_at, ended: m.ended_at, minutes: m.minutes, _id: m.id })):[],
-      notes_log: hasRelated?(nlBy.get(o.id)||[]).map(n => ({ text: n.text, by: n.by_user, date: n.created_at, _id: n.id })):[],
+      timeline: hasRelated?(tlBy.get(o.id)||[]).map(FILA_RELACIONADA.timeline):[],
+      comments: hasRelated?(cmBy.get(o.id)||[]).map(FILA_RELACIONADA.comments):[],
+      waste_log: hasRelated?(wlBy.get(o.id)||[]).map(FILA_RELACIONADA.waste_log):[],
+      machine_log: hasRelated?(mlBy.get(o.id)||[]).map(FILA_RELACIONADA.machine_log):[],
+      notes_log: hasRelated?(nlBy.get(o.id)||[]).map(FILA_RELACIONADA.notes_log):[],
     }});
+  },
+  // v10.84.179 — lo relacionado de UNA orden (la más larga de la bitácora trae 39 renglones: no hacen falta páginas). Si algo falla, lanza: un error de lectura no es «no hay» (regla 12)
+  async loadRelacionadoDe(id) {
+    const relacion = (tabla, col) => supabase.from(tabla).select("*").eq("order_id", id).order(col).order("id");
+    const [tl, cm, wl, ml, nl] = await Promise.all([
+      relacion("order_timeline", "created_at"),
+      relacion("order_comments", "created_at"),
+      relacion("order_waste", "created_at"),
+      relacion("order_machine_log", "started_at"),
+      relacion("order_notes", "created_at"),
+    ]);
+    const malo = [tl, cm, wl, ml, nl].find(r => r.error);
+    if (malo) throw new Error("No se pudieron leer los datos de la orden: " + (malo.error.message || malo.error));
+    return { timeline: (tl.data||[]).map(FILA_RELACIONADA.timeline), comments: (cm.data||[]).map(FILA_RELACIONADA.comments), waste_log: (wl.data||[]).map(FILA_RELACIONADA.waste_log), machine_log: (ml.data||[]).map(FILA_RELACIONADA.machine_log), notes_log: (nl.data||[]).map(FILA_RELACIONADA.notes_log) };
   },
   async saveOrder(o) {
     const { timeline, comments, waste_log, machine_log, notes_log, ...row } = o;
@@ -3408,6 +3432,19 @@ function TiempoEnLaEtapa({order:o}){
   const n=nivelDeTiempo(b.stage,b.hours),c=n==="doble"?C.dnInk:n==="sobre"?C.wnInk:null;
   return <span title={"Sólo cuenta el horario de trabajo: lunes a viernes, "+HORARIO_EN_PALABRAS} style={c?{color:c,fontWeight:600}:undefined}>{n?<WarningIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>:null}lleva <b style={{color:c||C.tx}}>{duracion(b.hours)}</b> {b.fuera?"con "+b.fuera:"en "+(SM[b.stage]?.lt||b.stage)}{n?" · más de lo normal":""}</span>;
 }
+// v10.84.179 — «Tiempo por etapa» de una orden terminada mientras no está su bitácora, que se lee al abrir el detalle. Leyendo no es «no hay» y una falla tampoco (regla 12). Lo que no tiene movimientos lo dice en un renglón, sin desaparecer: 259 órdenes, 238 de ellas ventas de inventario, que no pasan por la planta
+function SinBitacora({order:o,relacion,onReintentar,estilo}){
+  const falla=relacion==="error",inventario=o.source==="stock";
+  if(!falla&&(inventario||relacion!=="leyendo")) return <div style={{marginTop:6,fontSize:11,color:C.t2,...estilo}}><ClockIcon size={12} weight="bold" aria-hidden="true" style={{verticalAlign:"-2px",marginRight:5}}/>Tiempo por etapa · {inventario?"Venta de inventario: no pasó por la planta.":"Sin movimientos en la bitácora."}</div>;
+  return <div style={{marginTop:6,...estilo}}>
+    <div role={falla?"alert":"status"} style={{minHeight:40,boxSizing:"border-box",background:falla?C.bg:C.sf,boxShadow:falla?"0 0 0 1px "+C.dn:"0 0 0 0.5px "+C.bd,borderRadius:10,padding:"8px 12px"}}>
+      <span style={{display:"flex",alignItems:"center",gap:5,fontSize:11,fontWeight:600,color:C.t2}}><ClockIcon size={12} weight="bold"/>Tiempo por etapa</span>
+      <span style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginTop:4,fontSize:11,lineHeight:1.5,color:falla?C.dnInk:C.t2,fontWeight:falla?600:400}}>
+        {falla?<><span><WarningIcon size={12} weight="fill" aria-hidden="true" style={{verticalAlign:"-2px",marginRight:4}}/>No se pudo leer la bitácora ni las notas de esta orden.</span><button type="button" onClick={onReintentar} style={{...bt(C.sf,C.tx),border:"0.5px solid "+C.bd,padding:"4px 12px",fontSize:12,minHeight:32}}>Reintentar</button></>:"Leyendo la bitácora de esta orden…"}
+      </span>
+    </div>
+  </div>;
+}
 function StageFlowHistory({order:o,estilo}){
   const [open,setOpen]=useState(TIEMPOS_ABIERTO);
   // v10.84.176 — al abrirlo se ve (Marcelo, 4-nov: «para que sea visible»): sin esto se abría abajo de la orilla. Sin animar (regla 19c); `nearest` no mueve nada si ya cabe y, si es más alto que el cuerpo, deja el
@@ -4901,7 +4938,7 @@ const SeccionDelDetalle=({icono,children,mt=12})=><div style={{display:"flex",al
 //   a la vista, sin «Borrar» con folio, y menores.
 // v10.84.55: la tercera revisión independiente: cambiar de etapa pregunta antes (a cuál, de cuál y qué máquina deja, a quién
 //   avisa), la pregunta que se queda vieja se cierra, y «Seguir escribiendo» regresa al campo.
-function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction,oc=null}) {
+function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction,oc=null,relacion,onReintentarRelacion}) {
   // v10.72.42 — /impeccable: foco al abrir + restaurar al cerrar (a11y de modal; antes el foco quedaba huérfano).
   const dialogRef=useRef(null);const prevFocusRef=useRef(null);
   // v10.84.54 — cerrar no tira lo escrito (la segunda revisión independiente: una nota escrita y un clic fuera cerraban sin
@@ -5110,6 +5147,8 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction,oc=null}) 
   //   la máquina en la que está con su reloj, y a quién le toca
   const avisos=[...alertasDeLaOrden(o),...banderasDeLaOrden(o)];   // v10.84.54 — también «En espera» (arriba decía RETRASO y la espera sólo en el pie)
   const enMaquina=["in_production","packaging","ctp"].includes(o.stage)?(o.machine_log||[]).find(e=>!e.ended):null;
+  // v10.84.179 — con bitácora, el panel; de una orden terminada que todavía no la tiene, qué pasa (`relacion` sólo llega en ésas)
+  const panelTiempos=estilo=>!vOwns?null:o.timeline?.length>0?<StageFlowHistory order={o} estilo={estilo}/>:relacion?<SinBitacora order={o} relacion={relacion} onReintentar={onReintentarRelacion} estilo={estilo}/>:null;
   const nombreMaquina=enMaquina?(MACHINES.find(x=>x.id===enMaquina.machine)?.name||enMaquina.machine):null;   // («Empaque» en Empaque no se repite)
   // (a quién le toca: orderResponsible, lo mismo que la ficha —la maquila de un vendedor con usuario le toca a él, no a Lupita—
   //   y con su misma frase cuando le toca a los dos)
@@ -5158,7 +5197,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction,oc=null}) 
       {/* el cuerpo: lo único que hace scroll */}
       <div style={{flex:1,minHeight:0,overflowY:"auto",padding:"4px 24px 18px"}}>
       {/* v10.84.177 — a Dirección, «Tiempo por etapa» primero: su resumen se ve sin bajar (Marcelo revisa decenas de órdenes buscando quién detiene). A los demás, abajo, como siempre */}
-      {role==="admin"&&vOwns&&o.timeline?.length>0&&<StageFlowHistory order={o} estilo={{margin:"8px 0 4px",paddingBottom:10,borderBottom:"0.5px solid "+C.bd}}/>}
+      {role==="admin"&&panelTiempos({margin:"8px 0 4px",paddingBottom:10,borderBottom:"0.5px solid "+C.bd})}
       {o.sin_empaque_sygma&&<div style={{display:"flex",alignItems:"center",gap:8,margin:"10px 0 4px",padding:"9px 12px",background:C.dn+"10",border:"1.5px solid "+C.dn+"45",borderRadius:10}}><PackageIcon size={17} weight="bold" color={C.dn} style={{flexShrink:0}}/><div style={{fontSize:11.5,fontWeight:700,color:C.dnInk,lineHeight:1.35}}>Empaque SIN logo de SYGMA · trabajo white-label (imprenta externa). La orden impresa va sin logo.</div></div>}
       {o.plate_status&&antesDeCtp&&<div style={{marginTop:10}}><Badge color={o.plate_status==="existing"?C.live:C.ctp} style={{color:tintaAA(o.plate_status==="existing"?C.live:C.ctp)}} strong icon={o.plate_status==="existing"?<ArrowsClockwiseIcon size={11} weight="bold"/>:<PlusIcon size={11} weight="bold"/>}>{o.plate_status==="existing"?"Placa ya existe (salta CTP)":"Nueva placa CTP requerida"}</Badge></div>}
       {/* v10.84.48 — «CLIENTE» sólo con datos de contacto: los roles de piso no los ven y el rótulo quedaba vacío */}
@@ -5250,7 +5289,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction,oc=null}) 
       {o.stage==="draft"&&<div style={{marginTop:12,padding:"8px 0",display:"flex",gap:10,fontSize:11,color:C.t2,borderTop:"0.5px solid "+C.bd}}><span style={{color:o.validated_by_production?C.okInk:C.wnInk}}>{o.validated_by_production?<CheckCircleIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>:<HourglassIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>}Producción</span><span style={{color:o.validated_by_preprensa?C.okInk:C.wnInk}}>{o.validated_by_preprensa?<CheckCircleIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>:<HourglassIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>}Pre-prensa</span></div>}
 
       {/* v10.73.19 (F2) — Historial de tiempos por etapa (cuánto en cada una, quién la movió, regresiones). */}
-      {role!=="admin"&&vOwns&&o.timeline?.length>0&&<StageFlowHistory order={o} estilo={{marginTop:12,paddingTop:12,borderTop:"0.5px solid "+C.bd}}/>}
+      {role!=="admin"&&panelTiempos({marginTop:12,paddingTop:12,borderTop:"0.5px solid "+C.bd})}
       {/* 🆕 v10.58.41 — Historial campo-a-campo de cambios (antes/después/quién/cuándo).
           Mismo gate vOwns que precios/notas: un vendedor no ve el historial de órdenes ajenas. */}
       {vOwns&&<div style={{marginTop:12,paddingTop:12,borderTop:"0.5px solid "+C.bd}}>
@@ -21561,7 +21600,7 @@ export default function PrintFlow() {
     // preservar del estado previo notas/comentarios/timeline/etc. de esas órdenes para que una nota agregada a una
     // ENTREGADA no desaparezca al llegar el realtime reload. Spread de o primero → conserva el enriquecimiento de splits.
     {   // v10.84.61 — también con el archivo completo cargado (antes: setOrders(withSplits), que reemplazaba todo)
-      const _fin=new Set(["delivered","maq_delivered","cancelled","maq_cancelled","stocked"]);
+      const _fin=new Set(ETAPAS_SIN_RELACION);
       setOrders(prev=>{const pById={};for(const p of prev)if(p)pById[p.id]=p;
         return withSplits.map(o=>{if(_fin.has(o.stage)){const pr=pById[o.id];if(pr)return{...o,notes_log:pr.notes_log||[],comments:pr.comments||[],timeline:pr.timeline||[],waste_log:pr.waste_log||[],machine_log:pr.machine_log||[]};}return o;});});
     }
@@ -21624,6 +21663,28 @@ export default function PrintFlow() {
       return all.map(o=>enrichedById[o.id]?{...o,...enrichedById[o.id]}:o);
     });
   },[]);
+
+  // v10.84.179 — lo relacionado de una orden terminada se lee al abrir su detalle: `reload` no lo trae, y desde «Todas» o la búsqueda salía sin su bitácora, sus notas ni su merma hasta que alguien apretara
+  //   «Cargar Archivo Completo» (lo vio la revisión en producción de la 178). Una vez por orden en la sesión: lo leído se queda, porque la recarga conserva lo de las terminadas. Si falla, se puede volver a pedir.
+  const [relacionDe,setRelacionDe]=useState({});
+  const relacionPedidaRef=useRef(new Set());
+  const leerRelacionDe=useCallback(async id=>{
+    if(relacionPedidaRef.current.has(id))return;
+    relacionPedidaRef.current.add(id);
+    setRelacionDe(m=>({...m,[id]:"leyendo"}));
+    try{
+      const r=await db.loadRelacionadoDe(id);
+      // lo que se escribió mientras leía y todavía no venía en la respuesta se queda (una nota en el Wi-Fi del taller): se pintó con su aviso de guardada
+      const conLoNuevo=(leidas,mias)=>[...leidas,...(mias||[]).filter(m=>!leidas.some(x=>x.text===m.text&&x.by===m.by))];
+      setOrders(prev=>prev.map(o=>o&&o.id===id?{...o,...r,notes_log:conLoNuevo(r.notes_log,o.notes_log),comments:conLoNuevo(r.comments,o.comments)}:o));
+      setRelacionDe(m=>({...m,[id]:"leida"}));
+    }catch(e){console.error("[detalle]",e);relacionPedidaRef.current.delete(id);setRelacionDe(m=>({...m,[id]:"error"}));}
+  },[]);
+  useEffect(()=>{
+    if(!detailModalId)return;
+    const o=ordersRef.current.find(x=>x&&x.id===detailModalId);
+    if(o&&ETAPAS_SIN_RELACION.includes(o.stage))leerRelacionDe(detailModalId);
+  },[detailModalId,leerRelacionDe]);
 
   useEffect(() => { if (user) reload(); }, [user, reload]);
 
@@ -25471,6 +25532,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
       {clientHistory&&<ClientHistory clientName={clientHistory} orders={viewOrders} role={user} userLogin={userLogin} onClose={()=>setClientHistory(null)}/>}
       {flowDiagram&&<FlowDiagram currentStage={flowDiagram.stage} orderType={flowDiagram.type} onClose={()=>setFlowDiagram(null)}/>}
       {detailModalId&&orders.find(x=>x.id===detailModalId)&&<DetailModal order={orders.find(x=>x.id===detailModalId)} role={user} userLogin={userLogin} onClose={()=>setDetailModalId(null)} onPrint={o=>setPrintModal(o)} onAction={handleAction}
+        relacion={ETAPAS_SIN_RELACION.includes(orders.find(x=>x.id===detailModalId)?.stage)?(relacionDe[detailModalId]||"leyendo"):undefined} onReintentarRelacion={()=>leerRelacionDe(detailModalId)}
         oc={(purchaseOrders||[]).find(p=>p.id===orders.find(x=>x.id===detailModalId)?.purchase_order_id)||null}/>}
       {/* ☀️ v10.58.51 — Despertador (encima de todo; solo se cierra con SI ENTIENDO) */}
       {/* v10.84.128 — al confirmar se abre la orden que se tocó en el Despertador */}
