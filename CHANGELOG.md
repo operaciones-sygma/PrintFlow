@@ -12,6 +12,21 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.180 — «Tiempo por etapa» dice qué se pasó y contra qué: su segunda crítica independiente (20/40) — 5-nov-2026
+
+**Qué pasaba.** Marcelo: «sigamos haciendo pases de impeccable hasta dejarla lo más alta posible». El revisor, con capturas de producción de la 178, dio 20/40: contesta lo más grande, no quién detiene la orden. Medido en 868 órdenes de 180 días: en 71% de las órdenes las negritas caían en una etapa que no se pasó; de 12 activas con marca, en 9 la marca estaba en una etapa anterior y cerrado el panel no la decía; 88% de los CTP con pasos (272 de 308) se marcan de golpe; 19% de las etapas (929 de 4,857) duran menos de 5 minutos; 3 de las 9 pausadas activas salían con alarma.
+
+**Qué se cambió** (la pantalla; la base no).
+- 🔑 **Un veredicto en el botón**: «Lleva 24h hábiles · Noemí 13h en Validar, lo normal 5h», «nada fuera de lo normal», o «con MAKILA · la sigue Lupita». Si está pausada, manda la pausa: «En espera desde vie 23-oct: el cliente no ha pedido factura». Sin negritas al mayor, y hasta cuatro datos a la vista («otros»); lo que se pasó nunca se esconde ahí.
+- 🔑 **Lo normal, a la vista**: «36h 00m · lo normal 23h». Sin el número, un rojo es una acusación sin prueba; con él, sobra la leyenda de colores y no depende del color. Sin `aria-label` en un `<span>`: el texto se oye.
+- **Hábiles, no «de trabajo»**: es tiempo dentro del horario, con fila y esperas.
+- **La pausa, un reloj por nombre**: «hasta la pausa · 36h» y «En espera 77h» (antes «en espera · 36h» y «En espera (77h)»). El encabezado de una pausada no alarma: «58h en Salidas hasta la pausa». El motivo, primero y en tinta.
+- **Lo que la bitácora no sabe no se afirma**: CTP y Procesadora marcadas de golpe (en el reloj) son un solo tiempo y lo dice; antes «En fila 4h 32m · CTP <1m · Procesadora <1m». Con turno conocido, «Fila de máquina» y «Máquina» aparte.
+- **Con minutos en los renglones** (`duracionFina`): los de adentro suman su total (decía 10h + 20h bajo 31h), las horas en tinta y los minutos en gris, y «<1m» no pesa como «31h». Los pasos ya no se marcan: lo normal es de la etapa entera.
+- **A 1366**: un solo renglón de aviso (eran tres), lo que duró menos de 5 minutos en una línea, las mismas columnas en todas las etapas, y «falta validar» en tinta (el ámbar es sólo para tiempo). Nombres y cifras a 13 px, de la escala.
+
+**Cómo se probó.** **Vuelta 1**, antes del arreglo, contra la 179, con las horas a mano: caían 25 de 28; las otras 3 son guardias, y saboteadas caen. Al correrlas destapó un bug mío: «de golpe» medía horas de jornada, y de noche juntaba marcas separadas por una hora de reloj (ses-163, tie-154). **Vuelta 2**, por donde no se diseñó: de noche, un motivo sin cortes a 300 px, menos de un minuto, en pausa con el de fuera, todo pasado de lo normal, y el contraste real con el fondo mezclado; lo que pasó a la primera se saboteó y cae por su causa. Al sabotear se vio que `ses-181` no podía caer (el botón desaparece al primer clic): ahora prueba abrir la orden otra vez mientras lee. 24 pruebas viejas cambiaron de texto a propósito (`de trabajo`, «En fila» en lo marcado de golpe, la nota de tres renglones), y `det-242` quedaba pasando en vacío.
+
 ## v10.84.179 — Una orden terminada abre con su bitácora, sus notas y su merma — 4-nov-2026
 
 **Qué pasaba.** Lo vio la revisión en producción de la 178, y su crítica independiente lo marcó P0: desde «Todas» o la búsqueda, una orden entregada o cancelada abría sin bitácora, notas ni merma. `loadOrders(true)` no las trae (1,092 de 1,127 órdenes) y sólo llegaban apretando «Cargar Archivo Completo» en otra pantalla. El panel «Tardó…» no salía y nadie decía por qué, y «Notas Rápidas» salía vacío aunque tuviera. Viene de v10.73.

@@ -2480,7 +2480,7 @@ await caso("ses-163-tiempo-por-etapa-con-la-bitacora-de-la-base", async ({ p, s 
   const dlg = p.getByRole("dialog").first();
   await dlg.getByRole("button", { name: /Tiempo por etapa/ }).click(); await p.waitForTimeout(200);
   const t = (await dlg.innerText()).replace(/\s+/g, " ");
-  ok("ses-163-tiempo-por-etapa-con-la-bitacora-de-la-base", /Noemí[^·]{0,40}validó/.test(t) && /Gerardo[^·]{0,40}validó/.test(t) && /En fila/.test(t) && /Procesadora/.test(t) && /Máquina · Gerardo/.test(t) && /Printmaster 52/.test(t) && /Polar 115.{0,80}ahora/.test(t), `el detalle: «${(t.match(/Tiempo por etapa.{0,420}/) || [t.slice(0, 200)])[0]}»`);
+  ok("ses-163-tiempo-por-etapa-con-la-bitacora-de-la-base", /Noemí.{0,60}validó/.test(t) && /Gerardo.{0,60}validó/.test(t) && /En fila/.test(t) && /Procesadora/.test(t) && /Máquina · Gerardo/.test(t) && /Printmaster 52/.test(t) && /Polar 115.{0,80}ahora/.test(t), `el detalle: «${(t.match(/Tiempo por etapa.{0,420}/) || [t.slice(0, 200)])[0]}»`);
 });
 
 // el mismo panel en la ficha abierta («Historial y notas»), que es más angosta: se lee y nada se sale, en las dos pantallas de Marcelo, y tocarlo no abre el detalle
@@ -2503,7 +2503,7 @@ await caso("ses-164-tiempo-por-etapa-en-la-ficha-abierta", async ({ p, s }) => {
   await p.setViewportSize({ width: 1920, height: 1080 }); await p.waitForTimeout(400);
   const a1920 = await medir();
   const bien = a => !a.fuera.length && !a.pagina;
-  ok("ses-164-tiempo-por-etapa-en-la-ficha-abierta", seVeLaEtapa && bien(a1366) && bien(a1920) && detalle === 0 && /Noemí[^·]{0,40}validó/.test(t) && /Gerardo[^·]{0,40}validó/.test(t) && /Printmaster 52/.test(t) && /Müller Martini/.test(t), `1366: ${JSON.stringify(a1366)} · 1920: ${JSON.stringify(a1920)} · diálogos: ${detalle} · «${(t.match(/Tiempo por etapa.{0,200}/) || [""])[0]}»`);
+  ok("ses-164-tiempo-por-etapa-en-la-ficha-abierta", seVeLaEtapa && bien(a1366) && bien(a1920) && detalle === 0 && /Noemí.{0,60}validó/.test(t) && /Gerardo.{0,60}validó/.test(t) && /Printmaster 52/.test(t) && /Müller Martini/.test(t), `1366: ${JSON.stringify(a1366)} · 1920: ${JSON.stringify(a1920)} · diálogos: ${detalle} · «${(t.match(/Tiempo por etapa.{0,200}/) || [""])[0]}»`);
 });
 
 // v10.84.177 — con la app real: a Dirección el resumen se le ve sin abrir el panel, con la bitácora de la base, y el encabezado dice cuánto lleva
@@ -2518,7 +2518,7 @@ await caso("ses-165-el-resumen-con-la-bitacora-de-la-base", async ({ p, s }) => 
   await fichaDe(p, "P-0957").click(); await p.waitForTimeout(600);
   const dlg = p.getByRole("dialog").first();
   const t = (await dlg.innerText()).replace(/\s+/g, " "), res = await dlg.locator("[data-resumen]").count();
-  ok("ses-165-el-resumen-con-la-bitacora-de-la-base", res === 1 && /Lleva \S+( \S+)? de trabajo · /.test(t) && /Máquina \S+/.test(t) && /lleva \S+( \S+)? en Máquina/.test(t), `resumen ${res}; «${(t.match(/Tiempo por etapa.{0,200}/) || [t.slice(0, 200)])[0]}»`);
+  ok("ses-165-el-resumen-con-la-bitacora-de-la-base", res === 1 && /Lleva \S+( \S+)? hábiles · /.test(t) && /Máquina \S+/.test(t) && /lleva \S+( \S+)? en Máquina/.test(t), `resumen ${res}; «${(t.match(/Tiempo por etapa.{0,200}/) || [t.slice(0, 200)])[0]}»`);
 });
 
 // v10.84.178 — con la app real, en la ficha abierta (que es un `role=button`): el teclado dentro del panel no abre el detalle, y el panel enseña su foco (el CSS global, que sólo trae la app)
@@ -2558,7 +2558,7 @@ await caso("ses-167-la-entregada-abre-con-su-bitacora-y-sus-notas", async ({ p, 
   await fichaDe(p, "P-0960").click();
   const dlg = p.getByRole("dialog").first(); await esperaPanel(dlg);
   const t = await leerTexto(dlg);
-  ok("ses-167-la-entregada-abre-con-su-bitacora-y-sus-notas", /Tardó [^·]*de trabajo/.test(t) && /Se entrega en la bodega de atrás/.test(t), `«${t.slice(0, 260)}»`);
+  ok("ses-167-la-entregada-abre-con-su-bitacora-y-sus-notas", /Tardó [^·]*hábiles/.test(t) && /Se entrega en la bodega de atrás/.test(t), `«${t.slice(0, 260)}»`);
 });
 await caso("ses-168-mientras-lee-lo-dice-y-no-dice-que-no-hay", async ({ p, s }) => {
   s.filas = { orders: [TERMINADA("P-0961")], order_timeline: bitacoraDe("P-0961") };
@@ -2636,7 +2636,7 @@ await caso("ses-174-la-respuesta-tarde-cae-en-su-orden", async ({ p, s }) => {
   const t67 = await leerTexto(p.getByRole("dialog").first());
   ok("ses-174-la-respuesta-tarde-cae-en-su-orden", /P-0968/.test(t68) && /Tardó/.test(t68) && !/regresó/.test(t68) && /P-0967/.test(t67) && /regresó 1 vez/.test(t67), `68: «${t68.slice(0, 160)}» · 67: «${t67.slice(0, 160)}»`);
 });
-// vuelta 2: la falla no se queda pegada al volver a abrir; un doble clic en «Reintentar» lee una vez; y lo que se escribe mientras lee no se pierde al llegar la respuesta
+// vuelta 2: la falla no se queda pegada al volver a abrir; lo que se escribe mientras lee no se pierde al llegar la respuesta; y abrirla otra vez mientras lee no la lee dos veces
 await caso("ses-179-si-fallo-al-volver-a-abrir-la-vuelve-a-leer", async ({ p, s }) => {
   s.filas = { orders: [TERMINADA("P-0973")], order_timeline: bitacoraDe("P-0973") };
   await aTodas(p, s);
@@ -2661,18 +2661,16 @@ await caso("ses-180-la-nota-escrita-mientras-lee-no-se-pierde", async ({ p, s })
   const t = await leerTexto(dlg);
   ok("ses-180-la-nota-escrita-mientras-lee-no-se-pierde", /La de antes/.test(t) && /La de ahorita/.test(t), `«${(t.match(/NOTAS RÁPIDAS.{0,160}/i) || [t.slice(0, 200)])[0]}»`);
 });
-await caso("ses-181-reintentar-con-doble-clic-lee-una-vez", async ({ p, s }) => {
+await caso("ses-181-abrirla-mientras-lee-no-la-lee-dos-veces", async ({ p, s }) => {
   s.filas = { orders: [TERMINADA("P-0975")], order_timeline: bitacoraDe("P-0975") };
   await aTodas(p, s);
-  s.relacionFalla = true;
+  s.retraso.order_timeline = 1500;
+  await fichaDe(p, "P-0975").click(); await p.waitForTimeout(250);
+  await p.keyboard.press("Escape"); await p.waitForTimeout(300);
   await fichaDe(p, "P-0975").click();
-  const dlg = p.getByRole("dialog").first();
-  await dlg.getByRole("alert").waitFor({ timeout: 8000 }).catch(() => {});
-  s.relacionFalla = false; s.retraso.order_timeline = 500;
-  await dlg.getByRole("button", { name: "Reintentar" }).dblclick({ timeout: 2000 }).catch(() => {});
-  await esperaPanel(dlg); await p.waitForTimeout(300);
+  const dlg = p.getByRole("dialog").first(); await esperaPanel(dlg); await p.waitForTimeout(300);
   const t = await leerTexto(dlg);
-  ok("ses-181-reintentar-con-doble-clic-lee-una-vez", /Tardó/.test(t) && lecturasDe(s, "P-0975") === 2, `${lecturasDe(s, "P-0975")} lecturas: «${t.slice(0, 160)}»`);
+  ok("ses-181-abrirla-mientras-lee-no-la-lee-dos-veces", /Tardó/.test(t) && lecturasDe(s, "P-0975") === 1, `${lecturasDe(s, "P-0975")} lecturas: «${t.slice(0, 160)}»`);
 });
 await caso("ses-175-la-activa-no-lee-de-mas", async ({ p, s }) => {
   s.filas = { orders: [ordenK("P-0969", { stage: "ctp", created_at: haceH(50), validated_by_production: true, validated_by_preprensa: true })], order_timeline: bitacoraDe("P-0969").slice(0, 4) };
@@ -2688,7 +2686,25 @@ await caso("ses-176-gerardo-ve-la-cancelada-con-su-bitacora", async ({ p, s }) =
   await fichaDe(p, "P-0970").click();
   const dlg = p.getByRole("dialog").first(); await esperaPanel(dlg);
   const t = await leerTexto(dlg);
-  ok("ses-176-gerardo-ve-la-cancelada-con-su-bitacora", /Duró [^·]*de trabajo/.test(t), `«${(t.match(/Tiempo por etapa.{0,140}/) || [t.slice(0, 200)])[0]}»`);
+  ok("ses-176-gerardo-ve-la-cancelada-con-su-bitacora", /Duró [^·]*hábiles/.test(t), `«${(t.match(/Tiempo por etapa.{0,140}/) || [t.slice(0, 200)])[0]}»`);
+});
+
+// v10.84.180 — el encabezado con la app real: la pausada no alarma con el reloj parado (P-0431: «lleva 58h» en rojo y en presente, en pausa desde septiembre), y lo que se pasa dice contra qué
+const enSalidas = (pn, x = {}) => { const ev = (h, to_stage, by_user, action) => ({ order_id: "OP-" + pn, action, by_user, color: "#8e8e93", created_at: haceH(h), to_stage });
+  return { orders: [ordenK(pn, { stage: "salidas", created_at: haceH(400), validated_by_production: true, validated_by_preprensa: true, ...x })], order_timeline: [ev(400, "draft", "secretaria", "📋 Orden creada"), ev(399, "salidas", "produccion", "📦 Empaque → 📤 Salidas"), ...(x.snooze_reason ? [ev(2, null, "karla", "🧾 En espera: el cliente no ha pedido factura")] : [])] }; };
+await caso("ses-177-la-pausada-no-alarma-en-el-encabezado", async ({ p, s }) => {
+  s.filas = enSalidas("P-0971", { snooze_reason: "El cliente aún no ha pedido factura/remisión", snooze_stage: "salidas", snoozed_by: "karla" });
+  await aTodas(p, s);
+  const f = fichaDe(p, "P-0971"); await f.focus(); await p.keyboard.press("Enter"); await p.waitForTimeout(700);   // con el teclado: el clic al centro de la ficha pausada cae en su franja
+  const t = await leerTexto(p.getByRole("dialog").first());
+  ok("ses-177-la-pausada-no-alarma-en-el-encabezado", /\d\S*( \S+)? en Salidas hasta la pausa/.test(t) && !/lleva \S+( \S+)? en Salidas/.test(t), `«${(t.match(/.{40}en Salidas.{30}/) || [t.slice(0, 200)])[0]}»`);
+});
+await caso("ses-178-lo-que-se-pasa-dice-contra-que", async ({ p, s }) => {
+  s.filas = enSalidas("P-0972");
+  await aTodas(p, s);
+  await fichaDe(p, "P-0972").click(); await p.waitForTimeout(700);
+  const t = await leerTexto(p.getByRole("dialog").first());
+  ok("ses-178-lo-que-se-pasa-dice-contra-que", /lleva \S+( \S+)? en Salidas · lo normal 23h/.test(t) && !/más de lo normal/.test(t), `«${(t.match(/lleva.{0,60}/) || [t.slice(0, 200)])[0]}»`);
 });
 
 await browser.close();

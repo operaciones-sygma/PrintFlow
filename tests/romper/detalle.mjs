@@ -599,7 +599,7 @@ await caso("det-241-terminada-no-dice-que-lleva", "caso=tiempos&rol=admin", asyn
 });
 await caso("det-242-a-quien-no-es-suya-no-se-le-dice", "caso=tiemposviva&rol=vendedor&login=otro", async p => {
   const t = await textoDlg(p);
-  ok("det-242-a-quien-no-es-suya-no-se-le-dice", !/lleva |de trabajo/.test(t), `«${(t.match(/.{30}(lleva |de trabajo).{20}/) || ["no lo dice"])[0]}»`);
+  ok("det-242-a-quien-no-es-suya-no-se-le-dice", !/lleva |hábiles/.test(t), `«${(t.match(/.{30}(lleva |hábiles).{20}/) || ["no lo dice"])[0]}»`);
 });
 await caso("det-243-a-direccion-arriba-y-se-ve-sin-bajar", "caso=tiempos&rol=admin", async p => {
   const yBoton = await dlg(p).getByRole("button", { name: /Tiempo por etapa/ }).evaluate(b => Math.round(b.getBoundingClientRect().top)), yProducto = await yDe(p, /^Producto$/);
@@ -618,7 +618,7 @@ await caso("det-245-abierto-se-recuerda-entre-ordenes", "caso=tiempos&rol=admin"
   await dlg(p).getByRole("button", { name: /Tiempo por etapa/ }).click(); await espera(p, 200);
   await reabrir(p);
   const a2 = await dlg(p).getByRole("button", { name: /Tiempo por etapa/ }).getAttribute("aria-expanded");
-  ok("det-245-abierto-se-recuerda-entre-ordenes", /Los tiempos sólo cuentan/.test(t) && a === "true" && a2 === "false", `abierto al volver: ${a}; cerrado al volver: ${a2}`);
+  ok("det-245-abierto-se-recuerda-entre-ordenes", /Sólo cuenta el horario/.test(t) && a === "true" && a2 === "false", `abierto al volver: ${a}; cerrado al volver: ${a2}`);
 });
 // recordarlo no mueve la ventana: a quien lo tiene abajo no le salta el detalle al abrir otra orden
 await caso("det-246-recordado-no-desplaza-al-abrir", "caso=tiempos&rol=karla", async p => {

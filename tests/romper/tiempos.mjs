@@ -201,7 +201,7 @@ await caso("tie-02-la-noche-no-cuenta", P0721(), async p => {
 await caso("tie-03-el-que-falta-se-dice", ENVALIDAR(), async p => {
   const t = await texto(p);
   // Noemí a los 15 m; Gerardo no ha validado y la orden lleva de 9:30 a 16:00 menos la comida: 5.5 h
-  ok("tie-03-el-que-falta-se-dice", /Noemí\D{0,12}15m/.test(t) && /Gerardo\D{0,12}5h 30m/.test(t) && /Gerardo[^·]{0,30}falta/i.test(t), `panel: «${t}»`);
+  ok("tie-03-el-que-falta-se-dice", /Noemí\D{0,12}15m/.test(t) && /Gerardo\D{0,12}5h 30m/.test(t) && /Gerardo\D{0,12}5h 30m lo normal 5h · falta/i.test(t), `panel: «${t}»`);
 });
 await caso("tie-04-faltan-los-dos", SINVALIDAR(), async p => {
   const t = await texto(p);
@@ -217,7 +217,7 @@ await caso("tie-05-otra-vuelta-a-validar-con-sus-tiempos", P0609(), async p => {
 await caso("tie-06-ctp-es-una-etapa-con-sus-pasos", P0726(), async p => {
   const t = await texto(p);
   // la orden pasó una vez por CTP: 54 m en fila (llegó a las 19:04, ya acabado el horario; de 9:00 a 9:53) y los dos pasos que Germán marcó de golpe. Antes salían tres renglones «CTP» sin decir qué era cada uno
-  ok("tie-06-ctp-es-una-etapa-con-sus-pasos", /En fila\D{0,12}54m/.test(t) && /Procesadora/.test(t) && cuenta(t, /\bCTP\b/g) <= 2, `«CTP» sale ${cuenta(t, /\bCTP\b/g)} veces; panel: «${t.slice(0, 420)}»`);
+  ok("tie-06-ctp-es-una-etapa-con-sus-pasos", /CTP · Germán 54m/.test(t) && !/En fila/.test(t) && /Procesadora/.test(t) && cuenta(t, /\bCTP\b/g) <= 2, `«CTP» sale ${cuenta(t, /\bCTP\b/g)} veces; panel: «${t.slice(0, 420)}»`);
 });
 await caso("tie-07-maquina-dice-cual", P0527(), async p => {
   const t = await texto(p);
@@ -263,12 +263,12 @@ await caso("tie-15-maquila-entregada", P0702(), async p => {
 await caso("tie-16-la-nota-dice-que-cuenta", P0726(), async p => {
   const t = await texto(p);
   // v10.84.176 — Marcelo, 4-nov: «si las horas sólo cuenta el tiempo en esa ventana agrega un texto que lo aclare»
-  ok("tie-16-la-nota-dice-que-cuenta", t.includes("Los tiempos sólo cuentan el horario de trabajo: lunes a viernes, de 9 a 2 y de 3 a 7.") && t.includes("No cuentan la comida, las noches, los fines de semana, los festivos ni las pausas «En espera».")
-    && !/«1d»/.test(t) && t.includes("En Validar, cada quien cuenta desde que la orden entró.") && !/Tiempo hábil|jornada/i.test(t), `panel: «${t.slice(0, 320)}»`);
+  ok("tie-16-la-nota-dice-que-cuenta", t.includes("Sólo cuenta el horario de trabajo: lunes a viernes, de 9 a 2 y de 3 a 7, sin festivos ni pausas.")
+    && !/«1d»/.test(t) && t.includes("cada quien cuenta desde aquí") && !/Tiempo hábil|jornada/i.test(t), `panel: «${t.slice(0, 320)}»`);
 });
 // se lee ANTES que los tiempos: va arriba de la primera etapa, sin cursivas, y se ve al abrir aunque el panel sea largo
 await caso("tie-61-la-nota-va-antes-de-los-tiempos", P0609(), async p => {
-  const m = await p.evaluate(() => { const caja = document.getElementById("caja"), nota = [...caja.querySelectorAll("div")].find(d => !d.children.length && /^Los tiempos sólo cuentan/.test(d.textContent)), etapa = caja.querySelector("[data-etapa]");
+  const m = await p.evaluate(() => { const caja = document.getElementById("caja"), nota = [...caja.querySelectorAll("div")].find(d => !d.children.length && /^Sólo cuenta el horario/.test(d.textContent)), etapa = caja.querySelector("[data-etapa]");
     if (!nota || !etapa) return { hay: false };
     const r = nota.getBoundingClientRect(), h = document.elementFromPoint(r.left + 10, r.top + r.height / 2);
     return { hay: true, antes: r.bottom <= etapa.getBoundingClientRect().top, seVe: h === nota || nota.contains(h), cursiva: getComputedStyle(nota).fontStyle === "italic", px: parseFloat(getComputedStyle(nota).fontSize) }; });
@@ -277,7 +277,7 @@ await caso("tie-61-la-nota-va-antes-de-los-tiempos", P0609(), async p => {
 // lo que no aplica no se dice: una maquila no pasa por Validar
 await caso("tie-62-la-maquila-no-habla-de-validar", P0702(), async p => {
   const t = await texto(p);
-  ok("tie-62-la-maquila-no-habla-de-validar", /Los tiempos sólo cuentan el horario de trabajo/.test(t) && !/En Validar/.test(t), `panel: «${t.slice(0, 240)}»`);
+  ok("tie-62-la-maquila-no-habla-de-validar", /Sólo cuenta el horario de trabajo/.test(t) && !/cada quien cuenta/.test(t), `panel: «${t.slice(0, 240)}»`);
 });
 // después de las 7 ya no cuenta, aunque se esté trabajando: las 19:10 a 19:40 son cero, y al día siguiente corre desde las 9
 await caso("tie-64-despues-de-las-7-no-cuenta", orden("P-0757", { stage: "design", created_at: H("2026-11-02 19:10:00") }, [
@@ -303,12 +303,12 @@ await caso("tie-65-la-comida-no-cuenta-en-pantalla", orden("P-0758", { stage: "d
 //   Germán; Salidas 487.8 m, 8 h 8 m de Karla; total 18.06 h = 2 días. Karla pausó a las 11:34: de ahí a las 16:00, menos la comida, 3 h 26 m que no cuentan.
 await caso("tie-70-el-resumen-se-ve-sin-abrir", P0726(), async p => {
   const t = await texto(p);
-  ok("tie-70-el-resumen-se-ve-sin-abrir", /Lleva 18h de trabajo · Karla 8h 8m · Gerardo 4h 51m · Noemí 4h 11m · Germán 54m · en espera 3h 26m, no cuenta/.test(t), `cerrado: «${t.slice(0, 240)}»`);
+  ok("tie-70-el-resumen-se-ve-sin-abrir", /En espera desde mié 04-nov: el cliente no ha pedido factura Lleva 18h hábiles, sin la pausa · Karla 8h 8m · Gerardo 4h 51m · Noemí 4h 11m · Germán 54m/.test(t), `cerrado: «${t.slice(0, 240)}»`);
 }, { abrir: false });
 // P1 1, decisión de Marcelo: lo de fuera no se le cuenta a nadie. «Proceso en Maquila» 3d 2h (39 m + 27 h + 66 m = 28.8 h): con quien la tiene, quién la sigue, sin rojo, y en el resumen no es de Lupita
 await caso("tie-71-lo-de-fuera-no-se-le-cuenta-a-nadie", { ...P0702(), maq_provider: "MAKILA" }, async p => {
   const t = await texto(p), n = await niveles(p, "maq_in_progress");
-  ok("tie-71-lo-de-fuera-no-se-le-cuenta-a-nadie", /Proceso en Maquila · con MAKILA · la sigue Lupita/.test(t) && n.length === 0 && /Tardó 29h de trabajo · Con MAKILA 29h/.test(t) && !/· Lupita \d/.test(t), `niveles ${JSON.stringify(n)}; «${t.slice(0, 300)}»`);
+  ok("tie-71-lo-de-fuera-no-se-le-cuenta-a-nadie", /Proceso en Maquila · con MAKILA · la sigue Lupita/.test(t) && n.length === 0 && /Tardó 29h hábiles · nada fuera de lo normal Con MAKILA 29h/.test(t) && !/· Lupita \d/.test(t), `niveles ${JSON.stringify(n)}; «${t.slice(0, 300)}»`);
 });
 await caso("tie-72-sin-nombre-del-maquilador", P0702(), async p => {
   const t = await texto(p);
@@ -333,7 +333,7 @@ await caso("tie-74-la-pausa-deja-rastro", P0609(), async p => {
 // mientras corre: el reloj parado no dice «en curso», y dice desde cuándo
 await caso("tie-75-la-pausa-que-sigue-dice-desde-cuando", P0726(), async p => {
   const t = await etapa(p, "salidas");
-  ok("tie-75-la-pausa-que-sigue-dice-desde-cuando", /en espera · 8h 8m/.test(t) && !/en curso/.test(t) && /desde mié 04-nov/.test(t) && /la puso Karla/.test(t), `«${t}»`);
+  ok("tie-75-la-pausa-que-sigue-dice-desde-cuando", /hasta la pausa · 8h 08m/.test(t) && !/en curso/.test(t) && /desde mié 04-nov/.test(t) && /la puso Karla/.test(t), `«${t}»`);
 });
 // entregada con la pausa abierta (sin «Reactivada»): la pausa termina al entregar, no sigue corriendo hasta hoy
 await caso("tie-84-la-pausa-se-cierra-al-entregar", conEventos("P-0760", { stage: "delivered", delivered_at: H("2026-11-02 12:00:00") }, [
@@ -381,7 +381,7 @@ await caso("tie-78-validar-6h-ya-es-mucho", orden("P-0763", { stage: "design", c
   ["2026-11-02 16:00:00", "design", "produccion", "📝 → 🎨 Ambos validaron → Diseño"],
 ]), async p => {
   const n = await niveles(p, "draft"), t = await texto(p);
-  ok("tie-78-validar-6h-ya-es-mucho", n.length === 2 && n.every(x => /^sobre\|.*más de lo normal/.test(x)) && /En ámbar, lo que pasó de lo normal de su etapa; en rojo, el doble\./.test(t), `${JSON.stringify(n)}; «${t.slice(0, 300)}»`);
+  ok("tie-78-validar-6h-ya-es-mucho", n.length === 1 && /^sobre\|/.test(n[0]) && /Gerardo\D{0,12}6h 00m lo normal 5h/.test(t), `${JSON.stringify(n)}; «${t.slice(0, 300)}»`);
 });
 await caso("tie-79-validar-11h-es-el-doble", orden("P-0764", { stage: "design", created_at: H("2026-11-02 09:00:00") }, [
   ["2026-11-02 09:00:00", "draft", "secretaria", "📋 Orden creada"],
@@ -390,16 +390,16 @@ await caso("tie-79-validar-11h-es-el-doble", orden("P-0764", { stage: "design", 
   ["2026-11-03 11:00:00", "design", "produccion", "📝 → 🎨 Ambos validaron → Diseño"],
 ]), async p => {
   const n = await niveles(p, "draft");
-  ok("tie-79-validar-11h-es-el-doble", n.length === 3 && n.every(x => /^doble\|.*el doble de lo normal/.test(x)), JSON.stringify(n));
+  ok("tie-79-validar-11h-es-el-doble", n.length === 2 && n.every(x => /^doble\|/.test(x)), JSON.stringify(n));
 });
 // Máquina 30.6 h es de lo normal (p90 56 h): antes salía en rojo. Sin marcas, tampoco se explica lo que no sale
 await caso("tie-88-maquina-30h-es-normal", P0527(), async p => {
   const n = await niveles(p, "in_production");
-  ok("tie-88-maquina-30h-es-normal", n.length === 0 && /31h/.test(await etapa(p, "in_production")), JSON.stringify(n));
+  ok("tie-88-maquina-30h-es-normal", n.length === 0 && /3[01]h \d\dm/.test(await etapa(p, "in_production")), JSON.stringify(n));
 });
 await caso("tie-89-sin-marcas-no-se-explican", SINVALIDAR(), async p => {
   const t = await texto(p);
-  ok("tie-89-sin-marcas-no-se-explican", !/lo normal/.test(t), `«${t.slice(0, 340)}»`);
+  ok("tie-89-sin-marcas-no-se-explican", !/lo normal \d/.test(t) && !/En ámbar/.test(t), `«${t.slice(0, 340)}»`);
 });
 // Salidas del viernes 15:00 al miércoles 16:00: 4 + 9 + 9 + 6 = 28 h: arriba de 23, ámbar
 await caso("tie-90-salidas-28h-pasa-de-lo-normal", orden("P-0765", { stage: "salidas", created_at: H("2026-10-30 14:00:00") }, [
@@ -417,17 +417,17 @@ await caso("tie-80-el-ultimo-se-dice", P0726(), async p => {
 await caso("tie-81-terminada-dice-cuanto-duro", conEventos("P-0766", { stage: "cancelled", cancelled_at: H("2026-11-02 12:00:00") }, [
   ["2026-11-02 12:00:00", null, "admin", "❌ Cancelada: Orden repetida"],
 ]), async p => {
-  ok("tie-81-terminada-dice-cuanto-duro", /Duró 2h 30m de trabajo/.test(await texto(p)), `«${(await texto(p)).slice(0, 200)}»`);
+  ok("tie-81-terminada-dice-cuanto-duro", /Duró 2h 30m hábiles/.test(await texto(p)), `«${(await texto(p)).slice(0, 200)}»`);
 }, { abrir: false });
 await caso("tie-91-la-entregada-dice-que-tardo", P0609(), async p => {
-  ok("tie-91-la-entregada-dice-que-tardo", /Tardó \S+( \S+)? de trabajo/.test(await texto(p)), `«${(await texto(p)).slice(0, 200)}»`);
+  ok("tie-91-la-entregada-dice-que-tardo", /Tardó \S+( \S+)? hábiles/.test(await texto(p)), `«${(await texto(p)).slice(0, 200)}»`);
 }, { abrir: false });
 // de quién es el tiempo de Validar: de quien falta; de los dos si faltan los dos; si la bitácora no guardó a uno, del que sí está
 await caso("tie-82-validar-es-de-quien-falta", ENVALIDAR(), async p => {
-  ok("tie-82-validar-es-de-quien-falta", /Lleva 5h 30m de trabajo · Gerardo 5h 30m/.test(await texto(p)), `«${(await texto(p)).slice(0, 200)}»`);
+  ok("tie-82-validar-es-de-quien-falta", /Lleva 5h 30m hábiles · Gerardo 5h 30m en Validar, lo normal 5h Gerardo 5h 30m/.test(await texto(p)), `«${(await texto(p)).slice(0, 200)}»`);
 }, { abrir: false });
 await caso("tie-92-validar-de-los-dos", SINVALIDAR(), async p => {
-  ok("tie-92-validar-de-los-dos", /Lleva 30m de trabajo · Noemí y Gerardo 30m/.test(await texto(p)), `«${(await texto(p)).slice(0, 200)}»`);
+  ok("tie-92-validar-de-los-dos", /Lleva 30m hábiles · nada fuera de lo normal Noemí y Gerardo 30m/.test(await texto(p)), `«${(await texto(p)).slice(0, 200)}»`);
 }, { abrir: false });
 await caso("tie-83-validar-sin-la-hora-de-uno", conEventos("P-0545", { stage: "ready" }, [
   ["2026-11-02 10:00:00", null, "preprensa", "✅ Validada por Pre-prensa"],
@@ -472,7 +472,7 @@ await caso("tie-102-en-curso-avanza-solo", SINVALIDAR(), async p => {
   const a = await texto(p);
   await p.clock.fastForward("30:00"); await p.waitForTimeout(150);
   const b = await texto(p);
-  ok("tie-102-en-curso-avanza-solo", /Lleva 30m de trabajo/.test(a) && /Lleva 1h de trabajo/.test(b), `«${a.slice(0, 60)}» → «${b.slice(0, 60)}»`);
+  ok("tie-102-en-curso-avanza-solo", /Lleva 30m hábiles/.test(a) && /Lleva 1h hábiles/.test(b), `«${a.slice(0, 60)}» → «${b.slice(0, 60)}»`);
 }, { reloj: true });
 // lector de pantalla y teclado: una lista de etapas, y el panel es una región a la que se llega con Tab para desplazarlo
 await caso("tie-103-lista-y-region", P0726(), async p => {
@@ -496,7 +496,7 @@ await caso("tie-107-regresar-no-es-rojo", P0609(), async p => {
     return { nombre: n ? getComputedStyle(n).color : null, boton: boton ? getComputedStyle(boton).color : null, punto: d ? getComputedStyle(d.firstElementChild || d).backgroundColor : null, icono: !!v?.querySelector("svg") }; });
   ok("tie-107-regresar-no-es-rojo", m.nombre === "rgb(26, 26, 31)" && m.boton === "rgb(26, 26, 31)" && m.punto !== "rgb(224, 59, 48)" && m.icono, JSON.stringify(m));
 });
-// los renglones sanos sin pastilla; la que pasa de lo normal, con ícono, y lleva su color
+// los renglones sanos sin pastilla; la que pasa de lo normal, con ícono. v10.84.180 — en Validar la marca va en la fila de quien se pasó, sin pastilla: la pastilla es de la etapa entera (tie-159)
 await caso("tie-108-solo-lo-que-rebasa-lleva-pastilla", orden("P-0763", { stage: "design", created_at: H("2026-11-02 09:00:00") }, [
   ["2026-11-02 09:00:00", "draft", "secretaria", "📋 Orden creada"],
   ["2026-11-02 10:00:00", null, "preprensa", "✅ Validada por Pre-prensa"],
@@ -504,7 +504,7 @@ await caso("tie-108-solo-lo-que-rebasa-lleva-pastilla", orden("P-0763", { stage:
   ["2026-11-02 16:00:00", "design", "produccion", "📝 → 🎨 Ambos validaron → Diseño"],
 ]), async p => {
   const m = await p.evaluate(() => { const fondo = e => { const c = getComputedStyle(e).backgroundColor; return c !== "rgba(0, 0, 0, 0)" && c !== "transparent"; }; const v = document.querySelector('#caja [data-etapa="draft"] [data-nivel]'); const pastillas = [...document.querySelectorAll('#caja [data-etapa="design"] span')].filter(fondo).length; return { conFondo: v ? fondo(v) : null, icono: !!v?.querySelector("svg"), pastillas }; });
-  ok("tie-108-solo-lo-que-rebasa-lleva-pastilla", m.conFondo === true && m.icono && m.pastillas === 0, JSON.stringify(m));
+  ok("tie-108-solo-lo-que-rebasa-lleva-pastilla", m.conFondo === false && m.icono && m.pastillas === 0, JSON.stringify(m));
 });
 await caso("tie-109-las-fechas-dicen-el-dia", P0726(), async p => {
   const t = await etapa(p, "draft");
@@ -513,8 +513,8 @@ await caso("tie-109-las-fechas-dicen-el-dia", P0726(), async p => {
 // el resumen está dentro del botón: se oye con su nombre, y tocarlo abre
 await caso("tie-110-tocar-el-resumen-abre", P0726(), async p => {
   await p.locator("[data-resumen]").click(); await p.waitForTimeout(120);
-  const a = await p.getByRole("button", { name: /Lleva 18h de trabajo/ }).getAttribute("aria-expanded"), t = await texto(p);
-  ok("tie-110-tocar-el-resumen-abre", a === "true" && /Los tiempos sólo cuentan/.test(t), `aria-expanded ${a}`);
+  const a = await p.getByRole("button", { name: /Lleva 18h hábiles/ }).getAttribute("aria-expanded"), t = await texto(p);
+  ok("tie-110-tocar-el-resumen-abre", a === "true" && /Sólo cuenta el horario/.test(t), `aria-expanded ${a}`);
 }, { abrir: false });
 
 // la vuelta 2 de la 178: con el teclado se llega al panel y se sale; regresar dos veces; dos pausas; lo de fuera con pausa; lo que no cabe en el botón
@@ -555,7 +555,7 @@ await caso("tie-123-dos-pausas-en-la-misma-etapa", conEventos("P-0772", { stage:
   ["2026-11-02 13:00:00", null, "karla", "🔔 Reactivada"],
 ]), async p => {
   const t = await etapa(p, "salidas"), g = await texto(p);
-  ok("tie-123-dos-pausas-en-la-misma-etapa", cuenta(t, /En espera/g) === 2 && /no cuenta [^]*una/.test(t) && /no cuenta [^]*otra/.test(t) && /en espera 1h 30m, no cuenta/.test(g), `«${t}»`);
+  ok("tie-123-dos-pausas-en-la-misma-etapa", cuenta(t, /En espera/g) === 2 && /una · no cuenta/.test(t) && /otra · no cuenta/.test(t) && /en espera 1h 30m, no cuenta/.test(g), `«${t}»`);
 });
 await caso("tie-124-sin-pausa-no-la-menciona", P0527(), async p => {
   const t = await texto(p);
@@ -587,6 +587,181 @@ await caso("tie-127-pausada-y-arriba-de-lo-normal", orden("P-0775", { stage: "sa
 ]), async p => {
   const t = await etapa(p, "salidas"), n = await niveles(p, "salidas");
   ok("tie-127-pausada-y-arriba-de-lo-normal", /^sobre\|/.test(n[0] || "") && /36h/.test(t) && /En espera/.test(t) && /no cuenta/.test(t), `${n[0]} · «${t}»`);
+});
+
+// ════════════════════════ v10.84.180: su segunda crítica independiente ════════════════════════
+// sana: Noemí 1 h, Gerardo 1.5 h en Validar y 22 h en Diseño (lo normal, 29): 23.5 h hábiles
+const SANA = () => conEventos("P-0780", { stage: "design" }, [["2026-11-02 10:30:00", null, "preprensa", "✅ Validada por Pre-prensa"], ["2026-11-02 11:00:00", null, "produccion", "✅ Validada por Producción"],
+  ["2026-11-02 11:00:00", "design", "produccion", "📝 → 🎨 Ambos validaron → Diseño"]]);
+// lo que se pasó quedó atrás: Noemí 12.5 h en Validar (lo normal, 5: el doble) y ya va en Diseño, 11 h, sin pasarse. El encabezado no lo dice y, cerrado, antes tampoco el panel (9 de las 12 activas con marca)
+const SE_PASO_ATRAS = () => conEventos("P-0781", { stage: "design" }, [["2026-11-02 10:30:00", null, "produccion", "✅ Validada por Producción"], ["2026-11-03 13:00:00", null, "preprensa", "✅ Validada por Pre-prensa"],
+  ["2026-11-03 13:00:00", "design", "preprensa", "📝 → 🎨 Ambos validaron → Diseño"]]);
+// 36 h en Salidas (lo normal, 23) hasta que se pausó: del lunes 19-oct 10:00 al viernes 23-oct 10:00
+const PAUSADA_PASADA = () => orden("P-0775", { stage: "salidas", created_at: H("2026-10-19 09:30:00"), snooze_reason: "El cliente aún no ha pedido factura/remisión", snooze_stage: "salidas", snoozed_by: "karla" }, [
+  ["2026-10-19 09:30:00", "draft", "secretaria", "📋 Orden creada"], ["2026-10-19 10:00:00", "salidas", "produccion", "📦 Empaque → 📤 Salidas"], ["2026-10-23 10:00:00", null, "karla", "🧾 En espera: el cliente no ha pedido factura"]]);
+const veredicto = p => p.evaluate(() => document.querySelector("#caja [data-veredicto]")?.innerText.replace(/\s+/g, " ").trim() ?? null);
+const resumenDe = p => p.evaluate(() => document.querySelector("#caja [data-resumen]")?.innerText.replace(/\s+/g, " ").trim() ?? null);
+const rubrosMarcados = p => p.evaluate(() => [...document.querySelectorAll("#caja [data-rubro][data-nivel]")].map(x => x.innerText.trim()));
+await caso("tie-128-el-veredicto-dice-que-va-bien", SANA(), async p => {
+  const v = await veredicto(p);
+  ok("tie-128-el-veredicto-dice-que-va-bien", v === "Lleva 24h hábiles · nada fuera de lo normal", `«${v}»`);
+}, { abrir: false });
+await caso("tie-129-cerrado-dice-lo-que-se-paso-atras", SE_PASO_ATRAS(), async p => {
+  const v = await veredicto(p), n = await p.evaluate(() => document.querySelector("#caja [data-veredicto] [data-nivel]")?.getAttribute("data-nivel") ?? null);
+  ok("tie-129-cerrado-dice-lo-que-se-paso-atras", v === "Lleva 24h hábiles · Noemí 13h en Validar, lo normal 5h" && n === "doble", `«${v}» · ${n}`);
+}, { abrir: false });
+await caso("tie-130-la-pausada-abre-con-su-motivo", P0726(), async p => {
+  const v = await veredicto(p), r = await resumenDe(p);
+  ok("tie-130-la-pausada-abre-con-su-motivo", v === "En espera desde mié 04-nov: el cliente no ha pedido factura" && r === "Lleva 18h hábiles, sin la pausa · Karla 8h 8m · Gerardo 4h 51m · Noemí 4h 11m · Germán 54m", `«${v}» · «${r}»`);
+}, { abrir: false });
+// las negritas iban siempre al mayor (71% de las órdenes, sin haberse pasado); ahora sólo se marca lo que se pasó
+await caso("tie-131-el-mayor-sin-pasarse-no-se-marca", SANA(), async p => {
+  const pesos = await p.evaluate(() => [...document.querySelectorAll("#caja [data-rubro]")].map(x => Number(getComputedStyle(x).fontWeight))), m = await rubrosMarcados(p);
+  ok("tie-131-el-mayor-sin-pasarse-no-se-marca", pesos.length > 0 && pesos.every(x => x < 600) && m.length === 0, `pesos ${pesos.join(",")}; marcados ${m.join(" | ")}`);
+}, { abrir: false });
+// lo que ya nombró el veredicto no se marca otra vez: «Noemí 13h en Validar» y «Noemí 24h» repetían la alarma con otra cifra
+await caso("tie-132-lo-que-dijo-el-veredicto-no-se-repite", SE_PASO_ATRAS(), async p => {
+  const m = await rubrosMarcados(p), r = await resumenDe(p);
+  ok("tie-132-lo-que-dijo-el-veredicto-no-se-repite", m.length === 0 && /^Noemí 24h/.test(r || ""), `marcados ${m.join(" | ") || "ninguno"}; «${r}»`);
+}, { abrir: false });
+await caso("tie-133-con-el-de-fuera-no-dice-nada-fuera-de-lo-normal", conEventos("P-0782", { stage: "maq_in_progress", order_type: "maquila", maq_provider: "MAKILA" }, [["2026-11-02 10:00:00", "maq_in_progress", "secretaria", "🚚 Enviada a Maquila → ⚙️ Proceso en Maquila"]]), async p => {
+  const v = await veredicto(p);
+  ok("tie-133-con-el-de-fuera-no-dice-nada-fuera-de-lo-normal", /^Lleva \S+( \S+)? hábiles · con MAKILA · la sigue Lupita$/.test(v || ""), `«${v}»`);
+}, { abrir: false });
+// lo normal, a la vista: sin el número, un rojo es una acusación sin prueba; con él, sobra la leyenda de colores
+await caso("tie-134-lo-normal-junto-a-la-marca-y-sin-leyenda", orden("P-0783", { stage: "salidas", created_at: H("2026-10-19 09:30:00") }, [["2026-10-19 09:30:00", "draft", "secretaria", "📋 Orden creada"], ["2026-10-19 10:00:00", "salidas", "produccion", "📦 Empaque → 📤 Salidas"]]), async p => {
+  const t = await etapa(p, "salidas"), g = await texto(p), etiquetas = await p.evaluate(() => document.querySelectorAll("#caja span[aria-label]").length);
+  ok("tie-134-lo-normal-junto-a-la-marca-y-sin-leyenda", /en curso · \S+( \S+)? · lo normal 23h/.test(t) && !/En ámbar|en rojo/.test(g) && etiquetas === 0, `${etiquetas} aria-label en span; «${t.slice(0, 120)}»`);
+});
+// la pausa: un reloj por nombre. Antes «en espera · 36h» junto a «En espera (77h)»
+await caso("tie-135-hasta-la-pausa-y-no-en-espera", PAUSADA_PASADA(), async p => {
+  const t = await etapa(p, "salidas");
+  ok("tie-135-hasta-la-pausa-y-no-en-espera", /hasta la pausa · 36h 00m · lo normal 23h/.test(t) && !/en espera ·/.test(t) && !/\(\d/.test(t), `«${t}»`);
+});
+await caso("tie-136-el-motivo-primero-y-en-tinta", PAUSADA_PASADA(), async p => {
+  const t = await etapa(p, "salidas"), m = await p.evaluate(() => { const e = document.querySelector("#caja [data-motivo]"), n = document.querySelector("#caja [data-nombre-etapa]"); return e && { tam: getComputedStyle(e).fontSize, igual: getComputedStyle(e).color === getComputedStyle(n).color }; });
+  ok("tie-136-el-motivo-primero-y-en-tinta", /En espera \S+( \S+)? el cliente no ha pedido factura · no cuenta · desde vie 23-oct, 10:00 a\.m\. · la puso Karla/.test(t) && m?.tam === "11px" && m?.igual, `${JSON.stringify(m)} «${t}»`);
+});
+// 88% de los CTP con pasos se marcan de golpe: «En fila 54m · CTP <1m · Procesadora <1m» afirmaba que la placa se hizo en un minuto
+await caso("tie-137-marcadas-de-golpe-no-es-fila", P0726(), async p => {
+  const t = await etapa(p, "ctp");
+  ok("tie-137-marcadas-de-golpe-no-es-fila", /CTP · Germán 54m/.test(t) && !/En fila/.test(t) && /CTP y Procesadora marcadas juntas mar 03-nov, 09:53 a\.m\./.test(t), `«${t}»`);
+});
+const ctpCon = (pn, finCtp, finProc, finPlacas, extra = {}) => conEventos(pn, { stage: "placas_listas", ...extra }, [["2026-11-02 10:00:00", "ctp", "preprensa", "🎨 Diseño → 💿 CTP"], ["2026-11-02 " + finCtp, "ctp", "german", "🏭 CTP"], ["2026-11-02 " + finProc, "ctp", "german", "🏭 Procesadora"], ...(finPlacas ? [["2026-11-02 " + finPlacas, "placas_listas", "german", "💿 CTP → 📋 Placas Listas"]] : [])]);
+await caso("tie-138-con-tiempo-de-verdad-se-queda-con-sus-pasos", ctpCon("P-0784", "12:00:00", "13:00:00", "13:30:00"), async p => {
+  const t = await etapa(p, "ctp");
+  ok("tie-138-con-tiempo-de-verdad-se-queda-con-sus-pasos", /En fila 2h 00m/.test(t) && /CTP 1h 00m/.test(t) && /Procesadora 30m/.test(t) && !/marcadas juntas/.test(t), `«${t}»`);
+});
+await caso("tie-139-cuatro-minutos-es-de-golpe", ctpCon("P-0790", "12:00:00", "12:04:00", "12:08:00"), async p => {
+  const t = await etapa(p, "ctp");
+  ok("tie-139-cuatro-minutos-es-de-golpe", !/En fila/.test(t) && /CTP y Procesadora marcadas juntas lun 02-nov, 12:00 p\.m\./.test(t), `«${t}»`);
+});
+await caso("tie-140-seis-minutos-ya-no", ctpCon("P-0791", "12:00:00", "12:06:00", "12:08:00"), async p => {
+  const t = await etapa(p, "ctp");
+  ok("tie-140-seis-minutos-ya-no", /En fila/.test(t) && !/marcadas juntas/.test(t), `«${t}»`);
+});
+await caso("tie-141-mientras-sigue-ahi-no-se-juntan", conEventos("P-0792", { stage: "ctp" }, [["2026-11-02 10:00:00", "ctp", "preprensa", "🎨 Diseño → 💿 CTP"], ["2026-11-04 15:59:00", "ctp", "german", "🏭 CTP"]]), async p => {
+  const t = await etapa(p, "ctp");
+  ok("tie-141-mientras-sigue-ahi-no-se-juntan", /En fila/.test(t) && /ahora/.test(t) && !/marcad/.test(t), `«${t}»`);
+});
+// «Máquina» juntaba fila y corrida, y piden decisiones distintas: 21 h, de las que 9 fueron esperar turno
+const CON_TURNO = () => conEventos("P-0785", { stage: "in_production" }, [["2026-11-02 12:00:00", "in_production", "produccion", "🏭 Printmaster 52 (turno 3)"], ["2026-11-03 12:00:00", null, "produccion", "⏯️ Le tocó"]]);
+await caso("tie-142-fila-y-maquina-aparte-cuando-se-sabe", CON_TURNO(), async p => {
+  const r = await resumenDe(p);
+  ok("tie-142-fila-y-maquina-aparte-cuando-se-sabe", /Máquina 12h/.test(r || "") && /Fila de máquina 9h/.test(r || ""), `«${r}»`);
+}, { abrir: false });
+await caso("tie-143-sin-saberlo-sigue-maquina", conEventos("P-0793", { stage: "in_production" }, [["2026-11-02 12:00:00", "in_production", "produccion", "🏭 Printmaster 52 (turno 3)"]]), async p => {
+  const r = await resumenDe(p);
+  ok("tie-143-sin-saberlo-sigue-maquina", /Máquina 21h/.test(r || "") && !/Fila/.test(r || ""), `«${r}»`);
+}, { abrir: false });
+// los de adentro suman su total: decía 10h + 20h bajo 31h
+await caso("tie-144-los-de-adentro-suman", orden("P-0786", { stage: "salidas", created_at: H("2026-10-26 09:00:00") }, [["2026-10-26 09:00:00", "draft", "secretaria", "📋 Orden creada"], ["2026-10-26 09:30:00", "in_production", "produccion", "🏭 Printmaster 52"], ["2026-10-27 10:54:00", "in_production", "produccion", "🏭 Polar 115"], ["2026-10-29 13:24:00", "salidas", "produccion", "📦 Empaque → 📤 Salidas"]]), async p => {
+  const t = await etapa(p, "in_production");
+  ok("tie-144-los-de-adentro-suman", /30h 54m/.test(t) && /Printmaster 52 10h 24m/.test(t) && /Polar 115 20h 30m/.test(t), `«${t}»`);
+});
+// lo que duró menos de 5 minutos (19% de las etapas) en una línea, sin su fecha: la misma de la siguiente
+await caso("tie-145-la-etapa-de-paso-en-una-linea", P0726(), async p => {
+  const m = await p.evaluate(() => { const de = id => document.querySelector(`#caja [data-etapa="${id}"]`); return { paso: de("packaging")?.hasAttribute("data-de-paso"), texto: de("packaging")?.innerText.replace(/\s+/g, " "), diseno: de("design")?.hasAttribute("data-de-paso") }; });
+  ok("tie-145-la-etapa-de-paso-en-una-linea", m.paso === true && m.diseno === false && !/Entró/.test(m.texto || "x Entró"), JSON.stringify(m));
+});
+// «<1m» no pesa como «31h»
+await caso("tie-146-lo-minimo-no-pesa-como-lo-grande", conEventos("P-0788", { stage: "design" }, [["2026-11-02 09:30:10", "ready", "produccion", "📝 → ✅ Lista"], ["2026-11-02 09:30:20", "design", "produccion", "✅ → 🎨 Diseño"]]), async p => {
+  const m = await p.evaluate(() => { const c = id => { const e = document.querySelector(`#caja [data-etapa="${id}"] [data-cifra]`); if (!e) return null; const u = e.lastElementChild || e; return { t: e.innerText.trim(), peso: getComputedStyle(u).fontWeight, primero: getComputedStyle(e.firstElementChild || e).fontWeight, color: getComputedStyle(u).color }; }; return { ready: c("ready"), design: c("design") }; });
+  ok("tie-146-lo-minimo-no-pesa-como-lo-grande", m.ready?.t === "<1m" && Number(m.ready.peso) <= 400 && Number(m.design?.primero) >= 600 && /\d+h \d\dm/.test(m.design?.t || ""), JSON.stringify(m));
+});
+await caso("tie-147-un-solo-renglon-de-aviso", P0726(), async p => {
+  const n = await p.evaluate(() => document.querySelector("#caja [data-nota]")?.innerText.trim() ?? null), g = await texto(p);
+  ok("tie-147-un-solo-renglon-de-aviso", n === "Sólo cuenta el horario de trabajo: lunes a viernes, de 9 a 2 y de 3 a 7, sin festivos ni pausas." && !/No cuentan la comida/.test(g), `«${n}»`);
+});
+await caso("tie-148-validar-dice-desde-cuando-y-falta-no-es-amarillo", SINVALIDAR(), async p => {
+  const t = await etapa(p, "draft"), m = await p.evaluate(() => { const f = document.querySelector("#caja [data-falta]"), n = document.querySelector("#caja [data-nombre-etapa]"); return f && getComputedStyle(f).color === getComputedStyle(n).color; });
+  ok("tie-148-validar-dice-desde-cuando-y-falta-no-es-amarillo", /cada quien cuenta desde aquí/.test(t) && m === true, `tinta: ${m}; «${t.slice(0, 160)}»`);
+});
+// cada etapa armaba sus columnas: las fechas empezaban en un x distinto
+await caso("tie-149-las-columnas-se-alinean-entre-etapas", P0609(), async p => {
+  const xs = await p.evaluate(() => [...new Set([...document.querySelectorAll("#caja [data-fila-meta]")].map(x => Math.round(x.getBoundingClientRect().left)))]);
+  ok("tie-149-las-columnas-se-alinean-entre-etapas", xs.length === 1, xs.join(",") || "sin filas");
+});
+// hasta 7 datos seguidos en el resumen: tres y «otros» (abierto está todo)
+await caso("tie-150-el-resumen-no-pasa-de-cuatro", P0609(), async p => {
+  const n = await p.evaluate(() => document.querySelectorAll("#caja [data-rubro]").length), r = await resumenDe(p);
+  ok("tie-150-el-resumen-no-pasa-de-cuatro", n === 3 && /· otros \S+/.test(r || ""), `${n} rubros: «${r}»`);
+}, { abrir: false });
+await caso("tie-151-la-terminada-tambien-da-veredicto", P0563(), async p => {
+  const v = await veredicto(p);
+  ok("tie-151-la-terminada-tambien-da-veredicto", /^Tardó \S+( \S+)? hábiles · /.test(v || ""), `«${v}»`);
+}, { abrir: false });
+await caso("tie-152-pausada-y-pasada-abre-con-la-pausa-y-marca-el-rubro", PAUSADA_PASADA(), async p => {
+  const v = await veredicto(p), m = await rubrosMarcados(p);
+  ok("tie-152-pausada-y-pasada-abre-con-la-pausa-y-marca-el-rubro", v === "En espera desde vie 23-oct: el cliente no ha pedido factura" && m.some(x => /^Karla /.test(x)), `«${v}» · ${m.join(" | ")}`);
+}, { abrir: false });
+// tres se pasaron: Noemí 12.5 h de 5 (2.5 veces), Diseño 41 h de 29 y CTP 15 h de 8: dice la peor y cuántas más
+await caso("tie-153-dice-la-peor-y-cuantas-mas", orden("P-0789", { stage: "ctp", created_at: H("2026-10-26 09:30:00") }, [["2026-10-26 09:30:00", "draft", "secretaria", "📋 Orden creada"], ["2026-10-26 10:30:00", null, "produccion", "✅ Validada por Producción"], ["2026-10-27 13:00:00", null, "preprensa", "✅ Validada por Pre-prensa"], ["2026-10-27 13:00:00", "design", "preprensa", "📝 → 🎨 Ambos validaron → Diseño"], ["2026-11-03 09:00:00", "ctp", "preprensa", "🎨 Diseño → 💿 CTP"]]), async p => {
+  const v = await veredicto(p);
+  ok("tie-153-dice-la-peor-y-cuantas-mas", /· Noemí 13h en Validar, lo normal 5h · y 2 más$/.test(v || ""), `«${v}»`);
+}, { abrir: false });
+
+// la vuelta 2 de la 180: de noche; lo que no cabe; lo mínimo; en pausa con el de fuera; todo pasado de lo normal; y que lo marcado se lea
+await caso("tie-154-de-golpe-se-mide-en-el-reloj", ctpCon("P-0794", "19:30:00", "20:30:00", "21:30:00"), async p => {
+  const t = await etapa(p, "ctp");
+  ok("tie-154-de-golpe-se-mide-en-el-reloj", /En fila/.test(t) && !/marcadas juntas/.test(t), `«${t}»`);
+});
+await caso("tie-155-el-motivo-sin-cortes-no-se-sale-del-boton", orden("P-0795", { stage: "salidas", created_at: H("2026-11-02 09:00:00"), snooze_reason: "x", snooze_stage: "salidas", snoozed_by: "karla" }, [["2026-11-02 09:00:00", "draft", "secretaria", "📋 Orden creada"], ["2026-11-02 10:00:00", "salidas", "produccion", "📦 Empaque → 📤 Salidas"], ["2026-11-02 11:00:00", null, "karla", "🧾 En espera: IMG_20250914_183022_HDR_portrait_edited_edited.HEIC"]]), async p => {
+  const m = await seSale(p), v = await veredicto(p);
+  ok("tie-155-el-motivo-sin-cortes-no-se-sale-del-boton", m.length === 0 && /IMG_2025/.test(v || ""), m.slice(0, 3).join(" · ") || `«${v}»`);
+}, { ancho: 300, abrir: false });
+await caso("tie-156-menos-de-un-minuto-no-es-habil", orden("P-0796", { stage: "draft", created_at: H("2026-11-04 15:59:50") }, [["2026-11-04 15:59:50", "draft", "secretaria", "📋 Orden creada"]]), async p => {
+  const v = await veredicto(p);
+  ok("tie-156-menos-de-un-minuto-no-es-habil", v === "Lleva <1m · nada fuera de lo normal", `«${v}»`);
+}, { abrir: false });
+await caso("tie-157-en-pausa-con-el-de-fuera-manda-la-pausa", conEventos("P-0797", { stage: "maq_in_progress", order_type: "maquila", maq_provider: "MAKILA", snooze_reason: "Esperando autorización", snooze_stage: "maq_in_progress", snoozed_by: "secretaria" }, [["2026-11-02 10:00:00", "maq_in_progress", "secretaria", "🚚 Enviada a Maquila → ⚙️ Proceso en Maquila"], ["2026-11-03 11:00:00", null, "secretaria", "🔕 En espera: Esperando autorización"]]), async p => {
+  const v = await veredicto(p), r = await resumenDe(p);
+  ok("tie-157-en-pausa-con-el-de-fuera-manda-la-pausa", v === "En espera desde mar 03-nov: Esperando autorización" && /^Lleva \S+( \S+)? hábiles, sin la pausa · Con MAKILA /.test(r || ""), `«${v}» · «${r}»`);
+}, { abrir: false });
+// todo se pasó: Validar 14 h, CTP 27, Lista 27, Máquina 72 y Salidas 60: lo que se pasó no se esconde en «otros», aunque sean más de cuatro
+const TODO_PASADO = () => orden("P-0799", { stage: "salidas", created_at: H("2026-10-05 09:00:00") }, [["2026-10-05 09:00:00", "draft", "secretaria", "📋 Orden creada"], ["2026-10-05 10:00:00", null, "produccion", "✅ Validada por Producción"], ["2026-10-06 15:00:00", null, "preprensa", "✅ Validada por Pre-prensa"], ["2026-10-06 15:00:00", "ctp", "preprensa", "📝 → 💿 CTP"], ["2026-10-09 15:00:00", "ready", "german", "💿 → ✅ Lista"], ["2026-10-14 15:00:00", "in_production", "produccion", "🏭 Printmaster 52"], ["2026-10-26 15:00:00", "salidas", "produccion", "📦 Empaque → 📤 Salidas"]]);
+await caso("tie-158-lo-que-se-paso-no-se-esconde-en-otros", TODO_PASADO(), async p => {
+  const r = await resumenDe(p), m = await rubrosMarcados(p), v = await veredicto(p);
+  ok("tie-158-lo-que-se-paso-no-se-esconde-en-otros", m.length === 4 && !/otros/.test(r || "") && /· y 4 más$/.test(v || ""), `${m.length} marcados: «${r}» · «${v}»`);
+}, { abrir: false });
+// lo marcado se lee, con el fondo de verdad: la tinta contra el gris del botón, y la pastilla translúcida mezclada con lo de abajo
+const SOBRE = () => conEventos("P-0798", { stage: "design" }, [["2026-11-02 10:30:00", null, "produccion", "✅ Validada por Producción"], ["2026-11-02 16:30:00", null, "preprensa", "✅ Validada por Pre-prensa"], ["2026-11-02 16:30:00", "design", "preprensa", "📝 → 🎨 Ambos validaron → Diseño"]]);
+const contrasteDe = (p, sel) => p.evaluate(sel => { const rgb = c => { const m = /rgba?\(([^)]+)\)/.exec(c); if (!m) return null; const v = m[1].split(/[ ,/]+/).map(Number); return { r: v[0], g: v[1], b: v[2], a: v[3] ?? 1 }; };
+  const sobre = (f, a) => ({ r: f.r * f.a + a.r * (1 - f.a), g: f.g * f.a + a.g * (1 - f.a), b: f.b * f.a + a.b * (1 - f.a), a: 1 });
+  const fondo = e => { const capas = []; for (let x = e; x; x = x.parentElement) { const c = rgb(getComputedStyle(x).backgroundColor); if (c && c.a > 0) { capas.push(c); if (c.a === 1) break; } } let f = { r: 255, g: 255, b: 255, a: 1 }; for (const c of capas.reverse()) f = sobre(c, f); return f; };
+  const L = c => { const l = x => { x /= 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; }; return 0.2126 * l(c.r) + 0.7152 * l(c.g) + 0.0722 * l(c.b); };
+  const e = document.querySelector(sel); if (!e) return null; const a = L(rgb(getComputedStyle(e).color)), b = L(fondo(e)); return Math.round((Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) * 100) / 100; }, sel);
+for (const [n, armar] of [["ambar", SOBRE], ["rojo", SE_PASO_ATRAS]]) await caso("tie-159-lo-marcado-se-lee-" + n, armar(), async p => {
+  const v = await contrasteDe(p, "#caja [data-veredicto] [data-nivel]"), f = await contrasteDe(p, '#caja [data-fila-meta] span');
+  ok("tie-159-lo-marcado-se-lee-" + n, v >= 4.5 && f >= 4.5, `veredicto ${v}, lo normal en su fila ${f}`);
+});
+for (const [n, armar, sel] of [["ambar", PAUSADA_PASADA, '#caja [data-rubro][data-nivel="sobre"]'], ["rojo", TODO_PASADO, '#caja [data-rubro][data-nivel="doble"]']]) await caso("tie-161-el-rubro-marcado-se-lee-" + n, armar(), async p => {
+  const r = await contrasteDe(p, sel);
+  ok("tie-161-el-rubro-marcado-se-lee-" + n, r >= 4.5, `rubro ${r}`);
+}, { abrir: false });
+await caso("tie-160-la-pastilla-es-de-la-etapa-entera", orden("P-0800", { stage: "salidas", created_at: H("2026-10-19 09:30:00") }, [["2026-10-19 09:30:00", "draft", "secretaria", "📋 Orden creada"], ["2026-10-19 10:00:00", "salidas", "produccion", "📦 Empaque → 📤 Salidas"]]), async p => {
+  const m = await p.evaluate(() => { const v = document.querySelector('#caja [data-etapa="salidas"] [data-nivel]'); const c = v && getComputedStyle(v).backgroundColor; return { fondo: !!c && c !== "rgba(0, 0, 0, 0)" && c !== "transparent", icono: !!v?.querySelector("svg"), oculto: v?.querySelector("svg")?.getAttribute("aria-hidden") }; }), c = await contrasteDe(p, '#caja [data-etapa="salidas"] [data-nivel]');
+  ok("tie-160-la-pastilla-es-de-la-etapa-entera", m.fondo && m.icono && m.oculto === "true" && c >= 4.5, `${JSON.stringify(m)} contraste ${c}`);
 });
 
 // ════════════════════════ Vuelta 2: por donde no se diseñó ════════════════════════
@@ -826,7 +1001,7 @@ await caso("tie-43-con-el-teclado", P0726(), async p => {
   const a1 = await b.getAttribute("aria-expanded"), t1 = await texto(p);
   await p.keyboard.press("Space"); await p.waitForTimeout(120);
   const a2 = await b.getAttribute("aria-expanded"), t2 = await texto(p);
-  ok("tie-43-con-el-teclado", a0 === "false" && a1 === "true" && a2 === "false" && /Los tiempos sólo cuentan/.test(t1) && !/Los tiempos sólo cuentan/.test(t2), `aria-expanded: ${a0} → ${a1} → ${a2}`);
+  ok("tie-43-con-el-teclado", a0 === "false" && a1 === "true" && a2 === "false" && /Sólo cuenta el horario/.test(t1) && !/Sólo cuenta el horario/.test(t2), `aria-expanded: ${a0} → ${a1} → ${a2}`);
 }, { abrir: false });
 await caso("tie-44-a-futuro-no-da-negativo", conEventos("P-0755", { stage: "design", created_at: H("2026-11-20 09:30:00") }, [
   ["2026-11-20 10:00:00", "design", "preprensa", "📝 → 🎨 Ambos validaron → Diseño"],
