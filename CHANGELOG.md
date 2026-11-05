@@ -12,6 +12,20 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.182 — «Tiempo por etapa»: lo último de su cuarta crítica (26/40), y ahí paran las pasadas — 5-nov-2026
+
+**Qué pasaba.** El tercer revisor con capturas de producción, ya sobre la 181, dio 26/40 otra vez: el rojo todavía afirma más de lo que la bitácora sabe, y un mismo hecho sale con varias cifras. Medido: de 17 etapas con pausa del cliente que no es de factura, 5 seguían marcadas (P-0716, Noemí, «El cliente enviará corrección»). Era el tope que Marcelo aprobó (3 pasadas): ésta no lleva otro revisor, así que **su nota no está medida**.
+
+**Qué se cambió** (la pantalla; la base no).
+- 🔑 **El cliente, un solo trato**: toda pausa del cliente, en cualquier etapa, no acusa a nadie, y su rubro lo dice: «Salidas 21h (espera al cliente)».
+- 🔑 **Lo que ya pasó dice el hecho**: «Empaque tardó 72h, lo normal 24h», sin el nombre, que sale de una tabla fija. El nombre, sólo de quien la tiene ahora o de quien validó, que eso sí lo dice la bitácora. Primero quien la tiene ahora. El renglón marcado trae su prueba: cuándo salió y quién la pasó. «Máquina · la sigue Gerardo»: no le asigna el tiempo.
+- **Abrir ya no se lleva el botón**: en el detalle se queda pegado arriba con el veredicto, con lo que se pasó a la vista debajo. Abierto no hay rubros: la lista los desglosa.
+- **Un mismo hecho, una cifra**: «lleva 31h hábiles», «≈34 días hábiles», «le tocó mar 03-nov, 12:26 p.m.», «1h 06m» también cerrado, y el final con su calendario («22 días desde la captura»).
+- **La regla siempre a la vista**: «Lo normal: 9 de cada 10 órdenes tardan menos (180 días, medido el 4-nov)». 🔥 **Si «lo normal» debe ser ese tope o una meta de Marcelo, es decisión suya**: Validar tiene mediana 1.7 h y «lo normal» 5 h; P-0561, con Noemí en 4h 47m, dice que ninguna etapa se pasó.
+- Lo menor: «al último» sólo con 5 minutos o más de diferencia (51 de 742 no los tenían), unos minutos en fila no se dicen en el resumen, «Ver fechas» de 32 px, `aria-controls` sólo con destino.
+
+**Cómo se probó.** **Vuelta 1**, antes del arreglo, contra la 181: caían 17 de 18; la otra no forzaba el caso, se endureció y saboteada cae. **Vuelta 2**: una pausa «autorización del cliente», entregada el mismo día y al día siguiente; el paso único no decía «le tocó» (`tie-198`, se arregló). Lo que pasó a la primera se saboteó y cae por su causa. 18 pruebas viejas leían los rubros con el panel abierto, o decían textos que cambiaron a propósito.
+
 ## v10.84.181 — «Tiempo por etapa» ya no acusa con lo que no sabe: su tercera crítica independiente (26/40) — 5-nov-2026
 
 **Qué pasaba.** El revisor, con capturas de producción de la 180, dio 26/40: el panel señala a personas con datos que no lo sostienen, y sus cifras no cuadran entre sí. Medido en 868 órdenes de 180 días: 24 de las 70 Salidas o Recibidas con marca traían la pausa «el cliente no ha pedido factura» (13 órdenes marcadas sólo por eso); en 34% de los pasos con «esperó su turno» (201 de 587) el «le tocó» se marcó a menos de 5 minutos de acabar, y ahí estaba 44% de las horas de «fila»; en 52% de las órdenes (389 de 742) hay más de 1 h entre Noemí y Gerardo, y al cerrar no se veía.

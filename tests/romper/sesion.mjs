@@ -2480,7 +2480,7 @@ await caso("ses-163-tiempo-por-etapa-con-la-bitacora-de-la-base", async ({ p, s 
   const dlg = p.getByRole("dialog").first();
   await dlg.getByRole("button", { name: /Tiempo por etapa/ }).click(); await p.waitForTimeout(200);
   const t = (await dlg.innerText()).replace(/\s+/g, " ");
-  ok("ses-163-tiempo-por-etapa-con-la-bitacora-de-la-base", /Noemí.{0,60}validó/.test(t) && /Gerardo.{0,60}validó/.test(t) && /En fila/.test(t) && /Procesadora/.test(t) && /Máquina · Gerardo/.test(t) && /Printmaster 52/.test(t) && /Polar 115.{0,80}ahora/.test(t), `el detalle: «${(t.match(/Tiempo por etapa.{0,420}/) || [t.slice(0, 200)])[0]}»`);
+  ok("ses-163-tiempo-por-etapa-con-la-bitacora-de-la-base", /Noemí.{0,60}validó/.test(t) && /Gerardo.{0,60}validó/.test(t) && /En fila/.test(t) && /Procesadora/.test(t) && /Máquina · la sigue Gerardo/.test(t) && /Printmaster 52/.test(t) && /Polar 115.{0,80}ahora/.test(t), `el detalle: «${(t.match(/Tiempo por etapa.{0,420}/) || [t.slice(0, 200)])[0]}»`);
 });
 
 // el mismo panel en la ficha abierta («Historial y notas»), que es más angosta: se lee y nada se sale, en las dos pantallas de Marcelo, y tocarlo no abre el detalle
@@ -2740,6 +2740,28 @@ await caso("ses-184-ver-fechas-se-recuerda-entre-ordenes", async ({ p, s }) => {
   dlg = p.getByRole("dialog").first(); await esperaPanel(dlg); await p.waitForTimeout(200);
   const hay = await dlg.getByRole("button", { name: "Ocultar fechas" }).count(), t = await leerTexto(dlg);
   ok("ses-184-ver-fechas-se-recuerda-entre-ordenes", hay === 1 && /P-0979/.test(t) && /Entró/.test(t), `«Ocultar fechas» ${hay}: «${t.slice(0, 160)}»`);
+});
+
+// v10.84.182 — abrir no se lleva el botón: se queda pegado arriba, con lo que se pasó debajo y a la vista
+await caso("ses-185-al-abrir-se-quedan-el-boton-y-la-prueba", async ({ p, s }) => {
+  const ev = (h, to_stage, by_user, action) => ({ order_id: "OP-P-0980", action, by_user, color: "#8e8e93", created_at: haceH(h), to_stage });
+  s.filas = { orders: [TERMINADA("P-0980")], order_timeline: [ev(400, "draft", "secretaria", "📋 Orden creada"), ev(399, null, "preprensa", "✅ Validada por Pre-prensa"), ev(399, null, "produccion", "✅ Validada por Producción"), ev(399, "design", "produccion", "📝 → 🎨 Ambos validaron → Diseño"),
+    ...[0, 1, 2].flatMap(k => [ev(398.9 - k, "draft", "preprensa", "↩️ Regresada de 🎨 Diseño → 📝 Validar · Razón: vuelta " + k), ev(398.7 - k, null, "preprensa", "✅ Validada por Pre-prensa"), ev(398.6 - k, null, "produccion", "✅ Validada por Producción"), ev(398.6 - k, "design", "produccion", "📝 → 🎨 Ambos validaron → Diseño")]),
+    ev(395.5, "ctp", "preprensa", "🎨 Diseño → 💿 CTP"), ev(395.4, "placas_listas", "german", "💿 CTP → 📋 Placas Listas"), ev(395.3, "ready", "produccion", "📋 → ✅ Lista"), ev(395.2, "in_production", "produccion", "🏭 Printmaster 52"), ev(395.1, "packaging", "produccion", "🏭 📦 Empaque"), ev(395, "salidas", "produccion", "📦 Empaque → 📤 Salidas"), ev(20, "delivered", "karla", "🎉 Entregada")] };
+  await aTodas(p, s);
+  await fichaDe(p, "P-0980").click();
+  const dlg = p.getByRole("dialog").first(); await esperaPanel(dlg);
+  await dlg.getByRole("button", { name: /Tiempo por etapa/ }).click(); await p.waitForTimeout(350);
+  const m = await dlg.evaluate(d => { const pinta = e => { if (!e) return false; const r = e.getBoundingClientRect(), h = document.elementFromPoint(r.left + 40, r.top + 8); return !!h && (e === h || e.contains(h)); }; const b = [...d.querySelectorAll("button")].find(x => /Tiempo por etapa/.test(x.textContent)); return { boton: pinta(b), peor: pinta(d.querySelector("[data-peor]")) }; });
+  ok("ses-185-al-abrir-se-quedan-el-boton-y-la-prueba", m.boton && m.peor, JSON.stringify(m));
+}, { viewport: { width: 1366, height: 768 } });
+// el encabezado también dice «hábiles»: para Producción es lo único visible al abrir
+await caso("ses-186-el-encabezado-dice-habiles", async ({ p, s }) => {
+  s.filas = enSalidas("P-0981");
+  await aTodas(p, s);
+  await fichaDe(p, "P-0981").click(); await p.waitForTimeout(700);
+  const t = await leerTexto(p.getByRole("dialog").first());
+  ok("ses-186-el-encabezado-dice-habiles", /lleva \S+( \S+)? hábiles en Salidas · lo normal 23h/.test(t), `«${(t.match(/lleva.{0,60}/) || [t.slice(0, 200)])[0]}»`);
 });
 
 await browser.close();
