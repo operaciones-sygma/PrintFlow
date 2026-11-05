@@ -26,6 +26,14 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 **Cómo se probó.** **Vuelta 1**, antes del arreglo, contra la 181: caían 17 de 18; la otra no forzaba el caso, se endureció y saboteada cae. **Vuelta 2**: una pausa «autorización del cliente», entregada el mismo día y al día siguiente; el paso único no decía «le tocó» (`tie-198`, se arregló). Lo que pasó a la primera se saboteó y cae por su causa. 18 pruebas viejas leían los rubros con el panel abierto, o decían textos que cambiaron a propósito.
 
+**En producción.** 5-nov ~05:04, READY `dpl_9PuxfkeRmTQPiwWR75jmRsPdM97q`, commit `8ad6e47`. Candado 3059 de 3059 (22 nuevas), de a 4, 1367 s, a la primera, sin regresiones ni inestables. Revisado en producción sin escribir: 8 paneles como Dirección, Producción y Karla; sin errores de la página y ninguna escritura cortada. P-0716 ya no acusa a Noemí («Validar 13h (espera al cliente)»), y P-0623 deja el veredicto pegado arriba con su prueba debajo.
+
+**Vuelta atrás.** `git revert --no-edit 8ad6e47` (se detiene en `CHANGELOG.md`: `git checkout --ours CHANGELOG.md && git add CHANGELOG.md && git revert --continue`) y subir (ensayada en un worktree: deja `src`, `scripts`, `tests` y `DESIGN.md` como 9b02d2b, el código de la 181), o promover `dpl_CEDxe3oLmxcahJCQTGEcRjcG7qjX` (el código de la 181). La base no cambió.
+
+**Sin probar.** En un teléfono de verdad y con un lector de pantalla de verdad. La nota de esta versión: el tope de pasadas se acabó antes, 22 → 20 → 26 → 26.
+
+**Para Marcelo** (decisiones suyas, sin tocar): ¿«lo normal» es el tope del 90% o una meta suya? (Validar: mediana 1.7 h, «lo normal» 5 h). ¿Rojo en lo que se entregó a tiempo? (de 344 entregadas con marca, 82 a tiempo, 144 tarde, 118 sin fecha). ¿Los sábados cuentan? (7 de 25, unos 11 movimientos contra ~80). ¿Festivos de ley, bien? ¿Todo el piso ve el rojo, o sólo Dirección? Funciones nuevas que salieron, sólo con su sí: una vista persona × etapa y «siguiente / anterior» en el detalle.
+
 ## v10.84.181 — «Tiempo por etapa» ya no acusa con lo que no sabe: su tercera crítica independiente (26/40) — 5-nov-2026
 
 **Qué pasaba.** El revisor, con capturas de producción de la 180, dio 26/40: el panel señala a personas con datos que no lo sostienen, y sus cifras no cuadran entre sí. Medido en 868 órdenes de 180 días: 24 de las 70 Salidas o Recibidas con marca traían la pausa «el cliente no ha pedido factura» (13 órdenes marcadas sólo por eso); en 34% de los pasos con «esperó su turno» (201 de 587) el «le tocó» se marcó a menos de 5 minutos de acabar, y ahí estaba 44% de las horas de «fila»; en 52% de las órdenes (389 de 742) hay más de 1 h entre Noemí y Gerardo, y al cerrar no se veía.
