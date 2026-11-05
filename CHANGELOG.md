@@ -28,6 +28,12 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 **Cómo se probó.** **Vuelta 1**, antes del arreglo, contra la 180, con las horas a mano: caían 24 de 25; la otra es un guardia, y saboteada cae. Dos supuestos míos, corregidos: en P-0726 Placas Listas sí se pasó (2h 33m contra 2h), y el caso de un solo rubro traía otro. **Vuelta 2**, por donde no se diseñó: Validar dos veces, marcar la máquina enseguida de entrar, la recibida que espera al cliente, una razón sin cortes a 300 px, dos regresos, «Ver fechas» entre órdenes; lo que pasó a la primera se saboteó y cae por su causa. 16 pruebas viejas cambiaron de texto a propósito.
 
+**En producción.** 5-nov ~03:46, READY `dpl_87p254XTKmVB8pv8Qsh37xpgEgY9`, commit `0dda4b5`. Candado 3039 de 3039 (32 nuevas), de a 4, 1373 s, a la primera, sin regresiones ni inestables. Revisado en producción sin escribir: 24 paneles como Dirección (1366, 1920 y 390), Producción, Pre-prensa y Karla, y la venta de inventario y la histórica en su renglón; sin errores de la página y ninguna escritura cortada. P-0431 ya no acusa a Karla; P-0561 dice «Validar (Noemí 4h 47m, Gerardo 2m)» sin abrir.
+
+**Vuelta atrás.** `git revert --no-edit 0dda4b5` (se detiene en `CHANGELOG.md`: `git checkout --ours CHANGELOG.md && git add CHANGELOG.md && git revert --continue`) y subir (ensayada en un worktree: deja `src`, `scripts`, `tests` y `DESIGN.md` como 965823f, el código de la 180), o promover `dpl_DZdcLd2T1H6QYJZT33cFkkKonMHB` (el código de la 180). La base no cambió.
+
+**Sin probar.** En un teléfono de verdad y con un lector de pantalla de verdad. Los sábados y los festivos siguen esperando la respuesta de Marcelo.
+
 ## v10.84.180 — «Tiempo por etapa» dice qué se pasó y contra qué: su segunda crítica independiente (20/40) — 5-nov-2026
 
 **Qué pasaba.** Marcelo: «sigamos haciendo pases de impeccable hasta dejarla lo más alta posible». El revisor, con capturas de producción de la 178, dio 20/40: contesta lo más grande, no quién detiene la orden. Medido en 868 órdenes de 180 días: en 71% de las órdenes las negritas caían en una etapa que no se pasó; de 12 activas con marca, en 9 la marca estaba en una etapa anterior y cerrado el panel no la decía; 88% de los CTP con pasos (272 de 308) se marcan de golpe; 19% de las etapas (929 de 4,857) duran menos de 5 minutos; 3 de las 9 pausadas activas salían con alarma.
