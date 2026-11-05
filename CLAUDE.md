@@ -130,7 +130,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2929 pruebas, ~23 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2958 pruebas, ~23 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Las tandas con banco van de a 7 a la vez (`PROBAR_PARALELO`; con 11 juntas,
@@ -161,7 +161,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
     «25-40» fueron 187.
 25. Los skills de diseño (`impeccable` y los de Taste) corren con el sí de Marcelo: Claude los propone con su costo. Entran
     solos los técnicos (`mobile-native`, `animation-performance`, `diagnosing-bugs`, `flujo-sygma`…). La UI es de otra sesión.
-    Las pasadas de impeccable siguen paradas desde el 19-oct ~09:22 hasta que Marcelo las pida.
+    Las pasadas de impeccable siguen paradas desde el 19-oct ~09:22 hasta que Marcelo las pida (el 4-nov las pidió sólo para «Tiempo por etapa»: «hasta dejarla lo más alta posible»).
 
 ---
 
@@ -219,12 +219,13 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.177 (4-nov, ~19:17, READY `dpl_DLMDk7BB5A4ozG7Dv95AVELiC4FL`, commit `4148a53`; vuelta atrás: `git revert --no-edit 4148a53` y subir (ensayada en un worktree: deja todo como 59a1975, el código de la 176), o promover
+- **LIVE:** v10.84.178 (4-nov, ~22:15, READY `dpl_5Yr87N12GBxKygSSeTWAmoxbFneA`, commit `39c1d45`; vuelta atrás: `git revert --no-edit 39c1d45` y subir, o promover `dpl_BRftuhkLhn5n341tUKzyF55bSRtA` (el código de la 177); la base no cambió; candado 2958 de 2958 (29 nuevas), de a 4, 1370 s, a la primera y sin inestables; revisado en producción sin escribir: 13 paneles). 🔑 **«Tiempo por etapa», lo que su crítica ya había dicho**: una orden sana casi monocroma (rojo y ámbar sólo para tiempo; regresar lleva su ícono y su palabra), todo en horas (`duracion`), los festivos de ley no cuentan (`esFestivo`), el resumen dentro del botón, una región con su teclado. 🔥 Desde «Todas» o la búsqueda, una orden terminada abre sin su bitácora ni sus notas: lo arregla la 179.
+  v10.84.177 (4-nov, ~19:17, READY `dpl_DLMDk7BB5A4ozG7Dv95AVELiC4FL`, commit `4148a53`; vuelta atrás: `git revert --no-edit 4148a53` y subir (ensayada en un worktree: deja todo como 59a1975, el código de la 176), o promover
   `dpl_573TB8EtHMC5TBa7HTgcPng1w9MP` (el código de la 176); la base no cambió; candado 2929 de 2929 (34 nuevas), de a 4, 1376 s, a la primera y sin inestables; revisado en producción sin escribir: el panel y el encabezado con 6 órdenes vivas). 🔑 **«Tiempo por etapa» contesta quién la detuvo** (su crítica independiente, 22/40, snapshot
-  `.impeccable/critique/2026-11-05T00-00-17Z__src-app-jsx-stageflowhistory.md`; decisiones de Marcelo): un resumen que se ve sin abrir; lo de fuera no se le cuenta a nadie (`ESPERA_DE_FUERA`); lo lento contra lo normal de cada etapa (`LO_NORMAL`, números medidos el 4-nov: si la planta cambia, se vuelven a medir); la pausa con su renglón; a Dirección el panel arriba y abierto se recuerda (`TIEMPOS_ABIERTO`). Sin decimales. El P2 del color y lo menor, en el CHANGELOG.
+  `.impeccable/critique/2026-11-05T00-00-17Z__src-app-jsx-stageflowhistory.md`; decisiones de Marcelo): un resumen que se ve sin abrir; lo de fuera no se le cuenta a nadie (`ESPERA_DE_FUERA`); lo lento contra lo normal de cada etapa (`LO_NORMAL`, números medidos el 4-nov: si la planta cambia, se vuelven a medir); la pausa con su renglón; a Dirección el panel arriba y abierto se recuerda (`TIEMPOS_ABIERTO`). Sin decimales. El P2 del color y lo menor, hechos en la 178.
   v10.84.176 (4-nov, ~16:54, READY `dpl_2XmLaLtyRTNVJjKQAdh3YZeSqQib`, commit `e9fe843`; vuelta atrás: `git revert --no-edit e9fe843` y subir (ensayada en un worktree: deja todo como e5eb151, el código de la 175), o promover
   `dpl_At55dWMHayc8SJ3XsK6kgXfJo6i2` (el código de la 175); la base no cambió; candado 2895 de 2895 (7 nuevas), de a 4, 1366 s, a la primera y sin inestables; revisado en producción sin escribir: el panel con 3 órdenes vivas). 🔑 **«Tiempo por etapa» sólo cuenta el horario de trabajo** (Marcelo, 4-nov: «de 9 a 2, 1 hora de
-  descanso y de 3 a 7»; `JORNADA_TRAMOS`) y lo dice arriba de los tiempos, con el horario sacado de los tramos (`HORARIO_EN_PALABRAS`). Los festivos cuentan como día normal: la app no tiene calendario. Al abrirlo se ve, y las maquilas no enseñan validaciones.
+  descanso y de 3 a 7»; `JORNADA_TRAMOS`) y lo dice arriba de los tiempos, con el horario sacado de los tramos (`HORARIO_EN_PALABRAS`). Los festivos contaban como día normal (desde la 178, los de ley no cuentan). Al abrirlo se ve, y las maquilas no enseñan validaciones.
   v10.84.175 (4-nov, ~15:18, READY `dpl_F8suowzZRQunY3k5WsKLkzS9bYHd`, commit `66d726d`; vuelta atrás: `git revert --no-edit 66d726d` y subir (ensayada en un worktree: deja todo como 999b973, el código de la 174), o promover
   `dpl_JBHLcBRmy9ETCNwKCeWKmEjPwofJ` (el código de la 174); la base no cambió; candado 2888 de 2888 (68 nuevas), de a 4, 1379 s, sin regresiones, con una inestable de la red (tab-40, revisada); revisado en producción sin escribir: recorrido de 8 roles, nada truena, y el panel con 5 órdenes vivas). 🔑 **«Tiempo por etapa» dice
   quién tardó** (Marcelo, 4-nov: «no sé quién tardó, Gerardo o Noemí» y «diseño o CTP aparece varias veces»): la cuenta en `src/lib/tiempoPorEtapa.js`, en **horas de jornada** (`JORNADA_TRAMOS`; sólo este panel: «estancada» y lo demás siguen con 24 h de lunes a viernes); Noemí y Gerardo en Validar, cada etapa con

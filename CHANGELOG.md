@@ -28,6 +28,14 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 **Cómo se probó.** **Vuelta 1**, antes del arreglo, con las cuentas a mano: caían 34 de 110 en `tiempos`. **Vuelta 2** (10 casos, ninguna falla de la app): Tab entra y sale del panel, el teclado en la ficha abierta no abre el detalle y el foco se ve (ses-166, con la app real, que es la que trae el CSS global), una etapa que no conoce, regresar dos veces, lo de fuera con pausa, dos pausas, pausada y arriba de lo normal, mil horas, y nombres raros con un motivo sin cortes a 300 px. **Como pasaron a la primera, se sabotearon**: sin lo que vigila, cada una cae por su causa. Al prepararlo se vio que dos no detectaban nada (tie-124 no veía «en espera <1m» y tie-126 no traía nada sin cortes, y se corrigieron), y que quitarle el respaldo a `nombreEtapa` no rompía tie-116, porque la cuenta ya cae al id: lo que la protege es `st?.c`.
 
+**En producción.** 4-nov ~22:15, READY `dpl_5Yr87N12GBxKygSSeTWAmoxbFneA`, commit `39c1d45`. Candado 2958 de 2958 (29 nuevas), de a 4, 1370 s, a la primera, sin regresiones ni inestables. Revisado en producción sin escribir: 13 paneles de órdenes vivas, como Dirección (1366, 1920 y 390), Producción, Pre-prensa y Karla; sin errores de la página y ninguna escritura cortada.
+
+**Lo que destapó esa revisión** (no es de esta versión): desde «Todas» o la búsqueda, una orden entregada o cancelada abre sin su bitácora, sus notas ni su merma hasta que alguien aprieta «Cargar Archivo Completo»; el panel «Tardó…» no sale. Son 1,092 de las 1,127 órdenes. Va en v10.84.179.
+
+**Vuelta atrás.** `git revert --no-edit 39c1d45` y subir, o promover `dpl_BRftuhkLhn5n341tUKzyF55bSRtA` (el código de la 177). La base no cambió.
+
+**Sin probar.** En un teléfono de verdad y con un lector de pantalla de verdad. Los festivos se dedujeron de un solo día (16-sep); los cierres de Semana Santa o de diciembre no se conocen.
+
 ## v10.84.177 — «Tiempo por etapa» contesta quién la detuvo: su crítica independiente (22/40) — 4-nov-2026
 
 **Qué pasaba.** Marcelo pidió la crítica (`/impeccable`); un revisor independiente dio **22/40**, cuatro P1 y un P2 (snapshot `.impeccable/critique/2026-11-05T00-00-17Z__src-app-jsx-stageflowhistory.md`): contestaba quién tardó en Validar y por qué se repite una etapa, pero no quién detuvo la orden, y a veces señalaba a quien no fue. Medido en
