@@ -80,6 +80,9 @@ const partes = [
   // el tiempo por etapa, el historial de cambios y los pantones REALES (v10.84.49): la base que leen y escriben va simulada abajo
   // v10.84.175 — la cuenta se fue a src/lib/tiempoPorEtapa.js (entra con importacionesDeLib); las de antes, sólo si el App.jsx las trae (la corrida doble)
   ...["bizMsBetween", "bizHoursBetween"].flatMap(n => opcional(L.some(l => l.startsWith("function " + n + "(")), () => line(new RegExp("^function " + n + "\\("), n))), line(/^function bizDaysBefore\(/, "bizDaysBefore"),
+  // v10.84.177 — la cuenta del panel y del encabezado, y lo que recuerda si va abierto (si el App.jsx los trae: la corrida doble)
+  ...opcional(L.some(l => l.startsWith("let TIEMPOS_ABIERTO")), () => line(/^let TIEMPOS_ABIERTO/, "TIEMPOS_ABIERTO")),
+  ...["tiemposDeLaOrden", "TiempoEnLaEtapa"].flatMap(n => opcional(L.some(l => l.startsWith("function " + n + "(")), () => fnBlock(n))),
   fnBlock("StageFlowHistory"), fnBlock("OrderChangeHistory"),
   ...["HexDelPantone"].flatMap(n => opcional(L.some(l => l.startsWith("function " + n + "(")), () => fnBlock(n))), fnBlock("PantoneChips"),
   fnBlock("PantoneInput"),   // el mismo campo del HEX en la forma de la orden (pantoneinput=1)
@@ -195,7 +198,15 @@ CASOS.tiempos = { ...BASE, production_number: "P-0609", stage: "delivered", deli
   ["2026-10-08T15:08:13Z", "ctp", "preprensa", "🎨 Diseño → 💿 CTP"], ["2026-10-08T15:57:57Z", "ctp", "german", "🏭 CTP"], ["2026-10-08T15:58:01Z", "ctp", "german", "🏭 Procesadora"], ["2026-10-08T15:58:03Z", "placas_listas", "german", "💿 CTP → 📋 Placas Listas"],
   ["2026-10-08T17:16:37Z", "ready", "produccion", "📋 Placas Listas → ✅ Lista para imprimir"], ["2026-10-08T17:16:50Z", "in_production", "produccion", "🏭 Printmaster 74 (turno 3)"], ["2026-10-09T00:46:00Z", "in_production", "produccion", "🏭 Cilíndrica (turno 2)"],
   ["2026-10-09T16:13:41Z", "in_production", "produccion", "🏭 Polar 115"], ["2026-10-09T19:57:48Z", "packaging", "produccion", "⚙️ Máquina → 📦 Empaque"], ["2026-10-09T22:16:22Z", "salidas", "produccion", "📦 Empaque → 📤 Salidas"],
+  ["2026-10-14T15:33:51Z", null, "karla", "🧾 En espera: el cliente no ha pedido factura"], ["2026-10-29T22:51:59Z", null, "karla", "🔔 Reactivada"],
   ["2026-10-29T22:52:03Z", null, "karla", "📄 Asignado folio F-240 (Factura) · ✅ Entregada · ⏳ Pendiente cobro"]].map(([date, to, by, action]) => ({ date, by, action, ...(to ? { to } : {}) })) };
+// v10.84.177 — viva en una máquina, y con el maquilador: el encabezado dice cuánto lleva
+const bitacora2 = filas => filas.map(([date, to, by, action]) => ({ date, by, action, ...(to ? { to } : {}) }));
+CASOS.tiemposviva = { ...BASE, production_number: "P-0705", stage: "in_production", created_at: "2026-10-28T18:05:26Z", image_url_2: null, current_machine: "off_pm74", machine_queue_position: 0, timeline: bitacora2([
+  ["2026-10-28T18:05:26Z", "draft", "vendedor", "📋 Orden creada"], ["2026-10-28T18:16:00Z", null, "preprensa", "✅ Validada por Pre-prensa"], ["2026-10-28T21:54:27Z", null, "produccion", "✅ Validada por Producción"],
+  ["2026-10-28T21:54:28Z", "design", "produccion", "📝 → 🎨 Ambos validaron → Diseño"], ["2026-10-30T01:25:34Z", "ready", "preprensa", "🎨 Diseño → ✅ Lista para imprimir"], ["2026-10-30T16:20:06Z", "in_production", "produccion", "🏭 Printmaster 74 (turno 3)"]]) };
+CASOS.tiemposmaquila = { ...BASE, production_number: "P-0702", stage: "maq_in_progress", order_type: "maquila", maq_provider: "MAKILA", created_at: "2026-10-28T00:20:44Z", image_url: null, image_url_2: null, timeline: bitacora2([
+  ["2026-10-28T00:20:45Z", "maq_created", "secretaria", "📋 Orden creada"], ["2026-10-28T00:20:56Z", "maq_sent", "secretaria", "📋 Creada (Maquila) → 🚚 Enviada a Maquila"], ["2026-10-28T00:20:57Z", "maq_in_progress", "secretaria", "🚚 Enviada a Maquila → ⚙️ Proceso en Maquila"]]) };
 const categoriaDe = t => CATS.categoriaSugerida(t) ?? (String(t || "").trim() && !CATS.esVentaDeInventario(t) ? "otro" : null);
 Object.values(CASOS).forEach(o => { if (!("categoria" in o)) o.categoria = categoriaDe(o.product_type); });
 // etapa=… cambia la etapa del caso (para barrer etapas y roles); cliente=… cambia el nombre del cliente

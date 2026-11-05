@@ -583,6 +583,50 @@ await caso("det-238-al-abrir-tiempo-por-etapa-se-ve", "caso=tiempos&rol=admin", 
     return { boton: seVe([...d.querySelectorAll("button")].find(x => /Tiempo por etapa/.test(x.textContent))), etapa: seVe(d.querySelector('[data-etapa="draft"]')), noemi: seVe(pinta(/^Noemí$/)), gerardo: seVe(pinta(/^Gerardo$/)) }; });
   ok("det-238-al-abrir-tiempo-por-etapa-se-ve", visto.boton && visto.etapa && visto.noemi && visto.gerardo, JSON.stringify(visto));
 });
+// v10.84.177 — P1 4 de su crítica: «hay que ir por él». El encabezado dice cuánto lleva; a Dirección, el panel va arriba y su resumen se ve sin bajar; abierto se recuerda entre órdenes
+const yDe = (p, re) => dlg(p).evaluate((d, src) => { const r = new RegExp(src, "i"); const e = [...d.querySelectorAll("*")].find(x => !x.children.length && r.test(x.textContent.trim())); return e ? Math.round(e.getBoundingClientRect().top) : null; }, re.source);
+await caso("det-239-el-encabezado-dice-cuanto-lleva", "caso=tiemposviva&rol=admin", async p => {
+  const t = await encabezado(p), d = (await textoDlg(p)).replace(/\s+/g, " ");
+  ok("det-239-el-encabezado-dice-cuanto-lleva", /Le toca a\s*Gerardo/.test(t) && /lleva /.test(t) && /lleva \S+( \S+)? en Máquina/.test(d), `«${String(t).slice(-200)}»`);
+});
+await caso("det-240-en-maquila-dice-con-quien", "caso=tiemposmaquila&rol=admin", async p => {
+  const t = await encabezado(p), d = (await textoDlg(p)).replace(/\s+/g, " ");
+  ok("det-240-en-maquila-dice-con-quien", /lleva /.test(t) && /lleva \S+( \S+)? con MAKILA/.test(d), `«${String(t).slice(-200)}»`);
+});
+await caso("det-241-terminada-no-dice-que-lleva", "caso=tiempos&rol=admin", async p => {
+  const t = await encabezado(p);
+  ok("det-241-terminada-no-dice-que-lleva", !/lleva /.test(t), `«${String(t).slice(-200)}»`);
+});
+await caso("det-242-a-quien-no-es-suya-no-se-le-dice", "caso=tiemposviva&rol=vendedor&login=otro", async p => {
+  const t = await textoDlg(p);
+  ok("det-242-a-quien-no-es-suya-no-se-le-dice", !/lleva |de trabajo/.test(t), `«${(t.match(/.{30}(lleva |de trabajo).{20}/) || ["no lo dice"])[0]}»`);
+});
+await caso("det-243-a-direccion-arriba-y-se-ve-sin-bajar", "caso=tiempos&rol=admin", async p => {
+  const yBoton = await dlg(p).getByRole("button", { name: /Tiempo por etapa/ }).evaluate(b => Math.round(b.getBoundingClientRect().top)), yProducto = await yDe(p, /^Producto$/);
+  const seVe = await dlg(p).evaluate(d => { const e = d.querySelector("[data-resumen]"); if (!e) return false; const r = e.getBoundingClientRect(), h = document.elementFromPoint(r.left + 20, r.top + 6); return !!h && (e === h || e.contains(h)); });
+  ok("det-243-a-direccion-arriba-y-se-ve-sin-bajar", yBoton < yProducto && seVe, `botón y=${yBoton}, «Producto» y=${yProducto}, el resumen se ve: ${seVe}`);
+});
+await caso("det-244-a-los-demas-se-queda-abajo", "caso=tiempos&rol=karla", async p => {
+  const yBoton = await dlg(p).getByRole("button", { name: /Tiempo por etapa/ }).evaluate(b => Math.round(b.getBoundingClientRect().top)), yProducto = await yDe(p, /^Producto$/);
+  ok("det-244-a-los-demas-se-queda-abajo", yBoton > yProducto, `botón y=${yBoton}, «Producto» y=${yProducto}`);
+});
+const reabrir = async p => { await dlg(p).getByRole("button", { name: /^Cerrar$/ }).first().click(); await espera(p, 300); await p.click("#abrir-detalle"); await espera(p, 500); };
+await caso("det-245-abierto-se-recuerda-entre-ordenes", "caso=tiempos&rol=admin", async p => {
+  await dlg(p).getByRole("button", { name: /Tiempo por etapa/ }).click(); await espera(p, 200);
+  await reabrir(p);
+  const t = await textoDlg(p), a = await dlg(p).getByRole("button", { name: /Tiempo por etapa/ }).getAttribute("aria-expanded");
+  await dlg(p).getByRole("button", { name: /Tiempo por etapa/ }).click(); await espera(p, 200);
+  await reabrir(p);
+  const a2 = await dlg(p).getByRole("button", { name: /Tiempo por etapa/ }).getAttribute("aria-expanded");
+  ok("det-245-abierto-se-recuerda-entre-ordenes", /Los tiempos sólo cuentan/.test(t) && a === "true" && a2 === "false", `abierto al volver: ${a}; cerrado al volver: ${a2}`);
+});
+// recordarlo no mueve la ventana: a quien lo tiene abajo no le salta el detalle al abrir otra orden
+await caso("det-246-recordado-no-desplaza-al-abrir", "caso=tiempos&rol=karla", async p => {
+  await dlg(p).getByRole("button", { name: /Tiempo por etapa/ }).click(); await espera(p, 200);
+  await reabrir(p);
+  const arriba = await dlg(p).evaluate(d => [...d.querySelectorAll("div")].filter(e => e.scrollHeight > e.clientHeight + 1 && /auto|scroll/.test(getComputedStyle(e).overflowY)).map(e => e.scrollTop)[0]);
+  ok("det-246-recordado-no-desplaza-al-abrir", arriba === 0, `el cuerpo quedó en ${arriba}`);
+});
 // «Más» es un menú: las flechas se mueven, y Tab lo cierra sin perder el foco
 await caso("det-92-flechas-en-mas", "caso=salidas&rol=admin", async p => {
   await abrirMas(p);

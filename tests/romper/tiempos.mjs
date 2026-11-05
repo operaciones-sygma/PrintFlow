@@ -169,22 +169,39 @@ async function caso(nombre, o, fn, { viewport = { width: 1366, height: 768 }, an
 }
 const texto = p => p.evaluate(() => document.getElementById("caja").innerText.replace(/\s+/g, " ").trim());
 const cuenta = (t, re) => (t.match(re) || []).length;
+// sólo los renglones de las etapas, sin el resumen de arriba («Máquina» también es un rubro del resumen)
+const etapas = p => p.evaluate(() => [...document.querySelectorAll("#caja [data-etapa]")].map(x => x.innerText).join(" ").replace(/\s+/g, " ").trim());
+const etapa = (p, id) => p.evaluate(s => { const e = document.querySelector(`#caja [data-etapa="${s}"]`); return e ? e.innerText.replace(/\s+/g, " ").trim() : ""; }, id);
+const niveles = (p, id) => p.evaluate(s => [...document.querySelectorAll(`#caja [data-etapa="${s}"] [data-nivel]`)].map(x => x.getAttribute("data-nivel") + "|" + (x.getAttribute("aria-label") || "")), id);
+const SIN_CORTES = "IMG_20250914_183022_HDR_portrait_edited_edited.HEIC";   // del catálogo de break-ui: sin dónde partirlo
+const conEventos = (pn, extra, filas) => orden(pn, { stage: "in_production", created_at: H("2026-11-02 09:30:00"), ...extra }, [["2026-11-02 09:30:00", "draft", "secretaria", "📋 Orden creada"], ...filas]);
+// nada se sale de la caja: ni la página se desliza, ni un texto ni un tiempo pasan de su borde, y cada tiempo se queda en su renglón sin taparse con su vecino
+const seSale = p => p.evaluate(() => {
+  const caja = document.getElementById("caja"), c = caja.getBoundingClientRect(), malos = [];
+  if (document.documentElement.scrollWidth > document.documentElement.clientWidth) malos.push("la página se desliza a lo ancho");
+  for (const el of caja.querySelectorAll("span,div")) {
+    if (![...el.childNodes].some(n => n.nodeType === 3 && n.textContent.trim())) continue;
+    const q = document.createRange(); q.selectNodeContents(el); const r = q.getBoundingClientRect();
+    if (r.right > c.right + 1 || r.left < c.left - 1) malos.push("«" + el.textContent.trim().slice(0, 40) + "»");
+  }
+  return malos;
+});
 
 // ════════════════════════ Validar: quién tardó, Noemí o Gerardo ════════════════════════
 await caso("tie-01-validar-dice-quien-tardo", P0726(), async p => {
   const t = await texto(p);
   // P-0726, lunes: se capturó a las 11:30:42; Noemí validó a las 12:47:29 (1 h 17 m) y Gerardo a las 13:49:15 (2 h 19 m): cada quien desde que entró a Validar
-  ok("tie-01-validar-dice-quien-tardo", /Noemí\D{0,12}1\.3h/.test(t) && /Gerardo\D{0,12}2\.3h/.test(t), `panel: «${t.slice(0, 200)}»`);
+  ok("tie-01-validar-dice-quien-tardo", /Noemí\D{0,12}1h 17m/.test(t) && /Gerardo\D{0,12}2h 19m/.test(t), `panel: «${t.slice(0, 200)}»`);
 });
 await caso("tie-02-la-noche-no-cuenta", P0721(), async p => {
   const t = await texto(p);
   // P-0721: capturada el jueves a las 18:40. Noemí validó a las 18:54 (14 m). Gerardo al día siguiente a las 15:08: de reloj son 20 h 28 m, de horario de trabajo 19 m + 5 h + 8.6 m = 5.5 h
-  ok("tie-02-la-noche-no-cuenta", /Noemí\D{0,12}14m/.test(t) && /Gerardo\D{0,12}5\.5h/.test(t) && !/\b2[01]h\b/.test(t), `panel: «${t.slice(0, 200)}»`);
+  ok("tie-02-la-noche-no-cuenta", /Noemí\D{0,12}14m/.test(t) && /Gerardo\D{0,12}5h 28m/.test(t) && !/\b2[01]h\b/.test(t), `panel: «${t.slice(0, 200)}»`);
 });
 await caso("tie-03-el-que-falta-se-dice", ENVALIDAR(), async p => {
   const t = await texto(p);
   // Noemí a los 15 m; Gerardo no ha validado y la orden lleva de 9:30 a 16:00 menos la comida: 5.5 h
-  ok("tie-03-el-que-falta-se-dice", /Noemí\D{0,12}15m/.test(t) && /Gerardo\D{0,12}5\.5h/.test(t) && /Gerardo[^·]{0,30}falta/i.test(t), `panel: «${t}»`);
+  ok("tie-03-el-que-falta-se-dice", /Noemí\D{0,12}15m/.test(t) && /Gerardo\D{0,12}5h 30m/.test(t) && /Gerardo[^·]{0,30}falta/i.test(t), `panel: «${t}»`);
 });
 await caso("tie-04-faltan-los-dos", SINVALIDAR(), async p => {
   const t = await texto(p);
@@ -205,7 +222,7 @@ await caso("tie-06-ctp-es-una-etapa-con-sus-pasos", P0726(), async p => {
 await caso("tie-07-maquina-dice-cual", P0527(), async p => {
   const t = await texto(p);
   // de lunes 16:07 a jueves 10:26 en la Printmaster 52: 2.9 + 9 + 9 + 1.4 = 22.3 h, 2 días 4 h; luego la Polar 115, 3.6 + 4 + 0.7 = 8.2 h. Una sola etapa «Máquina»: 30.6 h, 3 días 4 h
-  ok("tie-07-maquina-dice-cual", cuenta(t, /Máquina/g) === 1 && /Printmaster 52\D{0,12}2d 4h/.test(t) && /Polar 115\D{0,12}8\.2h/.test(t) && /3d 4h/.test(t), `«Máquina» sale ${cuenta(t, /Máquina/g)} veces; panel: «${t.slice(0, 420)}»`);
+  ok("tie-07-maquina-dice-cual", cuenta(await etapas(p), /Máquina/g) === 1 && /Printmaster 52\D{0,12}2d 4h/.test(t) && /Polar 115\D{0,12}8h 15m/.test(t) && /3d 4h/.test(t), `«Máquina» sale ${cuenta(await etapas(p), /Máquina/g)} veces; panel: «${t.slice(0, 420)}»`);
 });
 await caso("tie-08-la-doble-de-la-bitacora-no-se-repite", P0712(), async p => {
   const t = await texto(p);
@@ -281,20 +298,155 @@ await caso("tie-65-la-comida-no-cuenta-en-pantalla", orden("P-0758", { stage: "d
   ok("tie-65-la-comida-no-cuenta-en-pantalla", /Noemí\D{0,12}15m/.test(t), `panel: «${t.slice(0, 320)}»`);
 });
 
-// ════════════════════════ Vuelta 2: por donde no se diseñó ════════════════════════
-const SIN_CORTES = "IMG_20250914_183022_HDR_portrait_edited_edited.HEIC";   // del catálogo de break-ui: sin dónde partirlo
-const conEventos = (pn, extra, filas) => orden(pn, { stage: "in_production", created_at: H("2026-11-02 09:30:00"), ...extra }, [["2026-11-02 09:30:00", "draft", "secretaria", "📋 Orden creada"], ...filas]);
-// nada se sale de la caja: ni la página se desliza, ni un texto ni un tiempo pasan de su borde, y cada tiempo se queda en su renglón sin taparse con su vecino
-const seSale = p => p.evaluate(() => {
-  const caja = document.getElementById("caja"), c = caja.getBoundingClientRect(), malos = [];
-  if (document.documentElement.scrollWidth > document.documentElement.clientWidth) malos.push("la página se desliza a lo ancho");
-  for (const el of caja.querySelectorAll("span,div")) {
-    if (![...el.childNodes].some(n => n.nodeType === 3 && n.textContent.trim())) continue;
-    const q = document.createRange(); q.selectNodeContents(el); const r = q.getBoundingClientRect();
-    if (r.right > c.right + 1 || r.left < c.left - 1) malos.push("«" + el.textContent.trim().slice(0, 40) + "»");
-  }
-  return malos;
+// ════════════════════════ v10.84.177 — su crítica independiente (22/40) y las decisiones de Marcelo (4-nov) ════════════════════════
+// P1 2, «no contesta»: una línea que se ve sin abrir. P-0726 al miércoles 16:00: Validar 138.6 m (de Gerardo, el último) + Placas 151.3 + Lista 0.7 + Empaque 0.6 = 4 h 51 m de Gerardo; Diseño 250.8 m, 4 h 11 m de Noemí; CTP 54 m de
+//   Germán; Salidas 487.8 m, 8 h 8 m de Karla; total 18.06 h = 2 días. Karla pausó a las 11:34: de ahí a las 16:00, menos la comida, 3 h 26 m que no cuentan.
+await caso("tie-70-el-resumen-se-ve-sin-abrir", P0726(), async p => {
+  const t = await texto(p);
+  ok("tie-70-el-resumen-se-ve-sin-abrir", /Lleva 2d de trabajo · Karla 8h 8m · Gerardo 4h 51m · Noemí 4h 11m · Germán 54m · en espera 3h 26m, no cuenta/.test(t), `cerrado: «${t.slice(0, 240)}»`);
+}, { abrir: false });
+// P1 1, decisión de Marcelo: lo de fuera no se le cuenta a nadie. «Proceso en Maquila» 3d 2h (39 m + 27 h + 66 m = 28.8 h): con quien la tiene, quién la sigue, sin rojo, y en el resumen no es de Lupita
+await caso("tie-71-lo-de-fuera-no-se-le-cuenta-a-nadie", { ...P0702(), maq_provider: "MAKILA" }, async p => {
+  const t = await texto(p), n = await niveles(p, "maq_in_progress");
+  ok("tie-71-lo-de-fuera-no-se-le-cuenta-a-nadie", /Proceso en Maquila · con MAKILA · la sigue Lupita/.test(t) && n.length === 0 && /Tardó 3d 2h de trabajo · Con MAKILA 3d 2h/.test(t) && !/· Lupita \d/.test(t), `niveles ${JSON.stringify(n)}; «${t.slice(0, 300)}»`);
 });
+await caso("tie-72-sin-nombre-del-maquilador", P0702(), async p => {
+  const t = await texto(p);
+  ok("tie-72-sin-nombre-del-maquilador", /Proceso en Maquila · con el maquilador · la sigue Lupita/.test(t) && /Con el maquilador 3d 2h/.test(t), `«${t.slice(0, 300)}»`);
+});
+await caso("tie-73-la-aprobacion-espera-al-cliente", P0563(), async p => {
+  const t = await texto(p);
+  ok("tie-73-la-aprobacion-espera-al-cliente", /Aprobación · con el cliente · la sigue Noemí/.test(t) && !/Aprobación · Noemí/.test(t), `«${(t.match(/Aprobación.{0,80}/) || [t.slice(0, 200)])[0]}»`);
+});
+await caso("tie-87-la-maquila-parcial-tambien", conEventos("P-0759", {}, [
+  ["2026-11-02 10:00:00", "maquila_out", "produccion", "🚚 Enviada a Maquila (parcial)"],
+  ["2026-11-02 12:00:00", "in_production", "produccion", "🏭 Polar 78"],
+]), async p => {
+  const t = await etapa(p, "maquila_out");
+  ok("tie-87-la-maquila-parcial-tambien", /con el maquilador · la sigue Gerardo/.test(t), `«${t}»`);
+});
+// P1 3, la pausa deja rastro. P-0609: del 14-oct 09:33 al 29-oct 16:51 son 8.4 + 18 + 45 + 27 + 6.9 = 105.3 h de trabajo: 11d 6h, puestos por Karla con su motivo
+await caso("tie-74-la-pausa-deja-rastro", P0609(), async p => {
+  const t = await etapa(p, "salidas"), g = await texto(p);
+  ok("tie-74-la-pausa-deja-rastro", /En espera\D*11d 6h/.test(t) && /no cuenta/.test(t) && /la puso Karla/.test(t) && /el cliente no ha pedido factura/.test(t) && /2d 3h/.test(t) && /en espera 11d 6h, no cuenta/.test(g), `«${t}»`);
+});
+// mientras corre: el reloj parado no dice «en curso», y dice desde cuándo
+await caso("tie-75-la-pausa-que-sigue-dice-desde-cuando", P0726(), async p => {
+  const t = await etapa(p, "salidas");
+  ok("tie-75-la-pausa-que-sigue-dice-desde-cuando", /en espera · 8h 8m/.test(t) && !/en curso/.test(t) && /desde 04-nov/.test(t) && /la puso Karla/.test(t), `«${t}»`);
+});
+// entregada con la pausa abierta (sin «Reactivada»): la pausa termina al entregar, no sigue corriendo hasta hoy
+await caso("tie-84-la-pausa-se-cierra-al-entregar", conEventos("P-0760", { stage: "delivered", delivered_at: H("2026-11-02 12:00:00") }, [
+  ["2026-11-02 10:00:00", "salidas", "produccion", "📦 Empaque → 📤 Salidas"],
+  ["2026-11-02 11:00:00", null, "karla", "🧾 En espera: el cliente no ha pedido factura"],
+  ["2026-11-02 12:00:00", null, "karla", "✅ Entregada (folio F-1 ya asignado)"],
+]), async p => {
+  const t = await etapa(p, "salidas"), g = await texto(p);
+  ok("tie-84-la-pausa-se-cierra-al-entregar", /Salidas · Karla\D{0,6}1h/.test(t) && /En espera\D*1h/.test(t) && !/desde/.test(t) && /en espera 1h, no cuenta/.test(g), `«${t}»`);
+});
+await caso("tie-85-la-pausa-sin-motivo", conEventos("P-0761", { stage: "salidas" }, [
+  ["2026-11-02 10:00:00", "salidas", "produccion", "📦 Empaque → 📤 Salidas"],
+  ["2026-11-02 11:00:00", null, "karla", "↩️ En espera restaurada"],
+  ["2026-11-02 12:00:00", null, "karla", "🔔 Reactivada"],
+]), async p => {
+  const t = await etapa(p, "salidas");
+  ok("tie-85-la-pausa-sin-motivo", /En espera\D*1h/.test(t) && /la puso Karla/.test(t) && !/undefined|null|restaurada/.test(t), `«${t}»`);
+});
+// «Printmaster 74 · turno 3 · 2d 5h» no distinguía fila de impresión. La bitácora sólo sabe cuándo le tocó (36% de los pasos con turno no lo traen), así que se dice sólo eso, y sólo si se sabe.
+// P-0563: GTO 1 Color, turno 2, del 30-sep 10:42:10 al «⏯️» del 1-oct 09:14:10: 3 h 18 m + 4 h + 14 m = 7 h 32 m
+await caso("tie-76-esperar-turno-se-dice", P0563(), async p => {
+  const t = await etapa(p, "in_production");
+  ok("tie-76-esperar-turno-se-dice", /GTO 1 Color/.test(t) && /turno 2/.test(t) && /esperó su turno 7h 32m/.test(t), `«${t}»`);
+});
+await caso("tie-77-sin-saberlo-no-se-inventa", P0527(), async p => {
+  const t = await etapa(p, "in_production");
+  ok("tie-77-sin-saberlo-no-se-inventa", /Printmaster 52/.test(t) && !/esperó/.test(t), `«${t}»`);
+});
+// con varios pasos, cada máquina el suyo; y si se activó dos veces, cuenta la primera
+await caso("tie-86-esperar-turno-en-cada-paso", conEventos("P-0762", {}, [
+  ["2026-11-02 10:00:00", "in_production", "produccion", "🏭 Printmaster 74 (turno 3)"],
+  ["2026-11-02 12:00:00", null, "system", "⏯️ Auto-activada (cola promoción)"],
+  ["2026-11-02 13:00:00", null, "gerardo", "⏯️ Movida a ACTIVA"],
+  ["2026-11-03 10:00:00", "in_production", "produccion", "🏭 Manual #2"],
+]), async p => {
+  const t = await etapa(p, "in_production");
+  ok("tie-86-esperar-turno-en-cada-paso", /Printmaster 74[^]*esperó su turno 2h(?! \d)/.test(t) && cuenta(t, /esperó/g) === 1, `«${t}»`);
+});
+// decisión de Marcelo: lo lento, contra lo normal de cada etapa (p90 de 180 días): Validar 5 h, Máquina 56 h, Salidas 23 h; en rojo, el doble.
+// Validar de 9:00 a 16:00 del lunes son 6 h: ámbar, y en el renglón de Gerardo (10:00 de Noemí no)
+await caso("tie-78-validar-6h-ya-es-mucho", orden("P-0763", { stage: "design", created_at: H("2026-11-02 09:00:00") }, [
+  ["2026-11-02 09:00:00", "draft", "secretaria", "📋 Orden creada"],
+  ["2026-11-02 10:00:00", null, "preprensa", "✅ Validada por Pre-prensa"],
+  ["2026-11-02 16:00:00", null, "produccion", "✅ Validada por Producción"],
+  ["2026-11-02 16:00:00", "design", "produccion", "📝 → 🎨 Ambos validaron → Diseño"],
+]), async p => {
+  const n = await niveles(p, "draft"), t = await texto(p);
+  ok("tie-78-validar-6h-ya-es-mucho", n.length === 2 && n.every(x => /^sobre\|.*más de lo normal/.test(x)) && /En ámbar, lo que pasó de lo normal de su etapa; en rojo, el doble\./.test(t), `${JSON.stringify(n)}; «${t.slice(0, 300)}»`);
+});
+await caso("tie-79-validar-11h-es-el-doble", orden("P-0764", { stage: "design", created_at: H("2026-11-02 09:00:00") }, [
+  ["2026-11-02 09:00:00", "draft", "secretaria", "📋 Orden creada"],
+  ["2026-11-03 11:00:00", null, "produccion", "✅ Validada por Producción"],
+  ["2026-11-03 11:00:00", null, "preprensa", "✅ Validada por Pre-prensa"],
+  ["2026-11-03 11:00:00", "design", "produccion", "📝 → 🎨 Ambos validaron → Diseño"],
+]), async p => {
+  const n = await niveles(p, "draft");
+  ok("tie-79-validar-11h-es-el-doble", n.length === 3 && n.every(x => /^doble\|.*el doble de lo normal/.test(x)), JSON.stringify(n));
+});
+// Máquina 30.6 h es de lo normal (p90 56 h): antes salía en rojo. Sin marcas, tampoco se explica lo que no sale
+await caso("tie-88-maquina-30h-es-normal", P0527(), async p => {
+  const n = await niveles(p, "in_production");
+  ok("tie-88-maquina-30h-es-normal", n.length === 0 && /3d 4h/.test(await etapa(p, "in_production")), JSON.stringify(n));
+});
+await caso("tie-89-sin-marcas-no-se-explican", SINVALIDAR(), async p => {
+  const t = await texto(p);
+  ok("tie-89-sin-marcas-no-se-explican", !/lo normal/.test(t), `«${t.slice(0, 340)}»`);
+});
+// Salidas del viernes 15:00 al miércoles 16:00: 4 + 9 + 9 + 6 = 28 h: arriba de 23, ámbar
+await caso("tie-90-salidas-28h-pasa-de-lo-normal", orden("P-0765", { stage: "salidas", created_at: H("2026-10-30 14:00:00") }, [
+  ["2026-10-30 14:00:00", "draft", "secretaria", "📋 Orden creada"],
+  ["2026-10-30 15:00:00", "salidas", "produccion", "📦 Empaque → 📤 Salidas"],
+]), async p => {
+  const n = await niveles(p, "salidas");
+  ok("tie-90-salidas-28h-pasa-de-lo-normal", n.length === 1 && /^sobre\|/.test(n[0]), JSON.stringify(n));
+});
+// la negrita sola no dice nada (ni se oye): lleva su palabra. Con empate, nadie
+await caso("tie-80-el-ultimo-se-dice", P0726(), async p => {
+  const t = await etapa(p, "draft");
+  ok("tie-80-el-ultimo-se-dice", /Gerardo\D{0,12}2h 19m validó [^·]*· al último/.test(t) && !/12:47 p\.m\. · al último/.test(t), `«${t}»`);
+});
+await caso("tie-81-terminada-dice-cuanto-duro", conEventos("P-0766", { stage: "cancelled", cancelled_at: H("2026-11-02 12:00:00") }, [
+  ["2026-11-02 12:00:00", null, "admin", "❌ Cancelada: Orden repetida"],
+]), async p => {
+  ok("tie-81-terminada-dice-cuanto-duro", /Duró 2h 30m de trabajo/.test(await texto(p)), `«${(await texto(p)).slice(0, 200)}»`);
+}, { abrir: false });
+await caso("tie-91-la-entregada-dice-que-tardo", P0609(), async p => {
+  ok("tie-91-la-entregada-dice-que-tardo", /Tardó \S+( \S+)? de trabajo/.test(await texto(p)), `«${(await texto(p)).slice(0, 200)}»`);
+}, { abrir: false });
+// de quién es el tiempo de Validar: de quien falta; de los dos si faltan los dos; si la bitácora no guardó a uno, del que sí está
+await caso("tie-82-validar-es-de-quien-falta", ENVALIDAR(), async p => {
+  ok("tie-82-validar-es-de-quien-falta", /Lleva 5h 30m de trabajo · Gerardo 5h 30m/.test(await texto(p)), `«${(await texto(p)).slice(0, 200)}»`);
+}, { abrir: false });
+await caso("tie-92-validar-de-los-dos", SINVALIDAR(), async p => {
+  ok("tie-92-validar-de-los-dos", /Lleva 30m de trabajo · Noemí y Gerardo 30m/.test(await texto(p)), `«${(await texto(p)).slice(0, 200)}»`);
+}, { abrir: false });
+await caso("tie-83-validar-sin-la-hora-de-uno", conEventos("P-0545", { stage: "ready" }, [
+  ["2026-11-02 10:00:00", null, "preprensa", "✅ Validada por Pre-prensa"],
+  ["2026-11-02 10:00:00", "ready", "preprensa", "📝 → ⏩ Ambos validaron → Lista (placa existente, salta CTP)"],
+]), async p => {
+  // la media hora de Validar es de Noemí, la única con hora; lo de Gerardo en el resumen es de «Lista p/ imprimir»
+  ok("tie-83-validar-sin-la-hora-de-uno", /· Noemí 30m/.test(await texto(p)), `«${(await texto(p)).slice(0, 200)}»`);
+}, { abrir: false });
+// sin decimales en ningún lado («2.3h» se leía como 2 horas 30), y lo que no se parte tampoco se sale del resumen
+await caso("tie-93-sin-decimales", P0609(), async p => {
+  const t = await texto(p);
+  ok("tie-93-sin-decimales", !/\d\.\dh/.test(t) && /Polar 115/.test(t), `«${(t.match(/.{20}\d\.\dh.{10}/) || ["sin decimales"])[0]}»`);
+});
+await caso("tie-94-el-resumen-no-se-sale", { ...P0702(), maq_provider: "IMG_20250914_183022_HDR_portrait_edited_edited.HEIC" }, async p => {
+  const m = await seSale(p);
+  ok("tie-94-el-resumen-no-se-sale", m.length === 0, m.slice(0, 4).join(" · ") || "todo adentro");
+}, { ancho: 300 });
+
+// ════════════════════════ Vuelta 2: por donde no se diseñó ════════════════════════
 const LARGA = () => conEventos("P-0740", {}, [
   ["2026-11-02 10:00:00", "design", "preprensa", "📝 → 🎨 Ambos validaron → Diseño"],
   ["2026-11-02 11:00:00", "draft", "preprensa", "↩️ Regresada de 🎨 Diseño → 📝 Validar · Razón: " + SIN_CORTES.repeat(9)],
@@ -342,14 +494,14 @@ await caso("tie-26-cancelada-se-cierra", conEventos("P-0629", { stage: "cancelle
 ]), async p => {
   const t = await texto(p);
   // de 10:00 a 12:00 en Empaque, y fin. No sigue corriendo hasta el miércoles
-  ok("tie-26-cancelada-se-cierra", !/en curso|aquí ahora/.test(t) && /Empaque · Gerardo\D{0,6}2\.0h/.test(t) && /Cancelada/.test(t) && /Administrador · fin/.test(t), `panel: «${t.slice(0, 300)}»`);
+  ok("tie-26-cancelada-se-cierra", !/en curso|aquí ahora/.test(t) && /Empaque · Gerardo\D{0,6}2h/.test(t) && /Cancelada/.test(t) && /Administrador · fin/.test(t), `panel: «${t.slice(0, 300)}»`);
 });
 await caso("tie-27-entregada-sin-su-fecha-usa-su-evento", conEventos("P-0744", { stage: "delivered" }, [
   ["2026-11-02 10:00:00", "salidas", "produccion", "📦 Empaque → 📤 Salidas"],
   ["2026-11-02 11:00:00", null, "karla", "✅ Entregada (folio F-1 ya asignado)"],
 ]), async p => {
   const t = await texto(p);
-  ok("tie-27-entregada-sin-su-fecha-usa-su-evento", !/en curso|aquí ahora/.test(t) && /Salidas · Karla\D{0,6}1\.0h/.test(t) && /Karla · fin/.test(t), `panel: «${t.slice(0, 300)}»`);
+  ok("tie-27-entregada-sin-su-fecha-usa-su-evento", !/en curso|aquí ahora/.test(t) && /Salidas · Karla\D{0,6}1h/.test(t) && /Karla · fin/.test(t), `panel: «${t.slice(0, 300)}»`);
 });
 await caso("tie-28-la-entrega-antes-de-la-ultima-etapa-no-da-negativo", conEventos("P-0745", { stage: "delivered", delivered_at: H("2026-11-02 09:40:00") }, [
   ["2026-11-02 10:00:00", "salidas", "produccion", "📦 Empaque → 📤 Salidas"],
@@ -372,7 +524,7 @@ await caso("tie-30-gerardo-valida-con-el-panel-abierto", ENVALIDAR(), async p =>
   await p.waitForTimeout(150);
   const t = await texto(p);
   // de 9:30 a 15:30 menos la comida: 5 h; y Diseño lleva 30 m
-  ok("tie-30-gerardo-valida-con-el-panel-abierto", /falta/.test(antes) && !/falta/.test(t) && /Gerardo\D{0,12}5\.0h/.test(t) && /Diseño · Noemí\s*en curso · 30m/.test(t), `panel: «${t.slice(0, 300)}»`);
+  ok("tie-30-gerardo-valida-con-el-panel-abierto", /falta/.test(antes) && !/falta/.test(t) && /Gerardo\D{0,12}5h/.test(t) && /Diseño · Noemí\s*en curso · 30m/.test(t), `panel: «${t.slice(0, 300)}»`);
 });
 await caso("tie-31-fuera-de-jornada-no-cuenta", orden("P-0747", { stage: "design", created_at: H("2026-10-30 19:40:00") }, [
   ["2026-10-30 19:40:00", "draft", "secretaria", "📋 Orden creada"],
@@ -393,7 +545,7 @@ await caso("tie-32-la-pausa-en-validar-no-cuenta-para-nadie", orden("P-0748", { 
   ["2026-11-02 13:00:00", "design", "produccion", "📝 → 🎨 Ambos validaron → Diseño"],
 ]), async p => {
   const t = await texto(p);
-  ok("tie-32-la-pausa-en-validar-no-cuenta-para-nadie", /Noemí\D{0,12}1\.0h/.test(t) && /Gerardo\D{0,12}1\.5h/.test(t), `panel: «${t.slice(0, 240)}»`);
+  ok("tie-32-la-pausa-en-validar-no-cuenta-para-nadie", /Noemí\D{0,12}1h/.test(t) && /Gerardo\D{0,12}1h 30m/.test(t), `panel: «${t.slice(0, 240)}»`);
 });
 await caso("tie-33-otra-firma-se-dice", conEventos("P-0749", { stage: "design" }, [
   ["2026-11-02 10:00:00", null, "preprensa", "✅ Validada por Pre-prensa"],
@@ -401,7 +553,7 @@ await caso("tie-33-otra-firma-se-dice", conEventos("P-0749", { stage: "design" }
   ["2026-11-02 11:00:00", "design", "admin", "📝 → 🎨 Ambos validaron → Diseño"],
 ]), async p => {
   const t = await texto(p);
-  ok("tie-33-otra-firma-se-dice", /Gerardo\D{0,12}1\.5h validó [^·]*· por Administrador/.test(t) && !/Noemí[^·]*por /.test(t), `panel: «${t.slice(0, 240)}»`);
+  ok("tie-33-otra-firma-se-dice", /Gerardo\D{0,12}1h 30m validó [^·]*· por Administrador/.test(t) && !/Noemí[^·]*por /.test(t), `panel: «${t.slice(0, 240)}»`);
 });
 await caso("tie-34-la-que-no-guardo-la-hora-lo-dice", conEventos("P-0545", { stage: "design" }, [
   ["2026-11-02 10:00:00", null, "preprensa", "✅ Validada por Pre-prensa"],
@@ -454,14 +606,14 @@ await caso("tie-36-la-auto-sin-etapa-no-se-queda-en-validar", conEventos("P-0430
   ["2026-11-02 12:05:00", "ctp", "preprensa", "🎨 Diseño → 💿 CTP"],
 ]), async p => {
   const t = await texto(p);
-  ok("tie-36-la-auto-sin-etapa-no-se-queda-en-validar", /Diseño · Noemí\D{0,6}1\.0h/.test(t) && /Validar\s*1\.6h/.test(t), `panel: «${t.slice(0, 300)}»`);
+  ok("tie-36-la-auto-sin-etapa-no-se-queda-en-validar", /Diseño · Noemí\D{0,6}1h/.test(t) && /Validar\s*1h 35m/.test(t), `panel: «${t.slice(0, 300)}»`);
 });
 await caso("tie-37-la-maquila-de-un-vendedor-la-responde-el", orden("P-0751", { stage: "maq_sent", order_type: "maquila", agent: "genaro", created_at: H("2026-11-02 09:30:00") }, [
   ["2026-11-02 09:30:00", "maq_created", "vendedor", "📋 Orden creada"],
   ["2026-11-02 09:40:00", "maq_sent", "vendedor", "📋 Creada (Maquila) → 🚚 Enviada a Maquila"],
 ]), async p => {
   const t = await texto(p);
-  ok("tie-37-la-maquila-de-un-vendedor-la-responde-el", /Enviada a Maquila · Genaro/.test(t) && !/Lupita/.test(t.replace(/Capturada[^·]*· \S+/, "")), `panel: «${t.slice(0, 260)}»`);
+  ok("tie-37-la-maquila-de-un-vendedor-la-responde-el", /Enviada a Maquila · con el maquilador · la sigue Genaro/.test(t) && !/Lupita/.test(t.replace(/Capturada[^·]*· \S+/, "")), `panel: «${t.slice(0, 260)}»`);
 });
 await caso("tie-38-empaque-marcado-varias-veces-es-uno", conEventos("P-0288", { stage: "packaging" }, [
   ["2026-11-02 10:00:00", "in_production", "produccion", "🏭 Polar 78"],
@@ -494,7 +646,7 @@ await caso("tie-40-volver-a-otra-maquina-si-es-otro-paso", conEventos("P-0753", 
   ["2026-11-02 12:00:00", "in_production", "produccion", "🏭 Printmaster 52"],
 ]), async p => {
   const t = await texto(p);
-  ok("tie-40-volver-a-otra-maquina-si-es-otro-paso", cuenta(t, /Printmaster 52/g) === 2 && /Polar 115/.test(t) && cuenta(t, /Máquina/g) === 1, `panel: «${t.slice(0, 300)}»`);
+  ok("tie-40-volver-a-otra-maquina-si-es-otro-paso", cuenta(t, /Printmaster 52/g) === 2 && /Polar 115/.test(t) && cuenta(await etapas(p), /Máquina/g) === 1, `panel: «${t.slice(0, 300)}»`);
 });
 await caso("tie-41-regresar-por-la-secuencia-tambien-se-marca", conEventos("P-0754", {}, [
   ["2026-11-02 10:00:00", "in_production", "produccion", "🏭 Polar 78"],
@@ -531,7 +683,7 @@ await caso("tie-43-con-el-teclado", P0726(), async p => {
   const a1 = await b.getAttribute("aria-expanded"), t1 = await texto(p);
   await p.keyboard.press("Space"); await p.waitForTimeout(120);
   const a2 = await b.getAttribute("aria-expanded"), t2 = await texto(p);
-  ok("tie-43-con-el-teclado", a0 === "false" && a1 === "true" && a2 === "false" && /Noemí/.test(t1) && !/Noemí/.test(t2), `aria-expanded: ${a0} → ${a1} → ${a2}`);
+  ok("tie-43-con-el-teclado", a0 === "false" && a1 === "true" && a2 === "false" && /Los tiempos sólo cuentan/.test(t1) && !/Los tiempos sólo cuentan/.test(t2), `aria-expanded: ${a0} → ${a1} → ${a2}`);
 }, { abrir: false });
 await caso("tie-44-a-futuro-no-da-negativo", conEventos("P-0755", { stage: "design", created_at: H("2026-11-20 09:30:00") }, [
   ["2026-11-20 10:00:00", "design", "preprensa", "📝 → 🎨 Ambos validaron → Diseño"],
@@ -558,7 +710,7 @@ if (!process.env.SOLO || new RegExp(process.env.SOLO).test("tie-50")) {
   cuenta2("tie-57-una-pausa-mas-larga-que-el-tramo-da-cero", "2026-11-02 10:00:00", "2026-11-02 11:00:00", 0, [{ start: H("2026-10-01 10:00:00"), end: H("2026-12-01 11:00:00") }]);
   const t0 = performance.now(); const anio = horasDeJornada(H("2024-01-01 09:00:00"), H("2026-01-01 09:00:00")), ms = Math.round(performance.now() - t0);
   ok("tie-58-dos-anos-no-se-traba", anio > 4000 && anio < 5200 && ms < 200, `${Math.round(anio)} h en ${ms} ms`);
-  const d = [[null, "—"], [0, "<1m"], [0.005, "<1m"], [0.5, "30m"], [59.6 / 60, "1.0h"], [2.34, "2.3h"], [8.94, "8.9h"], [HORAS_DE_UN_DIA, "1d"], [9.4, "1d"], [17.4, "1d 8h"], [17.6, "2d"], [18, "2d"], [22.32, "2d 4h"], [1284 * 9, "1284d"]];
+  const d = [[null, "—"], [0, "<1m"], [0.005, "<1m"], [0.5, "30m"], [59.6 / 60, "1h"], [2, "2h"], [2.34, "2h 20m"], [8.94, "8h 56m"], [HORAS_DE_UN_DIA, "1d"], [9.4, "1d"], [17.4, "1d 8h"], [17.6, "2d"], [18, "2d"], [22.32, "2d 4h"], [1284 * 9, "1284d"]];
   const malas = d.filter(([h, s]) => duracion(h) !== s).map(([h, s]) => `${h} → ${duracion(h)} (debía ${s})`);
   ok("tie-59-como-se-dice-cada-duracion", malas.length === 0, malas.join(" · ") || "todas");
   const sinOrden = tiempoPorEtapa(null, { ahora: H("2026-11-04 16:00:00") });

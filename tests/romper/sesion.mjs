@@ -2500,6 +2500,21 @@ await caso("ses-164-tiempo-por-etapa-en-la-ficha-abierta", async ({ p, s }) => {
   ok("ses-164-tiempo-por-etapa-en-la-ficha-abierta", seVeLaEtapa && bien(a1366) && bien(a1920) && detalle === 0 && /Noemí[^·]{0,40}validó/.test(t) && /Gerardo[^·]{0,40}validó/.test(t) && /Printmaster 52/.test(t) && /Müller Martini/.test(t), `1366: ${JSON.stringify(a1366)} · 1920: ${JSON.stringify(a1920)} · diálogos: ${detalle} · «${(t.match(/Tiempo por etapa.{0,200}/) || [""])[0]}»`);
 });
 
+// v10.84.177 — con la app real: a Dirección el resumen se le ve sin abrir el panel, con la bitácora de la base, y el encabezado dice cuánto lleva
+await caso("ses-165-el-resumen-con-la-bitacora-de-la-base", async ({ p, s }) => {
+  const ev = (h, to_stage, by_user, action) => ({ order_id: "OP-P-0957", action, by_user, color: "#8e8e93", created_at: haceH(h), to_stage });
+  s.filas = { orders: [ordenK("P-0957", { stage: "in_production", created_at: haceH(120), validated_by_production: true, validated_by_preprensa: true, current_machine: "off_pm52", machine_queue_position: 0 })],
+    order_timeline: [ev(120, "draft", "secretaria", "📋 Orden creada"), ev(119, null, "preprensa", "✅ Validada por Pre-prensa"), ev(100, null, "produccion", "✅ Validada por Producción"),
+      ev(100, "design", "produccion", "📝 → 🎨 Ambos validaron → Diseño"), ev(50, "in_production", "produccion", "🏭 Printmaster 52 (turno 2)"), ev(40, null, "system", "⏯️ Auto-activada (cola promoción)")] };
+  await abrirYEntrar(p, s, "marcelo");
+  await esperarMenu(p, /^Todas|^Pendientes/); await despertar(p);
+  await p.locator('button[title="Todas"]').first().click(); await p.waitForTimeout(800);
+  await fichaDe(p, "P-0957").click(); await p.waitForTimeout(600);
+  const dlg = p.getByRole("dialog").first();
+  const t = (await dlg.innerText()).replace(/\s+/g, " "), res = await dlg.locator("[data-resumen]").count();
+  ok("ses-165-el-resumen-con-la-bitacora-de-la-base", res === 1 && /Lleva \S+( \S+)? de trabajo · /.test(t) && /Máquina \S+/.test(t) && /lleva \S+( \S+)? en Máquina/.test(t), `resumen ${res}; «${(t.match(/Tiempo por etapa.{0,200}/) || [t.slice(0, 200)])[0]}»`);
+});
+
 await browser.close();
 await servidor.close();
 fin();

@@ -12,6 +12,25 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.177 — «Tiempo por etapa» contesta quién la detuvo: su crítica independiente (22/40) — 4-nov-2026
+
+**Qué pasaba.** Marcelo pidió la crítica (`/impeccable`); un revisor independiente dio **22/40**, cuatro P1 y un P2 (snapshot `.impeccable/critique/2026-11-05T00-00-17Z__src-app-jsx-stageflowhistory.md`): contestaba quién tardó en Validar y por qué se repite una etapa, pero no quién detuvo la orden, y a veces señalaba a quien no fue. Medido en
+la bitácora (180 días): Máquina es 42% de todo el tiempo y Validar 4%; 22% de las órdenes traen una pausa que no quedaba en ningún renglón; con un umbral de 18 h para todas, más de la mitad de las máquinas salía en rojo y Validar casi nunca se prendía. Decisiones de Marcelo: los 4 P1; lo de fuera no se le cuenta a nadie; lo lento, contra lo normal de cada etapa.
+
+**Qué se cambió** (la pantalla; la base no).
+- 🔑 **Un resumen que se ve sin abrir** (`resumen`): «Tardó 4d 2h de trabajo · Karla 2d 3h · Máquina 1d 3h · Gerardo 3h 49m · Noemí 50m · Germán 50m · en espera 11d 6h, no cuenta» (P-0609). Validar es de quien falta o de quien llegó al último. Máquina es su propio rubro: no es de una persona.
+- 🔑 **Lo de fuera no se le cuenta a nadie** (`ESPERA_DE_FUERA`, `fuera`): «Proceso en Maquila · con MAKILA · la sigue Lupita», sin marca, y en el resumen «Con MAKILA». También «Enviada a Maquila» (con la parcial) y «Aprobación · con el cliente».
+- 🔑 **Lo lento, contra lo normal de cada etapa** (`LO_NORMAL`, `nivelDeTiempo`): de 10 órdenes, 9 tardan menos (Validar 5 h, Diseño 29, CTP 8, Placas 2, Lista 11, Máquina 56, Empaque 24, Salidas 23); ámbar desde ahí y rojo desde el doble, con ícono y nombre accesible, y una línea que lo explica sólo si aparece. Marcas: 46% de las órdenes con alguna, 16% con rojo (antes, más de la mitad de las máquinas). 🔑 Son números escritos, medidos el 4-nov: si la planta cambia, se vuelven a medir.
+- **La pausa deja rastro** (`pausas`): «En espera (11d 6h) · no cuenta · 14-oct… · la puso Karla · el cliente no ha pedido factura», en la etapa donde empezó. La que sigue dice «desde», el reloj parado dice «en espera» y no «en curso», y la que seguía abierta termina al entregar.
+- **«Esperó su turno»** (`espero`): del paso con turno hasta su primer «⏯️». Sólo si se sabe: en 36% de los pasos con turno no hay activación, y Gerardo a veces marca al final, así que no se dice «en máquina». Con lo que se sabe, al menos 42% de Máquina es esperar turno.
+- **Más a la mano**: el encabezado dice «lleva 3d 7h en Máquina» (`TiempoEnLaEtapa`; si pasa de lo normal, se pinta y lo dice). A Dirección, el panel arriba del cuerpo. Abierto o cerrado se recuerda entre órdenes en la sesión (`TIEMPOS_ABIERTO`), sin desplazar la ventana al abrir otra.
+- **Sin decimales** (`duracion`): «2.3h» se lee como 2 horas 30; ahora «2h 18m». **«Al último»** con su palabra: la negrita sola no decía nada ni se oía. El horario baja a peso de meta: lo primero que se lee es el resumen. Una raya no se queda sola cuando el panel no tiene nada que enseñar (`estilo`).
+
+**Cómo se probó.** **Vuelta 1**, antes del arreglo, con las cuentas a mano (P-0726: «Lleva 2d de trabajo · Karla 8h 8m · Gerardo 4h 51m · Noemí 4h 11m · Germán 54m · en espera 3h 26m, no cuenta»): caían 33 de 91 en `tiempos`, 4 en `detalle` y ses-165. Tres fallas eran de mis pruebas, no de la app: tie-43 (el resumen ahora se ve cerrado), tie-80 (una regex cruzaba de
+renglón) y tie-89 (la orden sí traía marca: Placas 2h 31m). **Vuelta 2**: pausa abierta al entregar, sin motivo, proveedor sin cortes a 300 px, dos activaciones, la maquila parcial, Validar con dos faltantes o sin la hora de uno. **Barrido de sólo lectura** (820 órdenes): ni negativos ni rubros que no cuadren. Con la app real, ses-165; en `detalle`, det-239 a det-246.
+
+**Lo que dejó sin hacer** (lo decidió Marcelo: los 4 P1). El P2: dos sistemas de color (el de la etapa y el del tiempo), y el rojo que también dice «regresó». Y lo menor: el lector de pantalla (sin lista ni encabezados), el redondeo («2d 5h + 2d = 4d 6h»), «<1m» con dos significados, fechas sin día de la semana, los festivos, «2d» de 9 h junto a «2d estancada» de 24 h. **Sin navegador**, la crítica dedujo lo de teclado.
+
 ## v10.84.176 — «Tiempo por etapa»: el horario de trabajo de verdad, y un texto que lo aclara — 4-nov-2026
 
 **Qué pasaba.** v10.84.175 dedujo la jornada de la bitácora y contaba hasta las 19:30. Marcelo, 4-nov: «es de 9 a 2, 1 hora de descanso y de 3 a 7. Si las horas sólo cuenta el tiempo en esa ventana agrega un texto que lo aclare» (`/impeccable`). La nota iba hasta abajo y en cursivas: en un panel largo quedaba fuera de
