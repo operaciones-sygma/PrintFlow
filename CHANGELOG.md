@@ -29,6 +29,13 @@ la bitácora (180 días): Máquina es 42% de todo el tiempo y Validar 4%; 22% de
 **Cómo se probó.** **Vuelta 1**, antes del arreglo, con las cuentas a mano (P-0726: «Lleva 2d de trabajo · Karla 8h 8m · Gerardo 4h 51m · Noemí 4h 11m · Germán 54m · en espera 3h 26m, no cuenta»): caían 33 de 91 en `tiempos`, 4 en `detalle` y ses-165. Tres fallas eran de mis pruebas, no de la app: tie-43 (el resumen ahora se ve cerrado), tie-80 (una regex cruzaba de
 renglón) y tie-89 (la orden sí traía marca: Placas 2h 31m). **Vuelta 2**: pausa abierta al entregar, sin motivo, proveedor sin cortes a 300 px, dos activaciones, la maquila parcial, Validar con dos faltantes o sin la hora de uno. **Barrido de sólo lectura** (820 órdenes): ni negativos ni rubros que no cuadren. Con la app real, ses-165; en `detalle`, det-239 a det-246.
 
+**En producción.** 4-nov ~19:17, READY `dpl_DLMDk7BB5A4ozG7Dv95AVELiC4FL`, commit `4148a53`. Candado 2929 de 2929 (34 nuevas), de a 4, 1376 s, a la primera, sin regresiones ni inestables. Sabotaje: lo que pasaba antes del arreglo o se escribió después cae sin él (tie-77, tie-88, tie-89, tie-94, det-241, det-242, det-246; det-244 en su propia ronda, porque subir el panel para todos le quita la causa a det-246).
+Revisado en producción sin escribir, con órdenes vivas: P-0705 («Le toca a Gerardo · lleva 4d 8h en Máquina»; «Lleva 5d 6h de trabajo · Máquina 4d 8h · Gerardo 4h 9m · Noemí 3h 6m»; «turno 3 · esperó su turno 1d 6h»), P-0725, P-0726, P-0736, y las maquilas P-0733 y P-0690 («lleva 9d 5h con CREATIVE»). El recorrido de toda la app no se repitió: el de la 175 es de esa tarde y esto sólo toca el panel y el encabezado.
+
+**Vuelta atrás.** `git revert --no-edit 4148a53` y subir (ensayada en un worktree: deja todo como 59a1975, el código de la 176), o promover `dpl_573TB8EtHMC5TBa7HTgcPng1w9MP` (el código de la 176). La base no cambió.
+
+**Sin probar.** En un teléfono de verdad; en el banco, el panel a 300 px. El lector de pantalla.
+
 **Lo que dejó sin hacer** (lo decidió Marcelo: los 4 P1). El P2: dos sistemas de color (el de la etapa y el del tiempo), y el rojo que también dice «regresó». Y lo menor: el lector de pantalla (sin lista ni encabezados), el redondeo («2d 5h + 2d = 4d 6h»), «<1m» con dos significados, fechas sin día de la semana, los festivos, «2d» de 9 h junto a «2d estancada» de 24 h. **Sin navegador**, la crítica dedujo lo de teclado.
 
 ## v10.84.176 — «Tiempo por etapa»: el horario de trabajo de verdad, y un texto que lo aclara — 4-nov-2026
