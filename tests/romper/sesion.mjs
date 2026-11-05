@@ -2518,7 +2518,7 @@ await caso("ses-165-el-resumen-con-la-bitacora-de-la-base", async ({ p, s }) => 
   await fichaDe(p, "P-0957").click(); await p.waitForTimeout(600);
   const dlg = p.getByRole("dialog").first();
   const t = (await dlg.innerText()).replace(/\s+/g, " "), res = await dlg.locator("[data-resumen]").count();
-  ok("ses-165-el-resumen-con-la-bitacora-de-la-base", res === 1 && /Lleva \S+( \S+)? hábiles · /.test(t) && /Máquina \S+/.test(t) && /lleva \S+( \S+)? en Máquina/.test(t), `resumen ${res}; «${(t.match(/Tiempo por etapa.{0,200}/) || [t.slice(0, 200)])[0]}»`);
+  ok("ses-165-el-resumen-con-la-bitacora-de-la-base", res === 1 && /Lleva \S+( \S+)? hábiles( \(≈\d+ días\))? · /.test(t) && /Máquina \S+/.test(t) && /lleva \S+( \S+)? en Máquina/.test(t), `resumen ${res}; «${(t.match(/Tiempo por etapa.{0,200}/) || [t.slice(0, 200)])[0]}»`);
 });
 
 // v10.84.178 — con la app real, en la ficha abierta (que es un `role=button`): el teclado dentro del panel no abre el detalle, y el panel enseña su foco (el CSS global, que sólo trae la app)
@@ -2705,6 +2705,41 @@ await caso("ses-178-lo-que-se-pasa-dice-contra-que", async ({ p, s }) => {
   await fichaDe(p, "P-0972").click(); await p.waitForTimeout(700);
   const t = await leerTexto(p.getByRole("dialog").first());
   ok("ses-178-lo-que-se-pasa-dice-contra-que", /lleva \S+( \S+)? en Salidas · lo normal 23h/.test(t) && !/más de lo normal/.test(t), `«${(t.match(/lleva.{0,60}/) || [t.slice(0, 200)])[0]}»`);
+});
+
+// v10.84.181 — al abrirlo se ve lo que se pasó, aunque quede bajo el corte a 1366: leer la alarma y buscar su evidencia era bajar a ciegas
+await caso("ses-182-al-abrir-se-ve-lo-que-se-paso", async ({ p, s }) => {
+  const ev = (h, to_stage, by_user, action) => ({ order_id: "OP-P-0976", action, by_user, color: "#8e8e93", created_at: haceH(h), to_stage });
+  s.filas = { orders: [TERMINADA("P-0976")], order_timeline: [ev(400, "draft", "secretaria", "📋 Orden creada"), ev(399, null, "preprensa", "✅ Validada por Pre-prensa"), ev(399, null, "produccion", "✅ Validada por Producción"), ev(399, "design", "produccion", "📝 → 🎨 Ambos validaron → Diseño"), ev(398, "ctp", "preprensa", "🎨 Diseño → 💿 CTP"), ev(397, "placas_listas", "german", "💿 CTP → 📋 Placas Listas"), ev(396, "ready", "produccion", "📋 → ✅ Lista"), ev(395, "in_production", "produccion", "🏭 Printmaster 52"), ev(394, "packaging", "produccion", "🏭 📦 Empaque"), ev(393, "salidas", "produccion", "📦 Empaque → 📤 Salidas"), ev(20, "delivered", "karla", "🎉 Entregada")] };
+  await aTodas(p, s);
+  await fichaDe(p, "P-0976").click();
+  const dlg = p.getByRole("dialog").first(); await esperaPanel(dlg);
+  await dlg.getByRole("button", { name: /Tiempo por etapa/ }).click(); await p.waitForTimeout(350);
+  const m = await dlg.evaluate(d => { const e = d.querySelector("[data-peor]"); if (!e) return { hay: false }; const r = e.getBoundingClientRect(), h = document.elementFromPoint(r.left + 40, r.top + 8); return { hay: true, se: !!h && (e === h || e.contains(h)), top: Math.round(r.top) }; });
+  ok("ses-182-al-abrir-se-ve-lo-que-se-paso", m.hay && m.se, JSON.stringify(m));
+}, { viewport: { width: 1366, height: 768 } });
+// bitácora con renglones y sin etapas (48 órdenes): antes desaparecía en silencio, al revés de la que no trae renglones
+await caso("ses-183-renglones-sin-etapas-lo-dice", async ({ p, s }) => {
+  s.filas = { orders: [TERMINADA("P-0977")], order_timeline: [{ order_id: "OP-P-0977", action: "🎉 Entregada", by_user: "karla", color: "#8e8e93", created_at: haceH(20), to_stage: null }] };
+  await aTodas(p, s);
+  await fichaDe(p, "P-0977").click(); await p.waitForTimeout(1200);
+  const t = await leerTexto(p.getByRole("dialog").first());
+  ok("ses-183-renglones-sin-etapas-lo-dice", /Sin movimientos/.test(t), `«${t.slice(0, 200)}»`);
+});
+
+// «Ver fechas» se recuerda entre órdenes, como abierto o cerrado
+await caso("ses-184-ver-fechas-se-recuerda-entre-ordenes", async ({ p, s }) => {
+  s.filas = { orders: [TERMINADA("P-0978"), TERMINADA("P-0979")], order_timeline: [...bitacoraDe("P-0978"), ...bitacoraDe("P-0979")] };
+  await aTodas(p, s);
+  await fichaDe(p, "P-0978").click();
+  let dlg = p.getByRole("dialog").first(); await esperaPanel(dlg);
+  await dlg.getByRole("button", { name: /Tiempo por etapa/ }).click(); await p.waitForTimeout(150);
+  await dlg.getByRole("button", { name: "Ver fechas" }).click(); await p.waitForTimeout(150);
+  await p.keyboard.press("Escape"); await p.waitForTimeout(350);
+  await fichaDe(p, "P-0979").click();
+  dlg = p.getByRole("dialog").first(); await esperaPanel(dlg); await p.waitForTimeout(200);
+  const hay = await dlg.getByRole("button", { name: "Ocultar fechas" }).count(), t = await leerTexto(dlg);
+  ok("ses-184-ver-fechas-se-recuerda-entre-ordenes", hay === 1 && /P-0979/.test(t) && /Entró/.test(t), `«Ocultar fechas» ${hay}: «${t.slice(0, 160)}»`);
 });
 
 await browser.close();

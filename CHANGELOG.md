@@ -12,6 +12,22 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.181 — «Tiempo por etapa» ya no acusa con lo que no sabe: su tercera crítica independiente (26/40) — 5-nov-2026
+
+**Qué pasaba.** El revisor, con capturas de producción de la 180, dio 26/40: el panel señala a personas con datos que no lo sostienen, y sus cifras no cuadran entre sí. Medido en 868 órdenes de 180 días: 24 de las 70 Salidas o Recibidas con marca traían la pausa «el cliente no ha pedido factura» (13 órdenes marcadas sólo por eso); en 34% de los pasos con «esperó su turno» (201 de 587) el «le tocó» se marcó a menos de 5 minutos de acabar, y ahí estaba 44% de las horas de «fila»; en 52% de las órdenes (389 de 742) hay más de 1 h entre Noemí y Gerardo, y al cerrar no se veía.
+
+**Qué se cambió** (la pantalla; la base no).
+- 🔑 **Lo que espera al cliente no acusa a nadie** (`esperaAlCliente`): sin marca, y su rubro es «Salidas», no «Karla». Es la decisión de Marcelo sobre lo de fuera (4-nov) y sobre «a tiempo» (17-oct).
+- 🔑 **Sólo el veredicto señala, y siempre con su cifra**: sin marcas en los rubros. Dice si lo pasado sigue ahí: «Noemí tardó 13h en Validar, lo normal 5h» o «Germán lleva 21h en CTP, lo normal 8h».
+- 🔑 **Una sola cifra por tiempo**: «Máquina 31h (15h en fila)» y «Validar (Gerardo 2h 19m, Noemí 1h 17m)». Lo de Validar se le sumaba a quien llegó al último, y «Gerardo 4h 57m · Noemí 4h 47m» parecía empate. Abierto, sin «otros».
+- **Lo que no se sabe no se afirma**: «le tocó» marcado al final no es fila; un paso de máquina de menos de 5 minutos con otro después no es renglón; pausas seguidas del mismo motivo son una; sin «· hasta que cambie de etapa». 🔑 **Con esto, lo que se sabe de Máquina como esperar turno baja de 36% a 20%**, y 39% trae turno sin saber cuándo le tocó (la cifra de la 177 estaba inflada por lo marcado al final).
+- **Las fechas se piden** («Ver fechas», se recuerda): sólo se quedan en lo que se pasó, lo que sigue ahí, lo que regresó y Validar. Al abrir se ve lo que se pasó, aunque quede bajo el corte.
+- **Los totales también en días**: «148h hábiles (≈16 días)». Los renglones se quedan en horas.
+- **El regreso, con su razón sin abrir**, y sin «nada fuera de lo normal» a su lado; la cancelada tampoco lo dice; se explica «lo normal» cuando hay marca; un mismo concepto, un nombre («en fila»).
+- **Lector de pantalla**: se oye título y veredicto, los rubros como descripción (eran 165 caracteres de corrido), y cada etapa es un encabezado. Bitácora con renglones y sin etapas (48 órdenes) lo dice en vez de desaparecer.
+
+**Cómo se probó.** **Vuelta 1**, antes del arreglo, contra la 180, con las horas a mano: caían 24 de 25; la otra es un guardia, y saboteada cae. Dos supuestos míos, corregidos: en P-0726 Placas Listas sí se pasó (2h 33m contra 2h), y el caso de un solo rubro traía otro. **Vuelta 2**, por donde no se diseñó: Validar dos veces, marcar la máquina enseguida de entrar, la recibida que espera al cliente, una razón sin cortes a 300 px, dos regresos, «Ver fechas» entre órdenes; lo que pasó a la primera se saboteó y cae por su causa. 16 pruebas viejas cambiaron de texto a propósito.
+
 ## v10.84.180 — «Tiempo por etapa» dice qué se pasó y contra qué: su segunda crítica independiente (20/40) — 5-nov-2026
 
 **Qué pasaba.** Marcelo: «sigamos haciendo pases de impeccable hasta dejarla lo más alta posible». El revisor, con capturas de producción de la 178, dio 20/40: contesta lo más grande, no quién detiene la orden. Medido en 868 órdenes de 180 días: en 71% de las órdenes las negritas caían en una etapa que no se pasó; de 12 activas con marca, en 9 la marca estaba en una etapa anterior y cerrado el panel no la decía; 88% de los CTP con pasos (272 de 308) se marcan de golpe; 19% de las etapas (929 de 4,857) duran menos de 5 minutos; 3 de las 9 pausadas activas salían con alarma.

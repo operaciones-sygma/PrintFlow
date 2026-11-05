@@ -21,6 +21,10 @@
 //   2. LO MARCADO DE GOLPE NO ES FILA (`juntas`): 88% de los CTP con pasos (272 de 308) se marcan en el mismo momento: «En fila 4h 32m · CTP <1m · Procesadora <1m» afirmaba que la placa se hizo en un minuto.
 //   3. FILA Y MÁQUINA APARTE cuando se sabe: juntas, «Máquina 31h» no distinguía máquina ocupada de trabajo en fila, y piden decisiones distintas.
 //   4. CON MINUTOS EN LOS RENGLONES (`duracionFina`): los de adentro suman su total.
+// v10.84.181 — su tercera crítica independiente, medida otra vez: señalaba a quien no fue y afirmaba lo que la bitácora no sabe.
+//   1. LO QUE ESPERA AL CLIENTE NO SE LE CUENTA A NADIE (`esperaAlCliente`, `nivel`): 24 de las 70 Salidas o Recibidas con marca traían la pausa «el cliente no ha pedido factura», y Karla salía en rojo por eso. Su rubro es la etapa.
+//   2. «LE TOCÓ» MARCADO AL FINAL NO ES FILA: en 34% de los pasos con ese dato (201 de 587) se marcó a menos de 5 minutos de acabar, y ahí estaba 44% de las horas de «fila». No se sabe, y no se dice.
+//   3. UNA SOLA CIFRA POR TIEMPO: «Máquina 31h (15h en fila)», no «Máquina 16h · Fila 15h» junto a «lleva 31h». Y Validar es su propio rubro con los dos adentro: se le sumaba a quien llegó al último, y «Gerardo 4h 57m · Noemí 4h 47m» parecía empate.
 
 // v10.84.176 — el horario de trabajo, de Marcelo (4-nov: «de 9 a 2, 1 hora de descanso y de 3 a 7»), de lunes a viernes. La bitácora de 120 días lo confirma, con movimientos hasta las 19:30 que
 //   ya no cuentan; la v10.84.175 lo había deducido de ahí y contaba hasta las 19:30. En horas del día, cada tramo [desde, hasta).
@@ -35,6 +39,8 @@ export const ESPERA_DE_FUERA = { maq_sent: "el maquilador", maq_in_progress: "el
 //   doble para arriba, «el doble»: el rojo vuelve a ser raro. La que no trae número (Prueba: 3 veces en 180 días) usa un día de trabajo. Si la planta cambia, se vuelve a medir.
 export const LO_NORMAL = { draft: 5, design: 29, ctp: 8, placas_listas: 2, ready: 11, in_production: 56, packaging: 24, salidas: 23, maq_created: 16, maq_received: 64 };
 export const loNormalDe = stage => LO_NORMAL[stage] ?? HORAS_DE_UN_DIA;
+// v10.84.181 — la pausa que espera a que el cliente pida su factura: «a tiempo» es haber quedado lista (Marcelo, 17-oct), y lo de fuera no se le cuenta a nadie (4-nov)
+const ESPERA_AL_CLIENTE = /cliente.*(factura|remisi)/i;
 export function nivelDeTiempo(stage, h) {
   if (h == null || ESPERA_DE_FUERA[stage]) return null;
   const normal = loNormalDe(stage);
@@ -118,7 +124,7 @@ const maquinaDe = t => {
 // `nombreEtapa(etapa)`: cómo se llama, para el rubro que no tiene persona.
 // Devuelve { bloques, regs, resumen }. Cada bloque: stage, at, by, responsable, fuera, hours, vez, isReg, razon, current, endpoint, inicial, pasos[{ etiqueta, maquina, turno, at, by, hours, current, espero }],
 // juntas{ etiquetas, at }, pausas[{ at, quien, motivo, abierta, hours }] y, en Validar, validaciones[{ rol, quien, por, at, hours, falta, sinHora, noValido, pasoPor, ultima }].
-// resumen: { verbo, total, rubros[{ quien, tipo, hours, nivel }], visibles, otros, pausa, pasados[{ quien, etapa, hours, nivel, normal }], pausaAbierta{ at, motivo, quien }, conFuera{ quien, sigue } }.
+// esperaAlCliente, nivel. resumen: { verbo, total, rubros[{ quien, tipo, hours, nivel, fila, quienes }], visibles, otros, pausa, pasados[{ quien, etapa, hours, nivel, normal, actual, bloque }], pausaAbierta{ at, motivo, quien }, conFuera{ quien, sigue } }.
 export function tiempoPorEtapa(o, { ahora, topePausa = null, secuencia = [], responsable = () => null, persona = x => x, nombreEtapa = x => x } = {}) {
   const tl = (o?.timeline || []).filter(t => t?.date && !isNaN(aMs(t.date))).slice().sort((a, b) => aMs(a.date) - aMs(b.date));
   // ventana de pausa: desde «🔕 En espera» hasta el primer evento posterior que sea «🔔 Reactivada» o una transición real (los neutros —edición, merma, precio— no la
@@ -131,7 +137,7 @@ export function tiempoPorEtapa(o, { ahora, topePausa = null, secuencia = [], res
     let abierta = false;
     if (!fin) { fin = ahora; abierta = true; if (topePausa && aMs(topePausa) < aMs(fin)) { fin = topePausa; abierta = false; } }
     if (aMs(fin) < aMs(t.date)) fin = t.date;
-    pausas.push({ start: t.date, end: fin, by: t.by, abierta, motivo: (/En espera:\s*(.+)$/su.exec(t.action || "") || [])[1]?.trim() || null });
+    pausas.push({ start: t.date, end: fin, by: t.by, abierta, motivo: (/En espera:\s*(.+)$/su.exec(t.action || "") || [])[1]?.trim().replace(/\s*·\s*hasta que cambie de etapa\s*$/i, "") || null });
   });
   // «📋 Orden creada» ya trae la etapa inicial y quién: no es una transición
   const creada = tl.find(t => /Orden creada/i.test(t.action || ""));
@@ -187,12 +193,17 @@ export function tiempoPorEtapa(o, { ahora, topePausa = null, secuencia = [], res
       p.current = b.current && ultPaso;
       p.etiqueta = p.maquina || (b.pasos.length > 1 ? "En fila" : null);
       // con turno: cuándo le tocó, el primer «⏯️». Sin él no se sabe, y no se dice
-      if (p.turno) { const le = tl.find(t => /^⏯/u.test(String(t.action || "").trim()) && aMs(t.date) > aMs(p.at) && aMs(t.date) <= aMs(finPaso)); if (le) p.espero = horas(p.at, le.date); } });
+      if (p.turno) { const le = tl.find(t => /^⏯/u.test(String(t.action || "").trim()) && aMs(t.date) > aMs(p.at) && aMs(t.date) <= aMs(finPaso)); if (le && (p.current || aMs(finPaso) - aMs(le.date) > 300000)) p.espero = horas(p.at, le.date); } });   // v10.84.181 — le tocó y acabó en 5 minutos: lo marcó al final, y eso no es fila
     // v10.84.180 — CTP y Procesadora marcadas de golpe: casi siempre se marcan al terminar, así que lo de antes no es fila ni dicen cuánto tardó cada paso. Un solo tiempo, y se dice. Se mide en el reloj: de noche todo da 0 horas de jornada, y una hora de diferencia no es «de golpe». Mientras sigue ahí, no: el último paso corre
     if (b.stage === "ctp" && b.pasos.length > 1 && !b.current && !b.pasos[0].maquina && b.pasos.slice(1).every(p => p.relojMs <= 300000)) {
       const [primero, ...marcados] = b.pasos;
       b.juntas = { etiquetas: marcados.map(p => p.maquina), at: marcados[0].at };
       b.pasos = [{ ...primero, hours: b.hours, etiqueta: null, current: false }];
+    }
+    // v10.84.181 — un paso de máquina de menos de 5 minutos con otro después no es renglón («Manual #1 <1m», 26 en 180 días): se movió enseguida. Su tiempo se va al siguiente
+    if (b.stage === "in_production" && b.pasos.length > 1) {
+      b.pasos = b.pasos.filter((p, j) => { const sig = b.pasos[j + 1]; if (sig && p.relojMs <= 300000) { sig.hours += p.hours; return false; } return true; });
+      b.pasos.forEach(p => { p.etiqueta = p.maquina || (b.pasos.length > 1 ? "En fila" : null); });
     }
     if (b.stage !== "draft" || o.order_type === "maquila") return;   // v10.84.176 — las maquilas no se validan, aunque hayan nacido como `draft` (P-0059)
     const salio = esUltimo ? null : trans.find(t => aMs(t.date) === aMs(fin) && aDonde(t) === bloques[i + 1].stage);
@@ -212,24 +223,25 @@ export function tiempoPorEtapa(o, { ahora, topePausa = null, secuencia = [], res
   });
   // cada pausa con la etapa en que empezó; la que no tocó el horario de trabajo no se dice, salvo la que sigue abierta
   pausas.forEach(p => { const b = [...bloques].reverse().find(x => !x.endpoint && aMs(x.at) <= aMs(p.start)), h = msDeJornada(p.start, p.end) / 3600000;
-    if (b && (h > 0 || p.abierta)) (b.pausas ||= []).push({ at: p.start, quien: p.by ? persona(p.by) : null, motivo: p.motivo, abierta: p.abierta, hours: h }); });
+    if (!b || !(h > 0 || p.abierta)) return;
+    const lista = (b.pausas ||= []), ult = lista[lista.length - 1];
+    if (ult && ult.motivo === p.motivo) { ult.hours += h; ult.abierta = p.abierta; return; }   // v10.84.181 — seguidas con el mismo motivo son una: tres «En espera» eran la repetición que Marcelo no entendía
+    lista.push({ at: p.start, quien: p.by ? persona(p.by) : null, motivo: p.motivo, abierta: p.abierta, hours: h }); });
+  bloques.forEach(b => { b.esperaAlCliente = (b.stage === "salidas" || b.stage === "maq_received") && (b.pausas || []).some(p => ESPERA_AL_CLIENTE.test(p.motivo || "")); b.nivel = b.esperaAlCliente ? null : nivelDeTiempo(b.stage, b.hours); });
   // de quién es cada tiempo: lo de fuera, de nadie; Máquina, su propio rubro; Validar, de quien falta o de quien llegó al último
   const rubros = new Map();
   const peorNivel = (a, b) => (a === "doble" || b === "doble" ? "doble" : a || b || null);
-  const suma = (quien, tipo, h, nivel = null) => { if (!quien || !(h > 0)) return; const r = rubros.get(quien) || { quien, tipo, hours: 0, nivel: null }; r.hours += h; r.nivel = peorNivel(r.nivel, nivel); rubros.set(quien, r); };
+  const suma = (quien, tipo, h, nivel = null, mas = null) => { if (!quien || !(h > 0)) return; const r = rubros.get(quien) || { quien, tipo, hours: 0, nivel: null }; r.hours += h; r.nivel = peorNivel(r.nivel, nivel); if (mas) mas(r); rubros.set(quien, r); };
   bloques.forEach(b => {
     if (b.endpoint || b.hours == null) return;
     if (b.fuera) return suma("Con " + b.fuera, "fuera", b.hours);
-    const nivel = nivelDeTiempo(b.stage, b.hours);
-    if (b.stage === "in_production") {
-      const fila = b.pasos.reduce((s, p) => s + (p.espero || 0), 0);
-      suma("Fila de máquina", "fila", fila, nivel);
-      return suma("Máquina", "maquina", b.hours - fila, nivel);
-    }
+    if (b.esperaAlCliente) return suma(nombreEtapa(b.stage), "etapa", b.hours);
+    const nivel = b.nivel;
+    if (b.stage === "in_production") return suma("Máquina", "maquina", b.hours, nivel, r => { r.fila = (r.fila || 0) + b.pasos.reduce((s, p) => s + (p.espero || 0), 0); });
     if (b.validaciones) {
       const faltan = b.validaciones.filter(v => v.falta), conTiempo = b.validaciones.filter(v => v.hours != null);
       if (faltan.length) return suma(faltan.map(v => v.quien).join(" y "), "persona", b.hours, nivel);
-      if (conTiempo.length) { const ultimo = conTiempo.reduce((x, y) => (y.hours > x.hours ? y : x)); return suma(ultimo.quien, "persona", b.hours, nivelDeTiempo(b.stage, ultimo.hours)); }
+      if (conTiempo.length) { const ultimo = conTiempo.reduce((x, y) => (y.hours > x.hours ? y : x)); return suma("Validar", "validar", b.hours, nivelDeTiempo(b.stage, ultimo.hours), r => { r.quienes ||= {}; conTiempo.forEach(v => { r.quienes[v.quien] = (r.quienes[v.quien] || 0) + v.hours; }); }); }
     }
     suma(b.responsable || nombreEtapa(b.stage), b.responsable ? "persona" : "etapa", b.hours, nivel);
   });
@@ -238,17 +250,17 @@ export function tiempoPorEtapa(o, { ahora, topePausa = null, secuencia = [], res
   const pasados = [];
   vivos.forEach(b => {
     const quienes = (b.validaciones || []).filter(v => nivelDeTiempo(b.stage, v.hours));
-    if (quienes.length) return quienes.forEach(v => pasados.push({ quien: v.quien, etapa: b.stage, hours: v.hours, nivel: nivelDeTiempo(b.stage, v.hours), normal: loNormalDe(b.stage) }));
-    const nivel = nivelDeTiempo(b.stage, b.hours);
-    if (nivel) pasados.push({ quien: b.stage === "in_production" ? "Máquina" : b.responsable, etapa: b.stage, hours: b.hours, nivel, normal: loNormalDe(b.stage) });
+    if (quienes.length) return quienes.forEach(v => pasados.push({ quien: v.quien, etapa: b.stage, hours: v.hours, nivel: nivelDeTiempo(b.stage, v.hours), normal: loNormalDe(b.stage), actual: !!v.falta, bloque: bloques.indexOf(b) }));
+    if (b.nivel) pasados.push({ quien: b.stage === "in_production" ? "Máquina" : b.responsable, etapa: b.stage, hours: b.hours, nivel: b.nivel, normal: loNormalDe(b.stage), actual: !!b.current, bloque: bloques.indexOf(b) });
   });
   pasados.sort((x, y) => y.hours / y.normal - x.hours / x.normal);
   const actual = vivos.find(b => b.current), abierta = !ES_FINAL(o?.stage) ? vivos.flatMap(b => b.pausas || []).find(p => p.abierta) : null;
   const todos = [...rubros.values()].filter(r => Math.round(r.hours * 60) >= 1).sort((a, b) => b.hours - a.hours);
-  // hasta cuatro datos a la vista (traía hasta 7): lo que se pasó siempre, y lo mayor; lo demás, junto. Abierto está todo
+  // hasta cuatro datos a la vista (traía hasta 7): lo que se pasó siempre, y lo mayor; lo demás, junto. Abierto está todo. v10.84.181 — y Validar si hay más de 1 h entre los dos: la pregunta de Marcelo (52% de las órdenes)
   let visibles = todos, otros = 0;
   if (todos.length > 4) {
-    const marcados = todos.filter(r => r.nivel), resto = todos.filter(r => !r.nivel);
+    const brecha = r => { const hs = Object.values(r.quienes || {}); return hs.length > 1 ? Math.max(...hs) - Math.min(...hs) : 0; };
+    const marcados = todos.filter(r => r.nivel || brecha(r) >= 1), resto = todos.filter(r => !marcados.includes(r));
     visibles = [...marcados, ...resto.slice(0, Math.max(0, 3 - marcados.length))].sort((a, b) => b.hours - a.hours);
     otros = todos.filter(r => !visibles.includes(r)).reduce((s, r) => s + r.hours, 0);
   }
@@ -257,5 +269,6 @@ export function tiempoPorEtapa(o, { ahora, topePausa = null, secuencia = [], res
     pausaAbierta: abierta ? { at: abierta.at, motivo: abierta.motivo, quien: abierta.quien } : null,
     conFuera: actual?.fuera ? { quien: actual.fuera, sigue: actual.responsable } : null };
   if (cierre) bloques.push({ stage: o.stage, at: cierre, by: porCierre, endpoint: true, current: false, isReg: false, razon: null, inicial: false, vez: 1, responsable: null, fuera: null, hours: null, pasos: [] });
-  return { bloques, regs: bloques.filter(b => b.isReg).length, resumen };
+  const regresos = bloques.filter(b => b.isReg);
+  return { bloques, regs: regresos.length, razonDelRegreso: regresos[regresos.length - 1]?.razon || null, resumen };
 }
