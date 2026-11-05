@@ -146,6 +146,8 @@ const TANDAS = [
   { nombre: "venta-inventario", gen: "tests/banco/gen-venta-inventario.mjs", romper: "tests/romper/venta-inventario.mjs", puerto: 5492 },
   // v10.84.175 — «Tiempo por etapa» (Marcelo, 4-nov: «no sé quién tardó, Gerardo o Noemí» y «diseño o CTP aparece varias veces»), con las bitácoras de producción y el reloj fijo
   { nombre: "tiempos", gen: "tests/banco/gen-tiempos.mjs", romper: "tests/romper/tiempos.mjs", puerto: 5493 },
+  // v10.84.184 — «Tiempos» de Analytics (Marcelo, 5-nov: la tabla por responsable y etapa): la misma cuenta del panel, por periodo; el banco es el de Analytics, con la bitácora que pone cada caso
+  { nombre: "personas", gen: "tests/banco/gen-analytics.mjs", romper: "tests/romper/personas.mjs", puerto: 5494 },
 ];
 // 🔑 LA SEGUNDA OPORTUNIDAD (8-oct-2026, Marcelo: «sí es una mejora, aplica la misma metodología para todos los proyectos»; la misma de
 // CobranzaFlow desde el 7-oct, con sus candados: scripts/reintento.mjs). Lo que falla se repite UNA vez, y sólo eso: lo que vuelve a fallar

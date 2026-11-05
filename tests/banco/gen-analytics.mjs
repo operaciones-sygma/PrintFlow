@@ -102,14 +102,18 @@ if (M.has("espera")) {
     ORDEN("oW4", "P-0123", { client: "ACABADOS", product_type: "Libros", order_type: "maquila", stage: "maq_delivered", maq_price: 3000, maq_cost: 1000, created_at: "2026-10-01T09:00:00-06:00",
       due_date: "2026-10-06", delivered_at: "2026-10-12T12:00:00-06:00", timeline: tl("2026-10-06T09:00:00-06:00", "maq_received", ["2026-10-06T10:00:00-06:00", "🔕 En espera (Torre): todavia no pide factura el cliente · hasta que cambie de etapa"]) }));
 }
-const ORDERS = M.has("vacio") ? [] : TODAS;`,
+// v10.84.184 — las órdenes las puede poner la tanda (tests/romper/personas.mjs: «Tiempos», con su bitácora)
+const ORDERS = window.__ordenes || (M.has("vacio") ? [] : TODAS);`,
   `// ── extraído de App.jsx por extraer.mjs ──\n` + codigo,
   `function Banco() {
   const [ordenes, setOrdenes] = useState(ORDERS);
+  const [leida, setLeida] = useState(!M.has("leyendo"));   // modo=leyendo: la bitácora del archivo completo todavía no llega
+  window.__cambiarOrdenes = f => setOrdenes(f);
+  window.__terminarLectura = () => setLeida(true);
   window.__agregarEntrega = () => setOrdenes(os => [...os, ORDEN("oZ", "P-0199", { client: "CERVECERIA MODELO", product_type: "Etiquetas", price: 1000,
     created_at: "2026-10-13T09:00:00-06:00", delivered_at: "2026-10-13T11:00:00-06:00" })]);
   return <div style={{ padding: 20, fontFamily: "'Geist',sans-serif", background: C.canvas, minHeight: "100vh" }}>
-    <Analytics orders={ordenes} onReload={() => anota("reload")} />
+    <Analytics orders={ordenes} onReload={() => anota("reload")} onAbrirOrden={id => anota("abrir: " + id)} bitacoraLeida={leida} />
     <pre id="log"></pre>
   </div>;
 }

@@ -106,6 +106,53 @@ export function duracionFina(h) {
   return { horas: hs + "h", minutos: String(m % 60).padStart(2, "0") + "m" };
 }
 
+// v10.84.184 — «Tiempos» de Analytics (Marcelo, 4-nov: «eso sirve para ver cuánto tiempo se tardó cada responsable»; 5-nov, a la tabla: «te doy el sí»): lo que el panel dice de cada orden, junto y por periodo. Medido en 868 órdenes de 180 días, y por eso es así:
+//   1. UNA LISTA POR RESPONSABLE, NO UNA MATRIZ: cada etapa tiene un solo responsable salvo Validar, y la matriz salía con 12 casillas llenas de unas 50.
+//   2. DE PASO NO ENTRA EN LA MEDIANA (`MS_DE_PASO`, contado en horario de trabajo): 50% de los Diseños (288 de 571), 38% de Listas y 69% de las maquilas recién creadas se marcan en menos de 5 minutos: «la mitad, en menos de 1m» diría que Noemí diseña en un minuto (sin ellas, 2h 08m). En Validar sí entra: firmar rápido es lo que se mide. «9 de cada 10» sí las cuenta: se lee junto a «lo normal», que las cuenta (sin ellas, Diseño decía 59 h contra 29 h, y era lo mismo).
+//   3. CUENTA CUANDO SALIÓ DE LA ETAPA (en Validar, cuando firmó cada quien): lo que sigue ahí no ha terminado, y la etapa en la que se canceló, tampoco.
+//   4. EL MISMO TRATO DEL PANEL: lo que espera al cliente o al maquilador no se le cuenta a nadie, y se dice cuántas; Máquina es su propio grupo (la sigue Gerardo, pero no es de una persona); «se pasó» es `nivelDeTiempo`.
+export const MS_DE_PASO = 300000;
+const VECES_PARA_COMPARAR = 5, LENTAS_A_LA_VISTA = 8;
+const enOrden = a => a.slice().sort((x, y) => x - y);
+export function mediana(a) { if (!a.length) return null; const s = enOrden(a), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; }
+// el valor que 9 de cada 10 no pasan. Con menos de 10 veces no hay «9 de cada 10»: no se inventa
+export function nueveDeDiez(a) { return a.length < 10 ? null : enOrden(a)[Math.ceil(a.length * 9 / 10) - 1]; }
+// `lista`: [{ orden, tiempos }], con `tiempos` de `tiempoPorEtapa` · `enPeriodo(fecha)`: si esa salida entra · `secuencia`: el orden del flujo.
+// Devuelve { grupos[{ quien, tipo, sigue, horas, parte, filas[{ quien, tipo, stage, veces, dePaso, mediana, nueve, normal, sePasaron, horas, parte, lentas[{ orden, hours, fin }] }] }], base, mayores, validar{ mayor, menor, parejos }, noCuentan{ cliente, fuera } }
+export function tiempoPorPersona(lista, { enPeriodo = () => true, secuencia = [] } = {}) {
+  const filas = new Map(), noCuentan = { cliente: 0, fuera: 0 };
+  const anota = (quien, tipo, stage, sigue, h, nivel, fin, orden, dePaso) => {
+    const k = quien + "|" + stage;
+    if (!filas.has(k)) filas.set(k, { quien, tipo, stage, sigue, veces: 0, dePaso: 0, horas: 0, sePasaron: 0, tiempos: [], todas: [] });
+    const f = filas.get(k);
+    f.veces++; f.horas += h; if (nivel) f.sePasaron++; if (dePaso) f.dePaso++; else f.tiempos.push(h);
+    f.todas.push({ orden, hours: h, fin });
+  };
+  lista.forEach(({ orden, tiempos }) => (tiempos?.bloques || []).forEach((b, i, bs) => {
+    if (b.endpoint || b.hours == null) return;
+    const sig = bs[i + 1];
+    if (sig?.endpoint && /cancel|reject/.test(sig.stage)) return;
+    if (b.esperaAlCliente) { if (!b.current && sig && enPeriodo(sig.at)) noCuentan.cliente++; return; }
+    // cada quien cuando firmó, aunque el otro todavía falte: lo suyo ya terminó
+    if (b.validaciones) { b.validaciones.forEach(v => { if (v.hours != null && v.at && enPeriodo(v.at)) anota(v.quien, "validar", b.stage, null, v.hours, nivelDeTiempo(b.stage, v.hours), v.at, orden, false); }); return; }
+    if (b.current || !sig || !enPeriodo(sig.at)) return;
+    if (b.fuera) { noCuentan[ESPERA_DE_FUERA[b.stage] === "el cliente" ? "cliente" : "fuera"]++; return; }   // la prueba que espera al cliente no es del maquilador
+    const enMaquina = b.stage === "in_production";
+    if (!b.responsable && !enMaquina) return;
+    anota(enMaquina ? "Máquina" : b.responsable, enMaquina ? "maquina" : "persona", b.stage, enMaquina ? b.responsable : null, b.hours, b.nivel, sig.at, orden, b.hours <= MS_DE_PASO / 3600000);   // en horario de trabajo: lo de las 19:10 a las 19:50 son 0 h, de las 18:58 a las 9:01 son 3 minutos (se quedó la noche) y una pausa que cubre la estancia deja uno; nada de eso dice cuánto tardó
+  }));
+  const base = [...filas.values()].reduce((s, f) => s + f.horas, 0), idx = s => { const i = secuencia.indexOf(s); return i < 0 ? secuencia.length : i; };
+  const conCifras = [...filas.values()].map(({ tiempos, todas, ...f }) => ({ ...f, mediana: mediana(tiempos), nueve: nueveDeDiez(todas.map(x => x.hours)), normal: loNormalDe(f.stage), parte: base > 0 ? f.horas / base : 0, lentas: todas.slice().sort((a, b) => b.hours - a.hours).slice(0, LENTAS_A_LA_VISTA) }));
+  const porQuien = new Map();
+  conCifras.forEach(f => { if (!porQuien.has(f.quien)) porQuien.set(f.quien, { quien: f.quien, tipo: f.tipo === "maquina" ? "maquina" : "persona", sigue: f.sigue || null, horas: 0, parte: 0, filas: [] }); const g = porQuien.get(f.quien); g.horas += f.horas; g.parte += f.parte; g.filas.push(f); });
+  // del que más tiene al que menos, y Máquina al final: no es de una persona. Adentro, en el orden del flujo
+  const grupos = [...porQuien.values()].map(g => ({ ...g, filas: g.filas.sort((a, b) => idx(a.stage) - idx(b.stage) || a.stage.localeCompare(b.stage)) })).sort((a, b) => (a.tipo === "maquina" ? 1 : 0) - (b.tipo === "maquina" ? 1 : 0) || b.horas - a.horas || a.quien.localeCompare(b.quien));
+  // Validar es lo único que la bitácora sabe persona por persona: ahí se compara, y sólo con veces suficientes
+  const deValidar = conCifras.filter(f => f.tipo === "validar" && f.veces >= VECES_PARA_COMPARAR && f.mediana != null).sort((a, b) => b.mediana - a.mediana);
+  const validar = deValidar.length === 2 ? { mayor: deValidar[0], menor: deValidar[1], parejos: deValidar[0].mediana - deValidar[1].mediana < 5 / 60 } : null;
+  return { grupos, base, mayores: conCifras.filter(f => f.horas > 0).sort((a, b) => b.horas - a.horas).slice(0, 3), validar, noCuentan };
+}
+
 const ES_FINAL = s => /delivered|cancelled|stocked|maq_delivered|maq_cancelled|web_rejected/.test(s || "");
 const VALIDADORES = [
   { rol: "preprensa", bandera: "validated_by_preprensa", patron: /Validada por Pre-prensa/ },

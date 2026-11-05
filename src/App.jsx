@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect, lazy, Suspense, Component } from "react";
 import { corregirPrecioEnLaBase, capturarPrecioEnLaBase, revisarPrecioFoliado, corregirPrecioFoliado, corregirRestoEnLaBase } from "./lib/corregirPrecio.js"; // v10.84.112 — «Corregir precio» contra la base, probado con Node (v10.84.115: y «Capturar precio»; v10.84.174: y lo que falta de una orden por partes)
-import { tiempoPorEtapa, duracion, duracionFina, nivelDeTiempo, loNormalDe, esFestivo, HORARIO_EN_PALABRAS, HORAS_DE_UN_DIA } from "./lib/tiempoPorEtapa.js"; // v10.84.175 — «Tiempo por etapa», probado con Node contra las bitácoras de producción
+import { tiempoPorEtapa, tiempoPorPersona, duracion, duracionFina, nivelDeTiempo, loNormalDe, esFestivo, HORARIO_EN_PALABRAS, HORAS_DE_UN_DIA } from "./lib/tiempoPorEtapa.js"; // v10.84.175 — «Tiempo por etapa», probado con Node contra las bitácoras de producción
 import { cancelarUnaDelLote } from "./lib/cancelarEnLote.js"; // v10.84.113 — «Cancelaciones» cancela cada orden completa, probado con Node
 import { cuadrarPartes } from "./lib/cuadrarPartes.js"; // v10.84.3 — aritmetica del reparto, probada con Node
 import { proponerPiezas, descripcionDeOrden } from "./lib/proponerPiezas.js"; // v10.84.102 — casar los conceptos de un CFDI con las órdenes del plan, probado con Node
@@ -18279,7 +18279,76 @@ const folioDe=o=>o?.production_number||[o?.invoice_folio||o?.grouped_invoice_fol
 const EMPAQUE_ID="vm_manual";   // mide lo que una orden espera antes de salir, no trabajo de una máquina: fuera de la utilización
 const fmtCorto=n=>new Intl.NumberFormat("es-MX",{style:"currency",currency:"MXN",notation:"compact",maximumFractionDigits:1}).format(n||0);
 const enPlural=(n,uno,varios)=>n+" "+(n===1?uno:varios);
-function Analytics({orders,onReload}) {
+// v10.84.184 — «Tiempos» (Marcelo, 4-nov: «eso sirve para ver cuánto tiempo se tardó cada responsable, la etapa de validación tiene 2, Noemí y Gerardo, veo que tardan horas en aprobarla, pero no sé quién tardó»; 5-nov, a la tabla: «te doy el sí»): lo que el panel
+//   dice de una orden, junto y por periodo, con la misma cuenta (`tiemposDeLaOrden`, `tiempoPorPersona`). Sólo Dirección, como toda esta pantalla. La bitácora de lo terminado la trae «Cargar datos completos», y la pantalla se enciende ANTES de que llegue: sin ella no hay cifras (`bitacoraLeida`, regla 12).
+const parteEnTexto=p=>{const n=Math.round(p*100);return p>0&&n===0?"<1%":n+"%"};
+const fechaConAnio=d=>d.getDate()+" "+MESES_CORTOS[d.getMonth()]+" "+d.getFullYear();
+function TiemposPorPersona({orders,rango,txtRango,desde,leida,onAbrirOrden}){
+  const [abierto,setAbierto]=useState(null);
+  // la cuenta de cada orden se hace una vez; cambiar de periodo sólo vuelve a juntar
+  const cuentas=useMemo(()=>leida?orders.filter(o=>o.timeline?.length).map(o=>({orden:o,tiempos:tiemposDeLaOrden(o)})):[],[orders,leida]);
+  const aMs=rango.a?rango.a.getTime():null,bMs=rango.b.getTime();
+  const t=useMemo(()=>{const r={a:aMs==null?null:new Date(aMs),b:new Date(bMs)};return tiempoPorPersona(cuentas,{secuencia:STAGE_SEQUENCE,enPeriodo:f=>enRango(diaLocal(f),r)})},[cuentas,aMs,bMs]);
+  if(!leida)return <div data-tiempos=""><div data-tiempos-leyendo="" role="status" style={{background:C.sf,borderRadius:14,padding:"24px 16px",fontSize:13,color:C.t2,textAlign:"center",maxWidth:860}}>Leyendo la bitácora…</div></div>;
+  const alternar=(k,e)=>{if(e.detail>=2)return;setAbierto(a=>a===k?null:k)};
+  const nombre=f=>f.tipo==="validar"?"Validar, "+f.quien:(SM[f.stage]?.lt||f.stage);
+  const num={padding:"6px 8px",textAlign:"right",fontSize:12,color:C.tx,fontFamily:"'Geist Mono',monospace",fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"};
+  const encabezado={padding:"6px 8px",textAlign:"right",fontSize:11,fontWeight:600,color:C.t2,verticalAlign:"bottom",lineHeight:1.25,borderBottom:"1px solid "+C.bd};
+  const v=t.validar;
+  return <div data-tiempos="">
+    <div data-veredicto-tiempos="" style={{maxWidth:860,marginBottom:10,lineHeight:1.45}}>
+      {v&&<div style={{fontSize:15,fontWeight:700,color:C.tx}}>{v.parejos?`En Validar, ${v.mayor.quien} y ${v.menor.quien} tardan casi lo mismo: mediana ${duracion(v.mayor.mediana)} y ${duracion(v.menor.mediana)}.`:`En Validar, ${v.mayor.quien} tarda más que ${v.menor.quien}: mediana ${duracion(v.mayor.mediana)} contra ${duracion(v.menor.mediana)}.`}</div>}
+      {t.mayores.length>0&&<div style={{fontSize:13,fontWeight:500,color:C.t2}}>Donde más se queda el tiempo: {t.mayores.map(f=>nombre(f)+" "+parteEnTexto(f.parte)).join(" · ")}.</div>}
+    </div>
+    <div style={{background:C.sf,borderRadius:14,padding:16,maxWidth:860}}>
+      <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:6}}><HourglassIcon size={13} weight="bold"/>Por responsable y etapa · {txtRango}</div>
+      <div data-tiempos-regla="" style={{fontSize:11,lineHeight:1.45,color:C.t2,marginBottom:10}}>Sólo cuenta el horario de trabajo: lunes a viernes, {HORARIO_EN_PALABRAS}, sin festivos de ley ni pausas. Es el tiempo que la orden estuvo ahí, con su fila; no el que se trabajó en ella.</div>
+      {t.grupos.length===0?<div data-tiempos-vacio="" style={{padding:"20px 0",textAlign:"center",fontSize:13,color:C.t2}}>Ninguna orden salió de una etapa en este periodo.{desde?" La bitácora empieza el "+fechaConAnio(desde)+".":""}</div>:<>
+      <div data-tiempos-caja="" style={{overflowX:"auto"}}>
+        <table aria-label="Tiempo por responsable y etapa" style={{width:"100%",minWidth:660,tableLayout:"fixed",borderCollapse:"collapse"}}>
+          <colgroup><col/><col style={{width:60}}/><col style={{width:60}}/><col style={{width:84}}/><col style={{width:84}}/><col style={{width:72}}/><col style={{width:92}}/><col style={{width:68}}/></colgroup>
+          <thead><tr>
+            <th scope="col" style={{...encabezado,textAlign:"left",position:"sticky",left:0,background:C.sf,zIndex:1}}>Responsable y etapa</th>
+            <th scope="col" style={encabezado}>Veces</th><th scope="col" style={encabezado}>De paso</th><th scope="col" style={encabezado}>Mediana</th><th scope="col" style={encabezado}>9 de cada 10</th><th scope="col" style={encabezado}>Lo normal</th><th scope="col" style={encabezado}>Se pasaron</th><th scope="col" style={encabezado}>Del tiempo</th>
+          </tr></thead>
+          {t.grupos.map(g=><tbody key={g.quien} data-grupo={g.quien}>
+            <tr>
+              <th scope="rowgroup" colSpan={7} style={{padding:"10px 0 4px",textAlign:"left",fontSize:13,fontWeight:700,color:C.tx}}><span style={{position:"sticky",left:0}}>{g.quien}{g.tipo==="maquina"&&g.sigue?<span style={{fontSize:11,fontWeight:500,color:C.t2}}> · la sigue {g.sigue} · no es de una persona</span>:null}</span></th>
+              <td data-parte-grupo="" style={{...num,padding:"10px 8px 4px",fontWeight:700}}>{parteEnTexto(g.parte)}</td>
+            </tr>
+            {g.filas.flatMap(f=>{const k=f.quien+"|"+f.stage,ab=abierto===k,Caret=ab?CaretDownIcon:CaretRightIcon;return [
+              <tr key={k} data-quien={f.quien} data-etapa={f.stage} style={{borderTop:"0.5px solid "+C.bd}}>
+                <th scope="row" style={{padding:0,fontWeight:500,position:"sticky",left:0,background:C.sf,zIndex:1}}><button onClick={e=>alternar(k,e)} aria-expanded={ab} aria-label={(f.tipo==="maquina"?"Máquina":(SM[f.stage]?.lt||f.stage)+" de "+f.quien)+": ver las más lentas"} style={{display:"flex",alignItems:"center",gap:6,width:"100%",minHeight:32,padding:"4px 8px 4px 2px",background:"transparent",border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:500,color:C.tx,textAlign:"left"}}><Caret size={11} weight="bold" aria-hidden="true" style={{color:C.t2,flexShrink:0}}/><span style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}><StageLbl stage={f.stage}/></span></button></th>
+                <td data-c="veces" style={num}>{f.veces.toLocaleString("es-MX")}</td>
+                <td data-c="depaso" style={num}>{f.tipo==="validar"?"—":f.dePaso.toLocaleString("es-MX")}</td>
+                <td data-c="mediana" style={num}>{f.mediana==null?"—":duracion(f.mediana)}</td>
+                <td data-c="p90" style={num}>{f.nueve==null?"—":duracion(f.nueve)}</td>
+                <td data-c="normal" style={num}>{duracion(f.normal)}</td>
+                <td data-c="pasaron" style={num}>{f.sePasaron.toLocaleString("es-MX")}{f.sePasaron>0?" · "+Math.round(100*f.sePasaron/f.veces)+"%":""}</td>
+                <td data-c="parte" style={num}>{parteEnTexto(f.parte)}</td>
+              </tr>,
+              ab&&<tr key={k+"-lentas"}><td colSpan={8} style={{padding:"0 0 8px"}}><div data-lentas="" style={{padding:"6px 10px",background:C.bg,borderRadius:8}}>
+                <div style={{fontSize:11,fontWeight:600,color:C.t2,marginBottom:2}}>{f.veces>f.lentas.length?`Las ${f.lentas.length} más lentas de ${f.veces.toLocaleString("es-MX")}`:f.veces===1?"La única":`Las ${f.veces}, de la más lenta a la más rápida`}</div>
+                {f.lentas.map((x,i)=><button key={x.orden.id+"-"+i} data-lenta="" onClick={e=>{if(e.detail>=2)return;onAbrirOrden&&onAbrirOrden(x.orden.id)}} style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) auto auto",gap:10,alignItems:"center",width:"100%",minHeight:28,padding:"3px 0",background:"transparent",border:"none",borderTop:"0.5px solid "+C.bd,cursor:"pointer",fontFamily:"inherit",fontSize:11,color:C.tx,textAlign:"left"}}>
+                  <span style={{display:"flex",gap:6,minWidth:0}}><span style={{fontFamily:"'Geist Mono',monospace",fontWeight:600,whiteSpace:"nowrap"}}>{folioDe(x.orden)}</span><span dir="auto" style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{String(x.orden.client||"").trim()||"Sin cliente"}</span></span>
+                  <span style={{color:C.t2,whiteSpace:"nowrap"}}>salió {fDia(x.fin)}</span>
+                  <span style={{fontFamily:"'Geist Mono',monospace",fontWeight:600,whiteSpace:"nowrap"}}>{duracion(x.hours)}</span>
+                </button>)}
+              </div></td></tr>
+            ]})}
+          </tbody>)}
+        </table>
+      </div>
+      <div data-tiempos-nota="" style={{display:"grid",gap:3,marginTop:12,fontSize:11,lineHeight:1.45,color:C.t2}}>
+        <div>Cuenta cuando salió de la etapa (en Validar, cuando firmó cada quien); lo que sigue ahí, no, ni la etapa en la que se canceló. No se le cuenta a nadie lo que esperó al cliente ({t.noCuentan.cliente}) ni al maquilador ({t.noCuentan.fuera}).</div>
+        <div>Responsable: quien responde de la etapa; sólo en Validar la bitácora dice quién firmó y cuándo.</div>
+        <div>De paso: estuvo menos de 5 minutos dentro del horario de trabajo; no entra en la mediana. Mediana: la mitad tardó menos. 9 de cada 10: tardaron menos que eso; con menos de 10 veces no se calcula.</div>
+        <div>Lo normal: 9 de cada 10 órdenes tardan menos (180 días, medido el 4-nov). Se pasaron: las que llegaron a lo normal o más.{desde?" La bitácora empieza el "+fechaConAnio(desde)+".":""}</div>
+      </div></>}
+    </div>
+  </div>;
+}
+function Analytics({orders,onReload,onAbrirOrden,bitacoraLeida=true}) {
   const [selMachine,setSelMachine]=useState(null);const [tab,setTab]=useState("finance");
   const [per,setPer]=useState("mes");
   const [abierto,setAbierto]=useState(null);   // v10.84.85 — el renglón de productos («p:…») o de clientes («c:…») que enseña sus órdenes
@@ -18372,10 +18441,13 @@ function Analytics({orders,onReload}) {
   const btnRenglon={display:"block",width:"100%",background:"transparent",border:"none",padding:"2px 0",textAlign:"left",cursor:"pointer",fontFamily:"inherit",color:"inherit"};
   const renglonDesplegado={display:"flex",gap:10,justifyContent:"space-between",fontSize:11,padding:"3px 0",borderTop:"0.5px solid "+C.bd};
   const listaOrdenes=(os,conTipo)=><div data-ordenes style={{margin:"6px 0 4px",padding:"4px 10px",background:C.bg,borderRadius:8}}>{os.slice().sort((a,b)=>precioVenta(b)-precioVenta(a)).slice(0,20).map(o=><div key={o.id} style={renglonDesplegado}><span style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}><span style={{fontFamily:"'Geist Mono',monospace",fontWeight:600}}>{folioDe(o)}</span> · {conTipo==="ambos"?[nombreDeTipo(o.product_type),String(o.client||"").trim()].filter(Boolean).join(" · "):conTipo?nombreDeTipo(o.product_type):o.client}{o.order_type==="maquila"?" · maquila":""} · {fD(o.delivered_at||o.deliveredAt)}</span><span style={{fontFamily:"'Geist Mono',monospace",whiteSpace:"nowrap"}}>{fmt(precioVenta(o))}</span></div>)}{os.length>20&&<div style={{fontSize:10,color:C.t2,paddingTop:4}}>y {os.length-20} más</div>}</div>;
-  const TABS=[{id:"finance",ic:CurrencyDollarIcon,l:"Financiero"},{id:"machines",ic:FactoryIcon,l:"Máquinas"},{id:"efficiency",ic:ChartBarIcon,l:"Eficiencia"},{id:"clients",ic:UsersIcon,l:"Clientes"},{id:"storage",ic:FolderOpenIcon,l:"Archivos"}];
+  const TABS=[{id:"finance",ic:CurrencyDollarIcon,l:"Financiero"},{id:"machines",ic:FactoryIcon,l:"Máquinas"},{id:"efficiency",ic:ChartBarIcon,l:"Eficiencia"},{id:"tiempos",ic:HourglassIcon,l:"Tiempos"},{id:"clients",ic:UsersIcon,l:"Clientes"},{id:"storage",ic:FolderOpenIcon,l:"Archivos"}];
   // v10.84.84 — el periodo es un grupo de radios: flechas para moverse, una sola parada de Tab (la marcada)
   const teclaPeriodo=e=>{const i=PERIODOS_ANALYTICS.findIndex(x=>x.id===per);let j=null;if(e.key==="ArrowRight"||e.key==="ArrowDown")j=(i+1)%PERIODOS_ANALYTICS.length;else if(e.key==="ArrowLeft"||e.key==="ArrowUp")j=(i-1+PERIODOS_ANALYTICS.length)%PERIODOS_ANALYTICS.length;else if(e.key==="Home")j=0;else if(e.key==="End")j=PERIODOS_ANALYTICS.length-1;if(j===null)return;e.preventDefault();setPer(PERIODOS_ANALYTICS[j].id);const b=e.currentTarget.querySelectorAll('[role="radio"]')[j];b&&b.focus()};
 
+  // v10.84.184 — «Tiempos» cuenta desde que hay bitácora, no desde la primera entrega (los primeros renglones de cada orden vienen ordenados por fecha)
+  const primeraMarca=tab==="tiempos"?orders.reduce((m,o)=>{const d=diaLocal(o.timeline?.[0]?.date);return d&&(!m||d<m)?d:m},null):null;
+  const txtDeLaTab=tab==="tiempos"&&per==="todo"?(!bitacoraLeida?"leyendo la bitácora…":primeraMarca?"desde "+fechaConAnio(primeraMarca):"sin movimientos en la bitácora"):txtRango;   // mientras lee, lo terminado todavía no trae bitácora: ni una fecha a medias ni «sin movimientos»
   return <div>
     {/* v10.84.84 — pestañas con su semántica (antes botones sueltos: un lector de pantalla no sabía cuál estaba abierta) */}
     <div role="tablist" aria-label="Secciones de Analytics" style={{display:"flex",gap:4,marginBottom:12,flexWrap:"wrap"}}>
@@ -18386,8 +18458,8 @@ function Analytics({orders,onReload}) {
       <div role="radiogroup" aria-label="Periodo" onKeyDown={teclaPeriodo} style={{display:"inline-flex",gap:2,background:C.sf,borderRadius:10,padding:3}}>
         {PERIODOS_ANALYTICS.map(x=>{const sel=per===x.id;return <button key={x.id} role="radio" aria-checked={sel} tabIndex={sel?0:-1} onClick={()=>setPer(x.id)} style={{border:"none",borderRadius:8,padding:"6px 12px",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit",background:sel?C.bg:"transparent",color:sel?C.tx:C.t2,boxShadow:sel?"0 1px 2px rgba(26,26,31,.08)":"none"}}>{x.l}</button>})}
       </div>
-      <span data-rango style={{fontSize:13,color:C.tx,fontWeight:600}}>{txtRango}</span>
-      <span style={{fontSize:11,color:C.t2}}>Ingreso es lo entregado en el periodo, por su fecha de entrega.</span>
+      <span data-rango style={{fontSize:13,color:C.tx,fontWeight:600}}>{txtDeLaTab}</span>
+      <span style={{fontSize:11,color:C.t2}}>{tab==="tiempos"?"Cuenta lo que salió de cada etapa en el periodo.":"Ingreso es lo entregado en el periodo, por su fecha de entrega."}</span>
     </div>}
 
     <div id="an-panel" role="tabpanel" aria-labelledby={"an-tab-"+tab}>
@@ -18544,6 +18616,9 @@ function Analytics({orders,onReload}) {
         </div>
       </div>
     </div>}
+
+    {/* ══ TIEMPOS ══ */}
+    {tab==="tiempos"&&<TiemposPorPersona orders={orders} rango={{a:R.a,b:R.b}} txtRango={txtDeLaTab} desde={primeraMarca} leida={bitacoraLeida} onAbrirOrden={onAbrirOrden}/>}
 
     {/* ══ CLIENTES ══ */}
     {tab==="clients"&&<div>
@@ -21524,6 +21599,7 @@ export default function PrintFlow() {
   },[]);
   const [archiveLoaded,setArchiveLoaded]=useState(false);
   const archiveLoadedRef=useRef(false);
+  const [archivoLeido,setArchivoLeido]=useState(false);   // v10.84.184 — `archiveLoaded` se enciende antes de leer: esto dice que YA llegó lo relacionado de lo terminado («Tiempos» de Analytics no da cifras a medias)
 
   // Load orders from Supabase
   // When archive not loaded yet: loads ALL order rows but only related data for active orders (fast)
@@ -21700,6 +21776,7 @@ export default function PrintFlow() {
       for(const o of prev){ if(o&&(o.has_splits!==undefined||o.splits||o.has_matrix_lines!==undefined)) enrichedById[o.id]={splits:o.splits,has_splits:o.has_splits,splits_alive_count:o.splits_alive_count,has_matrix_lines:o.has_matrix_lines}; }
       return all.map(o=>enrichedById[o.id]?{...o,...enrichedById[o.id]}:o);
     });
+    setArchivoLeido(true);
   },[]);
 
   // v10.84.179 — lo relacionado de una orden terminada se lee al abrir su detalle: `reload` no lo trae, y desde «Todas» o la búsqueda salía sin su bitácora, sus notas ni su merma hasta que alguien apretara
@@ -24835,7 +24912,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         {view==="calendar"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px"}}>Calendario de Entregas</h2><Calendar orders={filteredOrders} onChangeDate={changeDate} role={user} userLogin={userLogin}/></div>}
         {/* v10.84.125 — «Todas» en su vista (VistaTodas): de 40 en 40, las activas primero, el filtro por estado y sin cifras sin lectura */}{view==="orders"&&<VistaTodas orders={filteredOrders} search={search} onClearSearch={()=>setSearch("")} role={user} userLogin={userLogin} onAction={handleAction} actionLoading={actionLoading} onNueva={(user==="admin"||isSec(user))?()=>{setEditO(null);setView("form")}:null} leido={!!lectura.ok}/>}
         {view==="archive"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:8}}><ArchiveIcon size={18} weight="bold"/>Archivo de Completadas</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Órdenes entregadas organizadas por fecha{search?<> · <MagnifyingGlassIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:1}}/>"{search}"</>:""}</p>{!archiveLoaded?<div style={{textAlign:"center",padding:"40px 20px"}}><button onClick={loadArchive} style={{...bt(C.ac),fontSize:14,padding:"14px 28px"}}><FolderOpenIcon size={14} weight="bold"/>Cargar Archivo Completo</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Las órdenes activas ya están cargadas. Presiona para cargar el historial completo.</p></div>:<Archive orders={filteredOrders} role={user} onAction={handleAction} userLogin={userLogin}/>}</div>}
-        {view==="analytics"&&user==="admin"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px",textAlign:"center"}}>Analytics</h2>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}><ChartBarIcon size={14} weight="bold"/>Cargar datos completos para Analytics</button></div>:<Analytics orders={viewOrders} onReload={reload}/>}</div>}
+        {view==="analytics"&&user==="admin"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px",textAlign:"center"}}>Analytics</h2>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}><ChartBarIcon size={14} weight="bold"/>Cargar datos completos para Analytics</button></div>:<Analytics orders={viewOrders} onReload={reload} onAbrirOrden={id=>handleAction(id,"detail")} bitacoraLeida={archivoLeido}/>}</div>}
         {view==="wip"&&user==="admin"&&<WIPDashboard orders={orders} role={user} onAction={handleAction} leido={!!lectura.ok}/>}
         {view==="health"&&(user==="admin"||user==="secretaria"||user==="karla")&&<OperationalHealthView orders={orders} role={user} userLogin={userLogin} notifications={notifications} maintenance={maintenance} maintKey={maintKey} purchaseOrders={purchaseOrders} onAction={handleAction} setConfirmModal={setConfirmModal} showToast={showToast} reload={reload} reloadNotifications={()=>db.loadNotifications(notifKey).then(setNotifications)} leido={!!lectura.ok}/>}
         {/* 🗼 v10.58.52 — Torre de Control (admin) */}

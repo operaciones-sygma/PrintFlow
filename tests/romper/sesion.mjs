@@ -2764,6 +2764,79 @@ await caso("ses-186-el-encabezado-dice-habiles", async ({ p, s }) => {
   ok("ses-186-el-encabezado-dice-habiles", /lleva \S+( \S+)? hábiles en Salidas · lo normal 23h/.test(t), `«${(t.match(/lleva.{0,60}/) || [t.slice(0, 200)])[0]}»`);
 });
 
+// v10.84.184 — «Tiempos» de Analytics con la app real: lo terminado no trae su bitácora hasta «Cargar datos completos» (la regla 12), y `loadArchive` enciende la pantalla ANTES de que llegue: con las órdenes a medias, la tabla diría
+//   cifras que no son. Marcelo, 4-nov: «no sé quién tardó, Gerardo o Noemí»; 5-nov, a la tabla: «te doy el sí». Fechas fijas: lo que ya salió de una etapa no depende del reloj. Noemí 1 h 30 m, Gerardo 30 m.
+const ENTREGADA_FIJA = pn => { const ev = (f, to_stage, by_user, action) => ({ order_id: "OP-" + pn, action, by_user, color: "#8e8e93", created_at: f.replace(" ", "T") + "-06:00", to_stage });
+  return { orders: [ordenK(pn, { stage: "delivered", created_at: "2026-10-05T09:00:00-06:00", delivered_at: "2026-10-06T12:00:00-06:00", validated_by_production: true, validated_by_preprensa: true })],
+    order_timeline: [ev("2026-10-05 09:00:00", "draft", "secretaria", "📋 Orden creada"), ev("2026-10-05 09:30:00", null, "produccion", "✅ Validada por Producción"), ev("2026-10-05 10:30:00", null, "preprensa", "✅ Validada por Pre-prensa"), ev("2026-10-05 10:30:00", "design", "preprensa", "📝 → 🎨 Ambos validaron → Diseño"), ev("2026-10-05 11:00:00", "salidas", "produccion", "📦 Empaque → 📤 Salidas"), ev("2026-10-06 12:00:00", "delivered", "karla", "🎉 Entregada")] }; };
+const aAnalytics = async (p, s) => { await abrirYEntrar(p, s, "marcelo"); await esperarMenu(p, /^Todas|^Pendientes/); await despertar(p); await p.locator('button[title="Analytics"]').first().click(); await p.getByRole("button", { name: /Cargar datos completos/ }).waitFor({ timeout: 6000 }); };
+const cargarYTiempos = async p => { await p.getByRole("button", { name: /Cargar datos completos/ }).click(); await p.getByRole("tab", { name: "Tiempos" }).click({ timeout: 6000 }); };
+const verTodo = async p => { await p.getByRole("radio", { name: "Todo", exact: true }).click({ timeout: 6000 }); await p.waitForTimeout(200); };
+const celdaT = async (p, q, e, c) => { const l = p.locator(`[data-tiempos] tr[data-quien="${q}"][data-etapa="${e}"] [data-c="${c}"]`); return (await l.count()) ? (await l.first().innerText()).replace(/\s+/g, " ").trim() : null; };
+await caso("ses-187-tiempos-con-lo-terminado", async ({ p, s }) => {
+  s.filas = ENTREGADA_FIJA("P-0990");
+  await aAnalytics(p, s); await cargarYTiempos(p);
+  await p.locator("[data-tiempos] table").waitFor({ timeout: 8000 }).catch(() => {});
+  await verTodo(p);
+  const n = await celdaT(p, "Noemí", "draft", "mediana"), g = await celdaT(p, "Gerardo", "draft", "mediana");
+  ok("ses-187-tiempos-con-lo-terminado", n === "1h 30m" && g === "30m", `Noemí ${n}, Gerardo ${g}`);
+});
+await caso("ses-188-mientras-lee-no-dice-cifras", async ({ p, s }) => {
+  s.filas = ENTREGADA_FIJA("P-0991");
+  await aAnalytics(p, s);
+  s.retraso.order_timeline = 3000;
+  await cargarYTiempos(p); await p.waitForTimeout(400);
+  const leyendo = await p.locator("[data-tiempos-leyendo]").count(), tabla = await p.locator("[data-tiempos] table").count(), vacio = await p.locator("[data-tiempos-vacio]").count();
+  s.retraso.order_timeline = 0;
+  await p.locator("[data-tiempos-leyendo]").waitFor({ state: "detached", timeout: 12000 }).catch(() => {});
+  await verTodo(p);   // (la orden es de octubre: en «Este mes» ya no sale)
+  const despues = await p.locator("[data-tiempos] table").count(), l2 = await p.locator("[data-tiempos-leyendo]").count();
+  ok("ses-188-mientras-lee-no-dice-cifras", leyendo === 1 && tabla === 0 && vacio === 0 && despues === 1 && l2 === 0, JSON.stringify({ leyendo, tabla, vacio, despues, l2 }));
+});
+await caso("ses-189-si-no-se-pudo-leer-no-dice-cifras-y-se-reintenta", async ({ p, s }) => {
+  const buenas = ENTREGADA_FIJA("P-0992");
+  s.filas = buenas;
+  await aAnalytics(p, s);
+  s.filas = { ...buenas, order_timeline: "falla" };
+  await cargarYTiempos(p);
+  const boton = p.getByRole("button", { name: /Cargar datos completos/ });
+  await boton.waitFor({ timeout: 20000 }).catch(() => {});
+  const regreso = await boton.count(), t1 = await texto(p), cifras = await p.locator("[data-tiempos] table").count();
+  s.filas = buenas;
+  await cargarYTiempos(p);
+  await p.locator("[data-tiempos] table").waitFor({ timeout: 10000 }).catch(() => {});
+  await verTodo(p);
+  const n = await celdaT(p, "Noemí", "draft", "mediana");
+  ok("ses-189-si-no-se-pudo-leer-no-dice-cifras-y-se-reintenta", regreso === 1 && cifras === 0 && /No se pudo cargar el archivo completo/.test(t1) && n === "1h 30m", `el botón ${regreso}; tablas ${cifras}; Noemí ${n}; «${t1.slice(0, 160)}»`);
+});
+await caso("ses-190-de-la-tabla-a-la-orden-la-misma-cifra", async ({ p, s }) => {
+  s.filas = ENTREGADA_FIJA("P-0993");
+  await aAnalytics(p, s); await cargarYTiempos(p);
+  await p.locator("[data-tiempos] table").waitFor({ timeout: 8000 }).catch(() => {});
+  await verTodo(p);
+  await p.locator('[data-tiempos] tr[data-quien="Noemí"][data-etapa="draft"] button').first().click();
+  await p.locator("[data-lenta]").first().click({ timeout: 3000 });
+  const dlg = p.getByRole("dialog").first(); await esperaPanel(dlg);
+  const t = await leerTexto(dlg);
+  ok("ses-190-de-la-tabla-a-la-orden-la-misma-cifra", /Noemí 1h 30m/.test(t) && /Gerardo 30m/.test(t), `«${(t.match(/.{0,50}Validar.{0,80}/) || [t.slice(0, 200)])[0]}»`);
+});
+await caso("ses-191-sigue-despues-de-recargar", async ({ p, s }) => {
+  s.filas = ENTREGADA_FIJA("P-0994");
+  await aAnalytics(p, s); await cargarYTiempos(p);
+  await p.locator("[data-tiempos] table").waitFor({ timeout: 8000 }).catch(() => {});
+  await verTodo(p);
+  const antes = await celdaT(p, "Noemí", "draft", "veces"), lecturas = () => s.peticiones.filter(x => x.m === "GET" && x.ruta === "/rest/v1/orders").length, l0 = lecturas();
+  await p.waitForTimeout(22000);   // la recarga de cada 20 s: `loadOrders(true)` no trae lo relacionado de lo terminado, y lo que ya estaba se conserva
+  const despues = await celdaT(p, "Noemí", "draft", "veces"), l1 = lecturas();
+  ok("ses-191-sigue-despues-de-recargar", antes === "1" && despues === "1" && l1 > l0, `${antes} → ${despues}; lecturas de las órdenes ${l0} → ${l1}`);
+});
+await caso("ses-192-solo-direccion", async ({ p, s }) => {
+  s.filas = ENTREGADA_FIJA("P-0995");
+  await abrirYEntrar(p, s, "karla"); await esperarMenu(p, /^Pendientes/); await despertar(p);
+  const n = await p.locator('button[title="Analytics"]').count();
+  ok("ses-192-solo-direccion", n === 0, `Karla ve Analytics: ${n}`);
+});
+
 await browser.close();
 await servidor.close();
 fin();

@@ -133,7 +133,7 @@ await caso("an-13-teclado-pestanas-y-periodo", "", async p => {
   const r = p.getByRole("radio", { name: "Últimos 90 días", exact: true });
   await r.focus(); await p.keyboard.press("Enter"); await espera(p);
   const marcado = await r.getAttribute("aria-checked");
-  ok("an-13-teclado-pestanas-y-periodo", tabs === 5 && sel === 1 && marcado === "true", `pestañas con role=tab: ${tabs} (seleccionada ${sel}); «Últimos 90 días» con Enter: ${marcado}`);
+  ok("an-13-teclado-pestanas-y-periodo", tabs === 6 && sel === 1 && marcado === "true", `pestañas con role=tab: ${tabs} (seleccionada ${sel}); «Últimos 90 días» con Enter: ${marcado}`);
 });
 await caso("an-14-todo-dice-desde-cuando", "", async p => {
   await periodo(p, "Todo");
