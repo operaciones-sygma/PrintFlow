@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect, lazy, Suspense, Component } from "react";
 import { corregirPrecioEnLaBase, capturarPrecioEnLaBase, revisarPrecioFoliado, corregirPrecioFoliado, corregirRestoEnLaBase } from "./lib/corregirPrecio.js"; // v10.84.112 — «Corregir precio» contra la base, probado con Node (v10.84.115: y «Capturar precio»; v10.84.174: y lo que falta de una orden por partes)
-import { tiempoPorEtapa, duracion, duracionFina, nivelDeTiempo, loNormalDe, HORARIO_EN_PALABRAS, HORAS_DE_UN_DIA } from "./lib/tiempoPorEtapa.js"; // v10.84.175 — «Tiempo por etapa», probado con Node contra las bitácoras de producción
+import { tiempoPorEtapa, duracion, duracionFina, nivelDeTiempo, loNormalDe, esFestivo, HORARIO_EN_PALABRAS, HORAS_DE_UN_DIA } from "./lib/tiempoPorEtapa.js"; // v10.84.175 — «Tiempo por etapa», probado con Node contra las bitácoras de producción
 import { cancelarUnaDelLote } from "./lib/cancelarEnLote.js"; // v10.84.113 — «Cancelaciones» cancela cada orden completa, probado con Node
 import { cuadrarPartes } from "./lib/cuadrarPartes.js"; // v10.84.3 — aritmetica del reparto, probada con Node
 import { proponerPiezas, descripcionDeOrden } from "./lib/proponerPiezas.js"; // v10.84.102 — casar los conceptos de un CFDI con las órdenes del plan, probado con Node
@@ -3511,7 +3511,7 @@ function StageFlowHistory({order:o,estilo}){
           v10.84.180 — un solo renglón: eran tres antes de cada dato, y a 1366 empujaban la etapa actual abajo del corte. La comida y las noches ya las dice el horario; lo de Validar va en Validar y la leyenda de colores sobra.
           v10.84.182 — y de dónde sale «lo normal», siempre: «nada fuera de lo normal» también lo promete. */}
       <div style={{display:"flex",alignItems:"baseline",gap:10,marginBottom:10}}>
-        <div data-nota="" style={{flex:1,minWidth:0,fontSize:11,fontWeight:500,lineHeight:1.45,color:C.t2}}>Sólo cuenta el horario de trabajo: lunes a viernes, {HORARIO_EN_PALABRAS}, sin festivos ni pausas. Lo normal: 9 de cada 10 órdenes tardan menos (180 días, medido el 4-nov).</div>
+        <div data-nota="" style={{flex:1,minWidth:0,fontSize:11,fontWeight:500,lineHeight:1.45,color:C.t2}}>Sólo cuenta el horario de trabajo: lunes a viernes, {HORARIO_EN_PALABRAS}, sin festivos de ley ni pausas. Lo normal: 9 de cada 10 órdenes tardan menos (180 días, medido el 4-nov).</div>
         <button type="button" onClick={()=>{TIEMPOS_FECHAS=!conFechas;setConFechas(!conFechas);}} style={{flexShrink:0,minHeight:32,background:"none",border:"none",padding:"2px 0",cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:600,color:C.ac,whiteSpace:"nowrap"}}>{conFechas?"Ocultar fechas":"Ver fechas"}</button>
       </div>
       <ol style={{listStyle:"none",margin:0,padding:0}}>
@@ -18322,7 +18322,8 @@ function Analytics({orders,onReload}) {
   // ── máquinas: las horas del periodo, contra los días hábiles del periodo desde que hay registros ──
   // Turno: 9 h al día (9 a 19 menos la comida), de lunes a viernes.
   const WORK_HRS_DAY=9;
-  const countWorkDays=(from,to)=>{let d=diaLocal(from),count=0;const end=diaLocal(to);while(d<=end){const dow=d.getDay();if(dow>=1&&dow<=5)count++;d=masDias(d,1)}return count};
+  // v10.84.183 — los festivos de ley no son días hábiles (Marcelo, 5-nov: «para días que no se trabajan sólo damos los días festivos de ley»): septiembre decía 22 días × 9 h con el 16 adentro, y la utilización salía más baja de lo que fue
+  const countWorkDays=(from,to)=>{let d=diaLocal(from),count=0;const end=diaLocal(to);while(d<=end){const dow=d.getDay();if(dow>=1&&dow<=5&&!esFestivo(d))count++;d=masDias(d,1)}return count};
   const registros=[];orders.forEach(o=>(o.machine_log||[]).forEach(e=>{const d=diaLocal(e.started);if(d&&e.minutes>0)registros.push({o,e,d})}));
   const primerRegistro=registros.reduce((m,x)=>!m||x.d<m?x.d:m,null);
   const desdeMaq=primerRegistro?(R.a&&R.a>primerRegistro?R.a:primerRegistro):null;

@@ -264,7 +264,7 @@ await caso("tie-15-maquila-entregada", P0702(), async p => {
 await caso("tie-16-la-nota-dice-que-cuenta", P0726(), async p => {
   const t = await texto(p);
   // v10.84.176 — Marcelo, 4-nov: «si las horas sólo cuenta el tiempo en esa ventana agrega un texto que lo aclare»
-  ok("tie-16-la-nota-dice-que-cuenta", t.includes("Sólo cuenta el horario de trabajo: lunes a viernes, de 9 a 2 y de 3 a 7, sin festivos ni pausas.")
+  ok("tie-16-la-nota-dice-que-cuenta", t.includes("Sólo cuenta el horario de trabajo: lunes a viernes, de 9 a 2 y de 3 a 7, sin festivos de ley ni pausas.")
     && !/«1d»/.test(t) && t.includes("los dos cuentan desde aquí") && !/Tiempo hábil|jornada/i.test(t), `panel: «${t.slice(0, 320)}»`);
 });
 // se lee ANTES que los tiempos: va arriba de la primera etapa, sin cursivas, y se ve al abrir aunque el panel sea largo
@@ -692,7 +692,7 @@ await caso("tie-146-lo-minimo-no-pesa-como-lo-grande", conEventos("P-0788", { st
 });
 await caso("tie-147-un-solo-renglon-de-aviso", P0726(), async p => {
   const n = await p.evaluate(() => document.querySelector("#caja [data-nota]")?.innerText.trim() ?? null), g = await texto(p);
-  ok("tie-147-un-solo-renglon-de-aviso", /^Sólo cuenta el horario de trabajo: lunes a viernes, de 9 a 2 y de 3 a 7, sin festivos ni pausas\./.test(n || "") && !/No cuentan la comida/.test(g), `«${n}»`);
+  ok("tie-147-un-solo-renglon-de-aviso", /^Sólo cuenta el horario de trabajo: lunes a viernes, de 9 a 2 y de 3 a 7, sin festivos de ley ni pausas\./.test(n || "") && !/No cuentan la comida/.test(g), `«${n}»`);
 });
 await caso("tie-148-validar-dice-desde-cuando-y-falta-no-es-amarillo", SINVALIDAR(), async p => {
   const t = await etapa(p, "draft"), m = await p.evaluate(() => { const f = document.querySelector("#caja [data-falta]"), n = document.querySelector("#caja [data-nombre-etapa]"); return f && getComputedStyle(f).color === getComputedStyle(n).color; });
@@ -1249,6 +1249,14 @@ if (!process.env.SOLO || new RegExp(process.env.SOLO).test("tie-50")) {
   for (const [n, dia] of [["16-sep", "2026-09-16"], ["tercer-lunes-nov", "2026-11-16"], ["25-dic", "2026-12-25"], ["1-ene", "2027-01-01"], ["primer-lunes-feb", "2027-02-01"], ["tercer-lunes-mar", "2027-03-15"], ["1-may", "2026-05-01"]]) cuenta2("tie-111-festivo-" + n, dia + " 00:00:00", dia + " 23:59:00", 0);
   cuenta2("tie-112-el-lunes-anterior-si-cuenta", "2026-11-09 00:00:00", "2026-11-10 00:00:00", 9);
   cuenta2("tie-113-el-2-de-noviembre-si-cuenta", "2026-11-02 00:00:00", "2026-11-03 00:00:00", 9);
+  // v10.84.183 — Marcelo, 5-nov: «para días que no se trabajan sólo damos los días festivos de ley, investígalos». El art. 74 de la LFT (texto de la Cámara de Diputados, última reforma DOF 14-may-2026) tiene nueve fracciones:
+  //   faltaba la VII, el 1-oct de cada seis años (DOF 30-sep-2024: el 1-oct-2024, el de 2030…). La IX, la jornada electoral, siempre cae en domingo (LGIPE art. 22), y el domingo ya no cuenta.
+  for (const [n, dia] of [["2030", "2030-10-01"], ["2024", "2024-10-01"], ["2036", "2036-10-01"]]) cuenta2("tie-210-el-1-de-octubre-del-cambio-de-gobierno-" + n, dia + " 00:00:00", dia + " 23:59:00", 0);
+  cuenta2("tie-211-la-jornada-electoral-es-en-domingo", "2027-06-06 00:00:00", "2027-06-06 23:59:00", 0);
+  // los que se mueven a lunes, otro año: cada fecha que cae distinto
+  for (const [n, dia] of [["16-sep-2027-jueves", "2027-09-16"], ["tercer-lunes-nov-2027", "2027-11-15"], ["primer-lunes-feb-2028", "2028-02-07"], ["tercer-lunes-mar-2028", "2028-03-20"], ["1-ene-2029-lunes", "2029-01-01"]]) cuenta2("tie-212-festivo-" + n, dia + " 00:00:00", dia + " 23:59:00", 0);
+  // lo que NO es de ley se trabaja (Marcelo: «sólo»): el día que dice la historia cuando la ley lo movió a lunes, Semana Santa, Muertos, Guadalupe, Nochebuena, fin de año, y el 1-oct de los años sin cambio de gobierno
+  for (const [n, dia] of [["20-nov-2026-viernes", "2026-11-20"], ["5-feb-2027-viernes", "2027-02-05"], ["21-mar-2028-martes", "2028-03-21"], ["jueves-santo-2027", "2027-03-25"], ["viernes-santo-2027", "2027-03-26"], ["2-nov-2026", "2026-11-02"], ["12-dic-2025", "2025-12-12"], ["24-dic-2026", "2026-12-24"], ["31-dic-2026", "2026-12-31"], ["10-may-2028", "2028-05-10"], ["1-oct-2026", "2026-10-01"], ["1-oct-2029", "2029-10-01"], ["1-oct-2018", "2018-10-01"]]) cuenta2("tie-213-no-es-de-ley-" + n, dia + " 00:00:00", dia + " 23:59:00", 9);
   ok("tie-63-el-horario-en-palabras-sale-de-la-cuenta", HORARIO_EN_PALABRAS === "de 9 a 2 y de 3 a 7" && HORAS_DE_UN_DIA === 9, `«${HORARIO_EN_PALABRAS}», ${HORAS_DE_UN_DIA} h`);
   cuenta2("tie-53-la-comida-no-cuenta", "2026-11-02 14:10:00", "2026-11-02 14:50:00", 0);
   cuenta2("tie-54-de-antes-de-la-comida-a-despues", "2026-11-02 13:30:00", "2026-11-02 15:30:00", 1);

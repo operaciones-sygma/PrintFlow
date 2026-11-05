@@ -393,6 +393,12 @@ await caso("an-37-a-tiempo-si-estaba-lista-a-tiempo-aunque-no-esperara", "modo=e
     `a tiempo «${t}» (debe: 71 %, 5 de 7: las 2 de antes y P-0120, P-0122 y P-0123, listas a tiempo; P-0121, lista tarde, no); la nota: «${nota || "no sale"}» (debe decir que 3 estaban listas a tiempo, sin hablar de la factura)`);
 });
 
+// v10.84.183 — Marcelo, 5-nov: «para días que no se trabajan sólo damos los días festivos de ley»: septiembre de 2026 tiene 22 días entre semana, y el 16 no se trabaja
+await caso("an-38-los-dias-habiles-sin-festivos", "", async p => {
+  await pestaña(p, "Máquinas"); await periodo(p, "Mes pasado");
+  const base = await cifra(p, "utilizacion");
+  ok("an-38-los-dias-habiles-sin-festivos", /21 días hábiles/.test(base) && /189 h/.test(base), `«${base}» (debe: 21 días hábiles × 9 h = 189 h)`);
+});
 await browser.close();
 for (const r of res) console.log(r);
 const fallan = res.filter(r => r.startsWith("FALLA")).length;

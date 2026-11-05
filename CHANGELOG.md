@@ -12,6 +12,21 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.183 — Los festivos de ley, completos — 5-nov-2026
+
+**Qué pasaba.** La 178 dedujo los festivos de un solo día (el 16-sep sin movimientos) y quedó como pregunta. Marcelo, 5-nov: **«para días que no se trabajan sólo damos los días festivos de ley, investígalos»**. Ni Semana Santa, ni el 2-nov, ni el 12, 24 o 31-dic.
+
+**Lo investigado.** El art. 74 de la Ley Federal del Trabajo, en el texto de la Cámara de Diputados (última reforma DOF 14-may-2026; la lista no cambia desde el DOF 30-sep-2024): 1-ene, primer lunes de febrero, tercer lunes de marzo, 1-may, 16-sep, **el 1-oct de cada seis años, cuando cambia el gobierno**, tercer lunes de noviembre, 25-dic y la jornada electoral. La jornada siempre es en domingo (primer domingo de junio; el 6-jun-2027), y el domingo ya no cuenta. Lo que sigue: lun 16-nov, vie 25-dic; en 2027, vie 1-ene, lun 1-feb, lun 15-mar, sáb 1-may, jue 16-sep, lun 15-nov, sáb 25-dic.
+
+**Qué se cambió** (la pantalla; la base no).
+- `esFestivo` trae toda la ley: faltaba el 1-oct (2024, 2030, 2036…).
+- El panel lo dice: «sin festivos de ley ni pausas».
+- 🔑 **«Días hábiles» de Analytics → Máquinas tampoco los cuenta** (`countWorkDays`): septiembre de 2026 decía 22 días × 9 h con el 16 adentro; son 21 × 9 = 189 h, y la utilización salía más baja de lo que fue.
+
+**Cómo se probó.** **Vuelta 1**, antes del arreglo, sólo la cuenta: de 22 fechas, caían 3 (el 1-oct de 2024, 2030 y 2036). **Vuelta 2**: los lunes que caen distinto otros años, y lo que no es de ley y se trabaja (el 20-nov en viernes, el 5-feb en viernes, el 21-mar en martes, Jueves y Viernes Santo, 2-nov, 12, 24 y 31-dic, 10-may, el 1-oct sin cambio de gobierno). Lo que pasó a la primera se saboteó y cae por su causa. `tie-210` a `tie-213`, `an-38`.
+
+**Sin tocar** (se le pregunta a Marcelo). «Estancada» (`bizHoursAgo`) y la entrega lejana (`bizDaysUntil`, `bizDaysBefore`) siguen contando el festivo como día normal: el 17-nov una orden sale estancada un día antes. La fecha que sugiere la forma (`calcDeliveryDate`) tampoco lo salta, y puede proponer el lunes 16-nov. **Los sábados siguen sin contar**: «sólo festivos» no lo contesta.
+
 ## v10.84.182 — «Tiempo por etapa»: lo último de su cuarta crítica (26/40), y ahí paran las pasadas — 5-nov-2026
 
 **Qué pasaba.** El tercer revisor con capturas de producción, ya sobre la 181, dio 26/40 otra vez: el rojo todavía afirma más de lo que la bitácora sabe, y un mismo hecho sale con varias cifras. Medido: de 17 etapas con pausa del cliente que no es de factura, 5 seguían marcadas (P-0716, Noemí, «El cliente enviará corrección»). Era el tope que Marcelo aprobó (3 pasadas): ésta no lleva otro revisor, así que **su nota no está medida**.

@@ -50,10 +50,12 @@ export function nivelDeTiempo(stage, h) {
 
 // v10.84.178 — los festivos de ley (LFT art. 74) no cuentan: el 16-sep-2026 no hubo ni un movimiento en la bitácora, y desde mayo no hay otro día hábil vacío (el 2-nov, que no es de ley, hubo 81).
 //   Sin esto, el lunes 16-nov le sumaba 9 horas a quien tuviera la orden.
+// v10.84.183 — Marcelo, 5-nov: «para días que no se trabajan sólo damos los días festivos de ley, investígalos». Ni Semana Santa, ni el 2-nov, ni el 12 o el 24-dic. La lista es la del art. 74 de la LFT (texto de la Cámara de Diputados,
+//   última reforma DOF 14-may-2026): faltaba la fracción VII, el 1-oct de cada seis años, cuando cambia el gobierno (DOF 30-sep-2024: 2024, 2030…). La IX, la jornada electoral, siempre es en domingo (primer domingo de junio, LGIPE art. 22; el 6-jun-2027), y el domingo ya no cuenta.
 const lunesNumero = (y, m, n) => 1 + ((8 - new Date(y, m, 1).getDay()) % 7) + (n - 1) * 7;
 export function esFestivo(dia) {
   const y = dia.getFullYear(), m = dia.getMonth(), d = dia.getDate();
-  return (m === 0 && d === 1) || (m === 1 && d === lunesNumero(y, 1, 1)) || (m === 2 && d === lunesNumero(y, 2, 3)) || (m === 4 && d === 1) || (m === 8 && d === 16) || (m === 10 && d === lunesNumero(y, 10, 3)) || (m === 11 && d === 25);
+  return (m === 0 && d === 1) || (m === 1 && d === lunesNumero(y, 1, 1)) || (m === 2 && d === lunesNumero(y, 2, 3)) || (m === 4 && d === 1) || (m === 8 && d === 16) || (m === 9 && d === 1 && y >= 2024 && (y - 2024) % 6 === 0) || (m === 10 && d === lunesNumero(y, 10, 3)) || (m === 11 && d === 25);
 }
 
 const aMs = d => new Date(d).getTime();
