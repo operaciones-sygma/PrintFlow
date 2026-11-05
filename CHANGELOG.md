@@ -12,6 +12,22 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.178 — «Tiempo por etapa»: el P2 del color y lo menor de su crítica — 4-nov-2026
+
+**Qué pasaba.** Marcelo, 4-nov: «sí, sigamos haciendo pases de impeccable hasta dejarla lo más alta posible». Antes de pagar otro revisor, lo que la crítica ya dejó dicho y la 177 no hizo.
+
+**Qué se cambió** (la pantalla; la base no).
+- 🔑 **Una orden sana es casi monocroma** (el P2): el nombre de la etapa en tinta, el color de la etapa sólo en su punto, pastilla sólo en lo que pasa de lo normal, y regresar no es rojo (tiene su ícono y su palabra: «regresó 1 vez», antes «1 regresión» en rojo). Rojo y ámbar quedan sólo para tiempo. Eran ocho tonos en una orden sana y dos significados del rojo.
+- 🔑 **Todo en horas** (`duracion`): «22h», «105h», «1,284h». «2d» eran 18 h aquí y 48 h en «2d estancada» de la misma ventana; en una sola unidad se comparan de un vistazo, y ya no hay que recordar que «1d» son 9 h.
+- 🔑 **Los festivos de ley no cuentan** (`esFestivo`, LFT art. 74): el 16-sep-2026 no hubo ni un movimiento en la bitácora y desde mayo no hay otro día hábil vacío. Sin esto, el lunes 16-nov le sumaba 9 h a quien tuviera la orden. El texto de arriba lo dice.
+- **El resumen va dentro del botón**: se oye con su nombre, tocarlo abre, y deja de ser una pastilla de 40 px con letra de 11. Ícono de reloj, no de reproductor de video.
+- **Teclado y lector de pantalla**: el panel es una región a la que se llega con Tab y se desplaza con el teclado; adentro, una lista de etapas; `aria-controls`.
+- **Lo que está en curso avanza solo** (`useMinuto`), en el panel y en el encabezado.
+- **«Fuera de horario»** en vez de «<1m» cuando la etapa pasó entera fuera del horario (de 19:05 a 19:20): «<1m» queda para lo instantáneo.
+- **Las fechas dicen el día** (`fDia`, «lun 02-nov»), porque el aviso de arriba habla de fines de semana. **«Sin razón escrita»** cuando regresó sin razón. **Dirección** en vez de «Administrador». Lo que ya dice el nombre de la etapa no se repite («Empaque · Gerardo» sin «la pasó Gerardo»); sin «· fin» y sin «aquí ahora» junto a «en curso».
+
+**Cómo se probó.** **Vuelta 1**, antes del arreglo, con las cuentas a mano: caían 34 de 110 en `tiempos`. **Vuelta 2** (10 casos, ninguna falla de la app): Tab entra y sale del panel, el teclado en la ficha abierta no abre el detalle y el foco se ve (ses-166, con la app real, que es la que trae el CSS global), una etapa que no conoce, regresar dos veces, lo de fuera con pausa, dos pausas, pausada y arriba de lo normal, mil horas, y nombres raros con un motivo sin cortes a 300 px. **Como pasaron a la primera, se sabotearon**: sin lo que vigila, cada una cae por su causa. Al prepararlo se vio que dos no detectaban nada (tie-124 no veía «en espera <1m» y tie-126 no traía nada sin cortes, y se corrigieron), y que quitarle el respaldo a `nombreEtapa` no rompía tie-116, porque la cuenta ya cae al id: lo que la protege es `st?.c`.
+
 ## v10.84.177 — «Tiempo por etapa» contesta quién la detuvo: su crítica independiente (22/40) — 4-nov-2026
 
 **Qué pasaba.** Marcelo pidió la crítica (`/impeccable`); un revisor independiente dio **22/40**, cuatro P1 y un P2 (snapshot `.impeccable/critique/2026-11-05T00-00-17Z__src-app-jsx-stageflowhistory.md`): contestaba quién tardó en Validar y por qué se repite una etapa, pero no quién detuvo la orden, y a veces señalaba a quien no fue. Medido en

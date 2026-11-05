@@ -2474,7 +2474,7 @@ await caso("ses-163-tiempo-por-etapa-con-la-bitacora-de-la-base", async ({ p, s 
   const dlg = p.getByRole("dialog").first();
   await dlg.getByRole("button", { name: /Tiempo por etapa/ }).click(); await p.waitForTimeout(200);
   const t = (await dlg.innerText()).replace(/\s+/g, " ");
-  ok("ses-163-tiempo-por-etapa-con-la-bitacora-de-la-base", /Noemí[^·]{0,40}validó/.test(t) && /Gerardo[^·]{0,40}validó/.test(t) && /En fila/.test(t) && /Procesadora/.test(t) && /Máquina · Gerardo/.test(t) && /Printmaster 52/.test(t) && /Polar 115/.test(t) && /aquí ahora/.test(t), `el detalle: «${(t.match(/Tiempo por etapa.{0,420}/) || [t.slice(0, 200)])[0]}»`);
+  ok("ses-163-tiempo-por-etapa-con-la-bitacora-de-la-base", /Noemí[^·]{0,40}validó/.test(t) && /Gerardo[^·]{0,40}validó/.test(t) && /En fila/.test(t) && /Procesadora/.test(t) && /Máquina · Gerardo/.test(t) && /Printmaster 52/.test(t) && /Polar 115.{0,80}ahora/.test(t), `el detalle: «${(t.match(/Tiempo por etapa.{0,420}/) || [t.slice(0, 200)])[0]}»`);
 });
 
 // el mismo panel en la ficha abierta («Historial y notas»), que es más angosta: se lee y nada se sale, en las dos pantallas de Marcelo, y tocarlo no abre el detalle
@@ -2513,6 +2513,27 @@ await caso("ses-165-el-resumen-con-la-bitacora-de-la-base", async ({ p, s }) => 
   const dlg = p.getByRole("dialog").first();
   const t = (await dlg.innerText()).replace(/\s+/g, " "), res = await dlg.locator("[data-resumen]").count();
   ok("ses-165-el-resumen-con-la-bitacora-de-la-base", res === 1 && /Lleva \S+( \S+)? de trabajo · /.test(t) && /Máquina \S+/.test(t) && /lleva \S+( \S+)? en Máquina/.test(t), `resumen ${res}; «${(t.match(/Tiempo por etapa.{0,200}/) || [t.slice(0, 200)])[0]}»`);
+});
+
+// v10.84.178 — con la app real, en la ficha abierta (que es un `role=button`): el teclado dentro del panel no abre el detalle, y el panel enseña su foco (el CSS global, que sólo trae la app)
+await caso("ses-166-el-teclado-en-el-panel-no-abre-el-detalle", async ({ p, s }) => {
+  const ev = (h, to_stage, by_user, action) => ({ order_id: "OP-P-0958", action, by_user, color: "#8e8e93", created_at: haceH(h), to_stage });
+  s.filas = { orders: [ordenK("P-0958", { stage: "in_production", created_at: haceH(120), validated_by_production: true, validated_by_preprensa: true, current_machine: "off_pm52", machine_queue_position: 0 })],
+    order_timeline: [ev(120, "draft", "secretaria", "📋 Orden creada"), ev(119, null, "preprensa", "✅ Validada por Pre-prensa"), ev(100, null, "produccion", "✅ Validada por Producción"),
+      ev(100, "design", "produccion", "📝 → 🎨 Ambos validaron → Diseño"), ev(50, "in_production", "produccion", "🏭 Printmaster 52")] };
+  await abrirYEntrar(p, s, "marcelo");
+  await esperarMenu(p, /^Todas|^Pendientes/); await despertar(p);
+  await p.locator('button[title="Todas"]').first().click(); await p.waitForTimeout(800);
+  const ficha = fichaDe(p, "P-0958");
+  await ficha.getByRole("button", { name: /Historial y notas de P-0958/ }).click(); await p.waitForTimeout(250);
+  const b = ficha.getByRole("button", { name: /Tiempo por etapa/ });
+  await b.focus(); await p.keyboard.press("Enter"); await p.waitForTimeout(250);
+  const abierto = await b.getAttribute("aria-expanded"), d1 = await p.getByRole("dialog").count();
+  await p.keyboard.press("Tab"); await p.waitForTimeout(100);
+  const foco = await p.evaluate(() => { const a = document.activeElement, s = getComputedStyle(a); return { rol: a.getAttribute("role"), anillo: s.outlineStyle !== "none" && parseFloat(s.outlineWidth) > 0 }; });
+  await p.keyboard.press("Enter"); await p.waitForTimeout(250);
+  const d2 = await p.getByRole("dialog").count();
+  ok("ses-166-el-teclado-en-el-panel-no-abre-el-detalle", abierto === "true" && d1 === 0 && foco.rol === "region" && foco.anillo && d2 === 0, JSON.stringify({ abierto, d1, foco, d2 }));
 });
 
 await browser.close();

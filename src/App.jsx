@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect, lazy, Suspense, Component } from "react";
 import { corregirPrecioEnLaBase, capturarPrecioEnLaBase, revisarPrecioFoliado, corregirPrecioFoliado, corregirRestoEnLaBase } from "./lib/corregirPrecio.js"; // v10.84.112 — «Corregir precio» contra la base, probado con Node (v10.84.115: y «Capturar precio»; v10.84.174: y lo que falta de una orden por partes)
-import { tiempoPorEtapa, duracion, nivelDeTiempo, HORAS_DE_UN_DIA, HORARIO_EN_PALABRAS } from "./lib/tiempoPorEtapa.js"; // v10.84.175 — «Tiempo por etapa», probado con Node contra las bitácoras de producción
+import { tiempoPorEtapa, duracion, nivelDeTiempo, HORARIO_EN_PALABRAS } from "./lib/tiempoPorEtapa.js"; // v10.84.175 — «Tiempo por etapa», probado con Node contra las bitácoras de producción
 import { cancelarUnaDelLote } from "./lib/cancelarEnLote.js"; // v10.84.113 — «Cancelaciones» cancela cada orden completa, probado con Node
 import { cuadrarPartes } from "./lib/cuadrarPartes.js"; // v10.84.3 — aritmetica del reparto, probada con Node
 import { proponerPiezas, descripcionDeOrden } from "./lib/proponerPiezas.js"; // v10.84.102 — casar los conceptos de un CFDI con las órdenes del plan, probado con Node
@@ -3378,6 +3378,16 @@ function bizDaysSince(date){
 // Vuelve objetivo el "se echan la bolita": el registro muestra exactamente cuándo entró/salió de cada etapa y quién.
 // v10.84.175 — la cuenta se fue a src/lib/tiempoPorEtapa.js (ahí está por qué): quién tardó en Validar, Noemí o Gerardo; una etapa con sus pasos (cada máquina, CTP y Procesadora); la razón de lo que
 //   regresó; lo entregado se cierra; y sólo cuenta el horario de trabajo, y lo dice arriba. Cada tiempo va en su columna a la derecha y en Geist Mono: el panel se recorre de arriba abajo buscando el mayor.
+// v10.84.178 — quien firma, por su nombre. «Administrador» no es una persona: la bitácora guarda el rol, y en la app es Dirección
+const nombreDeFirma=q=>q==="system"?"Sistema":q==="admin"?"Dirección":AUTHOR_NAME[q]||q;
+// v10.84.178 — la fecha con su día: «lun 02-nov, 01:49 p.m.» (todo el texto de arriba habla de fines de semana y las fechas no los enseñaban)
+const fDia=d=>{const t=new Date(d);return isNaN(t.getTime())?"":t.toLocaleDateString("es-MX",{weekday:"short"}).replace(".","")+" "+fDT(d);};
+// v10.84.178 — lo que está en curso avanza solo mientras se mira
+function useMinuto(){
+  const [n,setN]=useState(0);
+  useEffect(()=>{const id=setInterval(()=>setN(x=>x+1),60000);return()=>clearInterval(id);},[]);
+  return n;
+}
 // v10.84.177 — la misma cuenta para el panel y para el encabezado del detalle
 function tiemposDeLaOrden(o){
   // v10.73.44b — tope de una pausa AÚN ABIERTA: el más TEMPRANO entre (a) vencimiento snooze_until y (b) auto-lift far_due
@@ -3386,13 +3396,14 @@ function tiemposDeLaOrden(o){
   const _capUntil=o?.snooze_until?new Date(String(o.snooze_until).slice(0,10)+"T23:59:59").toISOString():null;
   const _capFarDue=(o?.snooze_kind==="far_due"&&o?.due_date)?bizDaysBefore(o.due_date,5).toISOString():null;
   const topePausa=(_capUntil&&_capFarDue)?(_capUntil<_capFarDue?_capUntil:_capFarDue):(_capUntil||_capFarDue);
-  return tiempoPorEtapa(o,{ahora:new Date().toISOString(),topePausa,secuencia:STAGE_SEQUENCE,responsable:stage=>orderResponsible({...o,stage})?.name,persona:q=>q==="system"?"Sistema":AUTHOR_NAME[q]||q,nombreEtapa:s=>SM[s]?.lt||s});
+  return tiempoPorEtapa(o,{ahora:new Date().toISOString(),topePausa,secuencia:STAGE_SEQUENCE,responsable:stage=>orderResponsible({...o,stage})?.name,persona:nombreDeFirma,nombreEtapa:s=>SM[s]?.lt||s});
 }
 // v10.84.177 — abierto o cerrado se recuerda entre órdenes, en esta sesión (su crítica: Marcelo revisa decenas, y cada orden arrancaba cerrada)
 let TIEMPOS_ABIERTO=false;
 // v10.84.177 — en el encabezado, junto a «Le toca a»: cuánto lleva en la etapa, sin ir hasta el panel. Sólo si pasa de lo normal se pinta y lo dice
 function TiempoEnLaEtapa({order:o}){
-  const b=useMemo(()=>tiemposDeLaOrden(o).bloques.find(x=>x.current),[o]);
+  const minuto=useMinuto();
+  const b=useMemo(()=>tiemposDeLaOrden(o).bloques.find(x=>x.current),[o,minuto]);
   if(!b) return null;
   const n=nivelDeTiempo(b.stage,b.hours),c=n==="doble"?C.dnInk:n==="sobre"?C.wnInk:null;
   return <span title={"Sólo cuenta el horario de trabajo: lunes a viernes, "+HORARIO_EN_PALABRAS} style={c?{color:c,fontWeight:600}:undefined}>{n?<WarningIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>:null}lleva <b style={{color:c||C.tx}}>{duracion(b.hours)}</b> {b.fuera?"con "+b.fuera:"en "+(SM[b.stage]?.lt||b.stage)}{n?" · más de lo normal":""}</span>;
@@ -3403,15 +3414,17 @@ function StageFlowHistory({order:o,estilo}){
   //   botón arriba. v10.84.177 — sólo cuando lo abre la persona: al abrir otra orden con el panel recordado, la ventana no salta.
   const raizRef=useRef(null),pidioAbrir=useRef(false);
   useLayoutEffect(()=>{if(open&&pidioAbrir.current)raizRef.current?.scrollIntoView({block:"nearest",behavior:"instant"});pidioAbrir.current=false;},[open]);
-  const data=useMemo(()=>tiemposDeLaOrden(o),[o]);
+  const minuto=useMinuto();
+  const data=useMemo(()=>tiemposDeLaOrden(o),[o,minuto]);
   if(!data.bloques.length) return null;
   const alternar=()=>{pidioAbrir.current=true;TIEMPOS_ABIERTO=!open;setOpen(!open);};
-  // v10.84.177 — el color dice que pasó de lo normal de SU etapa (`nivelDeTiempo`): ámbar y rojo, con ícono y nombre accesible; lo demás, en gris
+  // v10.84.177 — el color dice que pasó de lo normal de SU etapa (`nivelDeTiempo`): ámbar y rojo, con ícono y nombre accesible. v10.84.178 — y sólo eso: el nombre de la etapa va en tinta, el color de la etapa
+  //   sólo en su punto, y regresar no es rojo (tiene su ícono y su palabra). Antes, ocho tonos en una orden sana y dos significados del rojo. Pastilla sólo en lo que rebasa: una marca en cada renglón no distingue nada.
   const TONO={sobre:C.amb,doble:C.dn};
   const dichoDe=n=>n==="doble"?"el doble de lo normal":"más de lo normal";
   const cifra={fontFamily:"'Geist Mono',monospace",whiteSpace:"nowrap"};
   const aviso=n=>n?<WarningIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>:null;
-  const nombreDe=q=>q?(q==="system"?"Sistema":AUTHOR_NAME[q]||q):null;
+  const nombreDe=q=>q?nombreDeFirma(q):null;
   // v10.84.175 — los renglones de adentro de una etapa (cada validación, cada paso, cada pausa): comparten sus columnas, y el tiempo cae bajo el total de la etapa para leerlos de arriba abajo
   const renglon=(n,stage,f)=>{const niv=f.pausa?null:nivelDeTiempo(stage,f.h);return <div key={f.k} style={{display:"contents"}}>
     <span style={{gridColumn:1,gridRow:n+1,fontSize:11,fontWeight:f.fuerte?700:500,color:C.tx,overflowWrap:"anywhere"}}>{f.nombre}</span>
@@ -3419,53 +3432,63 @@ function StageFlowHistory({order:o,estilo}){
     <span style={{gridColumn:2,gridRow:n+1,fontSize:10,color:C.t2,minWidth:0,overflowWrap:"anywhere"}}>{f.meta}</span>
   </div>;};
   const rejilla={display:"grid",gridTemplateColumns:"fit-content(45%) minmax(0,1fr) auto",columnGap:10,rowGap:3,alignItems:"baseline",marginTop:4};
-  const r=data.resumen;
+  const r=data.resumen,idPanel="tiempos-"+String(o.id||"")+(estilo?"-d":"-f");
   const hayLento=data.bloques.some(b=>!b.endpoint&&(nivelDeTiempo(b.stage,b.hours)||(b.validaciones||[]).some(v=>nivelDeTiempo(b.stage,v.hours))||(b.pasos.length>1&&b.pasos.some(p=>nivelDeTiempo(b.stage,p.hours)))));
   return <div ref={raizRef} onClick={e=>e.stopPropagation()} style={{marginTop:6,scrollMarginTop:8,...estilo}}>
-    <button aria-expanded={open} onClick={alternar} style={{...bs(C.sf,C.t2),boxShadow:"0 0 0 0.5px "+C.bd,padding:"4px 10px",fontSize:11,gap:4}}><FastForwardIcon size={11} weight="bold"/>Tiempo por etapa{data.regs>0?<span style={{color:C.dnInk,fontWeight:700}}> · {data.regs} regresi{data.regs===1?"ón":"ones"}</span>:null} {open?<CaretUpIcon size={10} weight="bold"/>:<CaretDownIcon size={10} weight="bold"/>}</button>
-    {/* v10.84.177 — el P1 de su crítica: contesta sin abrir. Cuánto lleva y de quién, el mayor primero; lo pausado aparte */}
-    <div data-resumen="" title={"Sólo cuenta el horario de trabajo: lunes a viernes, "+HORARIO_EN_PALABRAS} style={{marginTop:6,fontSize:11,lineHeight:1.5,color:C.t2,overflowWrap:"anywhere"}}>
-      <b style={{fontSize:12,fontWeight:700,color:C.tx}}>{r.verbo} {duracion(r.total)} de trabajo</b>
-      {r.rubros.map((x,i)=><span key={x.quien} style={i===0?{color:C.tx,fontWeight:600}:undefined}> · {x.quien} {duracion(x.hours)}</span>)}
-      {r.pausa>0?<span> · en espera {duracion(r.pausa)}, no cuenta</span>:null}
-    </div>
-    {open&&<div style={{marginTop:8}}>
-      {/* v10.84.176 — qué cuentan los tiempos, ANTES de leerlos (Marcelo, 4-nov: «si las horas sólo cuenta el tiempo en esa ventana agrega un texto que lo aclare»). Hasta abajo y en cursivas no se veía: con un panel largo quedaba fuera de la pantalla, y sin esto «2d» se lee como 48 horas. */}
+    {/* v10.84.177 — el P1 de su crítica: contesta sin abrir. Cuánto lleva y de quién, el mayor primero; lo pausado aparte. v10.84.178 — el resumen va DENTRO del botón: se oye con su nombre, tocarlo abre, y deja de ser una pastilla de 40 px con letra de 11 */}
+    <button aria-expanded={open} aria-controls={idPanel} onClick={alternar} style={{display:"block",width:"100%",minHeight:40,textAlign:"left",background:C.sf,border:"none",boxShadow:"0 0 0 0.5px "+C.bd,borderRadius:10,padding:"8px 12px",cursor:"pointer",fontFamily:"inherit"}}>
+      <span style={{display:"flex",alignItems:"center",gap:5,fontSize:11,fontWeight:600,color:C.t2}}><ClockIcon size={12} weight="bold"/>Tiempo por etapa{data.regs>0?<span style={{color:C.tx}}>· regresó {data.regs} {data.regs===1?"vez":"veces"}</span>:null}<span style={{marginLeft:"auto",display:"inline-flex"}}>{open?<CaretUpIcon size={10} weight="bold"/>:<CaretDownIcon size={10} weight="bold"/>}</span></span>
+      <span data-resumen="" title={"Sólo cuenta el horario de trabajo: lunes a viernes, "+HORARIO_EN_PALABRAS} style={{display:"block",marginTop:4,fontSize:11,lineHeight:1.5,color:C.t2,overflowWrap:"anywhere"}}>
+        <b style={{fontSize:12,fontWeight:700,color:C.tx}}>{r.verbo} {duracion(r.total)} de trabajo</b>
+        {r.rubros.map((x,i)=><span key={x.quien} style={i===0?{color:C.tx,fontWeight:600}:undefined}> · {x.quien} {duracion(x.hours)}</span>)}
+        {r.pausa>0?<span> · en espera {duracion(r.pausa)}, no cuenta</span>:null}
+      </span>
+    </button>
+    {/* v10.84.178 — una región a la que se llega con Tab y se desplaza con el teclado; adentro, una lista de etapas (31 renglones sueltos, sin saltar de una a otra) */}
+    {open&&<div id={idPanel} role="region" aria-label={"Tiempo por etapa de "+(o.production_number||o.id)} tabIndex={0} style={{marginTop:10,borderRadius:8}}>
+      {/* v10.84.176 — qué cuentan los tiempos, ANTES de leerlos (Marcelo, 4-nov: «si las horas sólo cuenta el tiempo en esa ventana agrega un texto que lo aclare»). Hasta abajo y en cursivas no se veía: con un panel largo quedaba fuera de la pantalla. */}
       <div style={{marginBottom:10,lineHeight:1.45}}>
         <div style={{fontSize:11,fontWeight:500,color:C.t2}}>Los tiempos sólo cuentan el horario de trabajo: lunes a viernes, {HORARIO_EN_PALABRAS}.</div>
-        <div style={{fontSize:10,color:C.t2,marginTop:2}}>No cuentan la comida, las noches, los fines de semana ni las pausas «En espera». «1d» son {HORAS_DE_UN_DIA} horas de trabajo.{data.bloques.some(b=>b.validaciones)?" En Validar, cada quien cuenta desde que la orden entró.":""}{hayLento?" En ámbar, lo que pasó de lo normal de su etapa; en rojo, el doble.":""}</div>
+        <div style={{fontSize:10,color:C.t2,marginTop:2}}>No cuentan la comida, las noches, los fines de semana, los festivos ni las pausas «En espera».{data.bloques.some(b=>b.validaciones)?" En Validar, cada quien cuenta desde que la orden entró.":""}{hayLento?" En ámbar, lo que pasó de lo normal de su etapa; en rojo, el doble.":""}</div>
       </div>
-      {data.bloques.map((b,i)=>{ const st=SM[b.stage]; const niv=nivelDeTiempo(b.stage,b.hours); const durC=TONO[niv]||C.t2; const c=b.isReg?C.dn:(st?.c||C.t3); const ultimo=i===data.bloques.length-1;
-        const varios=b.pasos.length>1, solo=b.pasos[0], quien=nombreDe(b.by), enEspera=b.current&&snoozeActive(o);
-        // cómo llegó: quién la capturó, la pasó o la regresó (de ese tiempo responde quien dice el nombre de la etapa)
-        const llego=b.inicial?"Capturada "+fDT(b.at)+(quien?" · "+quien:""):b.isReg?"Regresó "+fDT(b.at)+(quien?" · la regresó "+quien:""):"Entró "+fDT(b.at)+(quien?" · la pasó "+quien:"");
+      <ol style={{listStyle:"none",margin:0,padding:0}}>
+      {data.bloques.map((b,i)=>{ const st=SM[b.stage]; const niv=nivelDeTiempo(b.stage,b.hours); const c=st?.c||C.t3; const ultimo=i===data.bloques.length-1;
+        const varios=b.pasos.length>1, solo=b.pasos[0], quien=nombreDe(b.by), estado=b.current?(snoozeActive(o)?"en espera · ":"en curso · "):"";
+        // cómo llegó: quién la capturó, la pasó o la regresó. v10.84.178 — lo que ya dice el nombre de la etapa no se repite: «Empaque · Gerardo» sin «la pasó Gerardo»
+        const laPaso=q=>q&&q!==b.responsable?" · la pasó "+q:"";
+        const sinRazon=b.isReg&&!b.razon?" · sin razón escrita":"";
+        const llego=b.inicial?"Capturada "+fDia(b.at)+(quien?" · "+quien:""):b.isReg?"Regresó "+fDia(b.at)+(quien?" · la regresó "+quien:"")+sinRazon:"Entró "+fDia(b.at)+laPaso(quien);
         const turnoDe=p=>(p.turno?" · turno "+p.turno:"")+(p.espero!=null?" · esperó su turno "+duracion(p.espero):"");
+        const firmaDePaso=p=>{const q=nombreDe(p.by);return q&&q!==b.responsable?" · "+q:"";};
         const filas=[...(b.validaciones||[]).map(v=>({k:"v"+v.rol,nombre:v.quien,h:v.hours,fuerte:v.ultima,meta:v.falta?<span style={{color:C.wnInk,fontWeight:600}}><HourglassIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>falta validar</span>
-            :v.at?"validó "+fDT(v.at)+(v.por?" · por "+v.por:"")+(v.ultima?" · al último":"")
+            :v.at?"validó "+fDia(v.at)+(v.por?" · por "+v.por:"")+(v.ultima?" · al último":"")
             :v.sinHora?"validó · la bitácora no guardó la hora"
             :"no validó"+(v.pasoPor?" · la pasó "+v.pasoPor:"")})),
-          ...(varios?b.pasos.map((p,n)=>({k:"p"+n,nombre:p.etiqueta,h:p.hours,meta:fDT(p.at)+(n===0?(quien?(b.isReg?" · la regresó ":" · la pasó ")+quien:""):(nombreDe(p.by)?" · "+nombreDe(p.by):""))+turnoDe(p)+(p.current?" · aquí ahora":"")})):[]),
+          ...(varios?b.pasos.map((p,n)=>({k:"p"+n,nombre:p.etiqueta,h:p.hours,meta:fDia(p.at)+(n===0?(b.isReg?(quien?" · la regresó "+quien:"")+sinRazon:laPaso(quien)):firmaDePaso(p))+turnoDe(p)+(p.current?" · ahora":"")})):[]),
           // v10.84.177 — la pausa deja rastro: no cuenta, pero se dice quién la puso y por qué
-          ...(b.pausas||[]).map((p,n)=>({k:"e"+n,nombre:"En espera",h:p.hours,pausa:true,meta:"no cuenta · "+(p.abierta?"desde ":"")+fDT(p.at)+(p.quien?" · la puso "+p.quien:"")+(p.motivo?" · "+p.motivo:"")}))];
-        return <div key={i} data-etapa={b.stage} style={{display:"flex",gap:10,alignItems:"stretch"}}>
+          ...(b.pausas||[]).map((p,n)=>({k:"e"+n,nombre:"En espera",h:p.hours,pausa:true,meta:"no cuenta · "+(p.abierta?"desde ":"")+fDia(p.at)+(p.quien?" · la puso "+p.quien:"")+(p.motivo?" · "+p.motivo:"")}))];
+        return <li key={i} data-etapa={b.stage} style={{display:"flex",gap:10,alignItems:"stretch"}}>
           <div style={{display:"flex",flexDirection:"column",alignItems:"center",flexShrink:0,paddingTop:3}}>
             <div style={{width:10,height:10,borderRadius:"50%",background:c,flexShrink:0,boxShadow:b.current?"0 0 0 3px "+c+"22":"none"}}/>
             {!ultimo&&<div style={{width:2,flex:1,minHeight:16,background:C.bd,marginTop:2}}/>}
           </div>
           <div style={{flex:1,minWidth:0,paddingBottom:ultimo?0:10}}>
             <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-              {b.isReg&&<span title="Regresión (retrocedió de etapa)" style={{display:"inline-flex"}}><ArrowUUpLeftIcon size={11} weight="bold" color={C.dnInk}/></span>}
-              <span style={{fontSize:12,fontWeight:700,color:tintaAA(c,4.6),overflowWrap:"anywhere",minWidth:0}}><StageLbl stage={b.stage}/>{b.fuera?<span style={{fontSize:11,fontWeight:600,color:C.tx}}> · con {b.fuera}{b.responsable?" · la sigue "+b.responsable:""}</span>:b.responsable?<span style={{fontSize:11,fontWeight:600,color:C.tx}}> · {b.responsable}</span>:null}</span>
+              {b.isReg&&<span title="Regresó de etapa" style={{display:"inline-flex"}}><ArrowUUpLeftIcon size={11} weight="bold" color={C.tx}/></span>}
+              <span data-nombre-etapa="" style={{fontSize:12,fontWeight:700,color:C.tx,overflowWrap:"anywhere",minWidth:0}}><StageLbl stage={b.stage}/>{b.fuera?<span style={{fontSize:11,fontWeight:500,color:C.t2}}> · con {b.fuera}{b.responsable?" · la sigue "+b.responsable:""}</span>:b.responsable?<span style={{fontSize:11,fontWeight:500,color:C.t2}}> · {b.responsable}</span>:null}</span>
               {b.vez>1&&<span style={{fontSize:10,fontWeight:600,color:C.t2}}>{b.vez}.ª vez</span>}
-              {!b.endpoint&&<span data-nivel={niv||undefined} aria-label={niv?duracion(b.hours)+", "+dichoDe(niv):undefined} title={niv?dichoDe(niv)[0].toUpperCase()+dichoDe(niv).slice(1)+" para esta etapa":undefined} style={{marginLeft:"auto",fontSize:11,fontWeight:700,color:tintaAA(durC),background:durC+"14",padding:"1px 7px",borderRadius:5,whiteSpace:"nowrap"}}>{aviso(niv)}{b.current?(enEspera?"en espera · ":"en curso · "):""}<span style={cifra}>{duracion(b.hours)}</span></span>}
+              {!b.endpoint&&(niv
+                ?<span data-nivel={niv} aria-label={duracion(b.hours)+", "+dichoDe(niv)} title={dichoDe(niv)[0].toUpperCase()+dichoDe(niv).slice(1)+" para esta etapa"} style={{marginLeft:"auto",fontSize:11,fontWeight:700,color:tintaAA(TONO[niv]),background:TONO[niv]+"14",padding:"1px 7px",borderRadius:5,whiteSpace:"nowrap"}}>{aviso(niv)}{estado}<span style={cifra}>{duracion(b.hours)}</span></span>
+                :<span style={{marginLeft:"auto",fontSize:11,color:C.t2,paddingRight:7,whiteSpace:"nowrap"}}>{estado}{b.fueraDeHorario?"fuera de horario":<span style={{...cifra,fontSize:12,fontWeight:600,color:C.tx}}>{duracion(b.hours)}</span>}</span>)}
             </div>
-            {b.endpoint&&<div style={{fontSize:10,color:C.t2,marginTop:2}}>{fDT(b.at)}{quien?" · "+quien:""} · fin</div>}
-            {!b.endpoint&&!varios&&<div style={{fontSize:10,color:C.t2,marginTop:2,overflowWrap:"anywhere"}}>{solo.maquina?<><span style={{fontWeight:600,color:C.tx}}>{solo.maquina}</span>{turnoDe(solo)} · </>:null}{llego}{b.current?" · aquí ahora":""}</div>}
+            {b.endpoint&&<div style={{fontSize:10,color:C.t2,marginTop:2}}>{fDia(b.at)}{quien?" · "+quien:""}</div>}
+            {!b.endpoint&&!varios&&<div style={{fontSize:10,color:C.t2,marginTop:2,overflowWrap:"anywhere"}}>{solo.maquina?<><span style={{fontWeight:600,color:C.tx}}>{solo.maquina}</span>{turnoDe(solo)} · </>:null}{llego}</div>}
             {b.razon&&<div style={{fontSize:11,color:C.tx,marginTop:2,overflowWrap:"anywhere"}}>Razón: {b.razon}</div>}
             {filas.length>0&&<div style={rejilla}>{filas.map((f,n)=>renglon(n,b.stage,f))}</div>}
           </div>
-        </div>;
+        </li>;
       })}
+      </ol>
     </div>}
   </div>;
 }

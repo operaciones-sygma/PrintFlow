@@ -35,6 +35,14 @@ export function nivelDeTiempo(stage, h) {
   return h >= 2 * normal ? "doble" : h >= normal ? "sobre" : null;
 }
 
+// v10.84.178 — los festivos de ley (LFT art. 74) no cuentan: el 16-sep-2026 no hubo ni un movimiento en la bitácora, y desde mayo no hay otro día hábil vacío (el 2-nov, que no es de ley, hubo 81).
+//   Sin esto, el lunes 16-nov le sumaba 9 horas a quien tuviera la orden.
+const lunesNumero = (y, m, n) => 1 + ((8 - new Date(y, m, 1).getDay()) % 7) + (n - 1) * 7;
+export function esFestivo(dia) {
+  const y = dia.getFullYear(), m = dia.getMonth(), d = dia.getDate();
+  return (m === 0 && d === 1) || (m === 1 && d === lunesNumero(y, 1, 1)) || (m === 2 && d === lunesNumero(y, 2, 3)) || (m === 4 && d === 1) || (m === 8 && d === 16) || (m === 10 && d === lunesNumero(y, 10, 3)) || (m === 11 && d === 25);
+}
+
 const aMs = d => new Date(d).getTime();
 const alReloj = (dia, h) => new Date(dia.getFullYear(), dia.getMonth(), dia.getDate(), Math.floor(h), Math.round((h % 1) * 60)).getTime();
 
@@ -45,7 +53,7 @@ export function msDeJornada(a, b) {
   const dia = new Date(ini); dia.setHours(0, 0, 0, 0);
   while (dia.getTime() < fin && tope++ < 3660) {
     const dow = dia.getDay();
-    if (dow !== 0 && dow !== 6) for (const [de, hasta] of JORNADA_TRAMOS) {
+    if (dow !== 0 && dow !== 6 && !esFestivo(dia)) for (const [de, hasta] of JORNADA_TRAMOS) {
       const s = Math.max(ini, alReloj(dia, de)), e = Math.min(fin, alReloj(dia, hasta));
       if (e > s) ms += e - s;
     }
@@ -61,15 +69,15 @@ export function horasDeJornada(a, b, pausas) {
   return Math.max(0, ms) / 3600000;
 }
 
-// «<1m», «14m», «2h 19m», «2d 5h»: un día son las horas de un día de trabajo. Sin decimales desde v10.84.177: «2.3h» se lee como 2 horas 30
+// «<1m», «14m», «2h 19m», «22h», «1,284h». Sin decimales desde v10.84.177: «2.3h» se lee como 2 horas 30. v10.84.178 — todo en horas, sin días: «2d» eran 18 h aquí y 48 h en «2d estancada» de la misma ventana, y
+//   en una sola unidad se comparan de un vistazo.
 export function duracion(h) {
   if (h == null) return "—";
   const m = Math.round(h * 60);
   if (m < 1) return "<1m";
   if (m < 60) return m + "m";
-  if (h < HORAS_DE_UN_DIA) { const hs = Math.floor(m / 60), min = m % 60; return hs + "h" + (min ? " " + min + "m" : ""); }
-  const H = Math.round(h), d = Math.floor(H / HORAS_DE_UN_DIA), r = H - d * HORAS_DE_UN_DIA;   // por horas enteras: 17.6 h son «2d», no «1d 9h»
-  return d + "d" + (r ? " " + r + "h" : "");
+  if (h < 10) { const hs = Math.floor(m / 60), min = m % 60; return hs + "h" + (min ? " " + min + "m" : ""); }
+  return Math.round(h).toLocaleString("es-MX") + "h";
 }
 
 const ES_FINAL = s => /delivered|cancelled|stocked|maq_delivered|maq_cancelled|web_rejected/.test(s || "");
@@ -153,6 +161,8 @@ export function tiempoPorEtapa(o, { ahora, topePausa = null, secuencia = [], res
     const fin = esUltimo ? (b.endpoint ? b.at : (cierre || ahora)) : bloques[i + 1].at;
     b.current = esUltimo && !b.endpoint && !cierre && o.stage === b.stage;
     b.hours = horas(b.at, fin);
+    // v10.84.178 — lo que pasó todo fuera del horario no es «<1m»: de 19:05 a 19:20 hubo trabajo, y no cuenta
+    b.fueraDeHorario = !b.endpoint && msDeJornada(b.at, fin) === 0 && aMs(fin) - aMs(b.at) >= 600000;
     b.pasos.forEach((p, j) => { const ultPaso = j === b.pasos.length - 1, finPaso = ultPaso ? fin : b.pasos[j + 1].at;
       p.hours = horas(p.at, finPaso);
       p.current = b.current && ultPaso;

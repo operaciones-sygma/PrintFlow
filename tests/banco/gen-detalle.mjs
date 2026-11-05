@@ -82,7 +82,8 @@ const partes = [
   ...["bizMsBetween", "bizHoursBetween"].flatMap(n => opcional(L.some(l => l.startsWith("function " + n + "(")), () => line(new RegExp("^function " + n + "\\("), n))), line(/^function bizDaysBefore\(/, "bizDaysBefore"),
   // v10.84.177 — la cuenta del panel y del encabezado, y lo que recuerda si va abierto (si el App.jsx los trae: la corrida doble)
   ...opcional(L.some(l => l.startsWith("let TIEMPOS_ABIERTO")), () => line(/^let TIEMPOS_ABIERTO/, "TIEMPOS_ABIERTO")),
-  ...["tiemposDeLaOrden", "TiempoEnLaEtapa"].flatMap(n => opcional(L.some(l => l.startsWith("function " + n + "(")), () => fnBlock(n))),
+  ...["nombreDeFirma", "fDia"].flatMap(n => opcional(L.some(l => l.startsWith("const " + n + "=")), () => line(new RegExp("^const " + n + "="), n))),   // v10.84.178
+  ...["useMinuto", "tiemposDeLaOrden", "TiempoEnLaEtapa"].flatMap(n => opcional(L.some(l => l.startsWith("function " + n + "(")), () => fnBlock(n))),
   fnBlock("StageFlowHistory"), fnBlock("OrderChangeHistory"),
   ...["HexDelPantone"].flatMap(n => opcional(L.some(l => l.startsWith("function " + n + "(")), () => fnBlock(n))), fnBlock("PantoneChips"),
   fnBlock("PantoneInput"),   // el mismo campo del HEX en la forma de la orden (pantoneinput=1)
