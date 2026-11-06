@@ -62,7 +62,7 @@ ser nombre@sygma.mx»*. 6-nov: los pasos 1 a 3, ya, sin que nadie pierda acceso;
    ```
    Si alguien no entró con la nueva, `ligar` se niega y lo dice: se decide con Marcelo (esa persona sigue con su cuenta de hoy, o `ligar('…', p_sin_comprobar => true)` con su OK). Empezar por Marcelo: si algo sale mal, él lo ve primero.
 3. Las contraseñas débiles (la pregunta del 6-nov; `printflow-contrasenas-legibles`): lo que Marcelo decidió, en la memoria `una-sola-cuenta-sygma`.
-4. Subir, con su candado, las ramas `cuenta-29nov`: PrintFlow y Almacén piden el correo completo, y sin `@` dicen cómo se entra; Contabilidad, su letrero. La ley de la subida: base → app → Central.
+4. Lo que dicen las pantallas, en `paso5_pantallas.md` (sin escribir todavía: Almacén cambia todos los días y una rama de hoy no llegaría limpia): se escribe con sus pruebas y sube con su candado, una app a la vez. PrintFlow, ~24 min; Almacén, ~20; Contabilidad, 1. Orden: base → app → Central.
 5. **Probar**: Marcelo entra con `marcelo@sygma.mx` a las seis apps, y con la cuenta de pruebas se recorre sin escribir. Vuelta atrás ensayada a mano en Marcelo: `select cuentas_29nov.regresar('marcelo');` y `ligar` otra vez.
 
 **Lunes 30-nov:**

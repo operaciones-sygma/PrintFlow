@@ -32,4 +32,4 @@ Sin mandar. Cada uno, cuando el `LEEME.md` lo diga; los de la gente, por WhatsAp
 
 > Una sola cuenta: paso 4 aplicado a [las nueve personas o las que sean]. Quedan por apagar las cuentas viejas de [quienes no hayan entrado]. Vuelta atrás de cada quien: `select cuentas_29nov.regresar('nombre');`. El ensayo de Almacén puede arrancar.
 
-**La conversación de Almacén:** `tests/romper/base-real.mjs` lee las cuentas de la base por nombre, y su candado corre contra lo de verdad: lo que dice `login.mjs` de «Usuario» y de «Aquí se entra con tu usuario de PrintFlow» va en la rama `cuenta-29nov`.
+**La conversación de Almacén (antes de tocar su `Login.jsx`):** `tests/romper/base-real.mjs` lee las cuentas de la base por nombre, y su candado corre contra lo de verdad: con los cambios de correo y de renglón hay que volver a correrlo. Lo que cambia en su pantalla, en `paso5_pantallas.md`.
