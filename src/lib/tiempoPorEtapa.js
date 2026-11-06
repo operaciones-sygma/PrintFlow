@@ -171,11 +171,14 @@ const maquinaDe = t => {
 
 // `ahora`: ISO · `topePausa`: hasta cuándo corre una pausa todavía abierta (ISO o null) · `secuencia`: el orden de las etapas, para saber qué es regresar ·
 // `responsable(etapa)`: quién responde de ella · `persona(quien)`: su nombre, de lo que la bitácora guarda (rol o usuario).
+// `marcas`: "todas" · "sinRojo" (entregada a tiempo: el doble baja a ámbar) · "ninguna" (quien no es Dirección: los tiempos, sin marcas ni veredicto). v10.84.186 — devuelve `nivelDe`: quien pinte un nivel usa ése, no `nivelDeTiempo`.
 // `nombreEtapa(etapa)`: cómo se llama, para el rubro que no tiene persona.
 // Devuelve { bloques, regs, resumen }. Cada bloque: stage, at, by, responsable, fuera, hours, vez, isReg, razon, current, endpoint, inicial, pasos[{ etiqueta, maquina, turno, at, by, hours, current, espero }],
 // juntas{ etiquetas, at }, pausas[{ at, quien, motivo, abierta, hours }] y, en Validar, validaciones[{ rol, quien, por, at, hours, falta, sinHora, noValido, pasoPor, ultima }].
 // esperaAlCliente, nivel. resumen: { verbo, total, rubros[{ quien, tipo, hours, nivel, fila, quienes }], visibles, otros, pausa, pasados[{ quien, etapa, hours, nivel, normal, actual, bloque }], pausaAbierta{ at, motivo, quien }, conFuera{ quien, sigue } }.
-export function tiempoPorEtapa(o, { ahora, topePausa = null, secuencia = [], responsable = () => null, persona = x => x, nombreEtapa = x => x } = {}) {
+export function tiempoPorEtapa(o, { ahora, topePausa = null, secuencia = [], responsable = () => null, persona = x => x, nombreEtapa = x => x, marcas = "todas" } = {}) {
+  // v10.84.186 — Marcelo, 5-nov, por Central: lo que se entregó a tiempo no va en rojo (24 de 291 lo traían), y el rojo y el ámbar sólo los ve Dirección. «Se pasó» sigue siendo lo mismo: un «sobre» cuenta igual que un «doble» en la tabla de Analytics.
+  const nivelDe = (stage, h) => { const n = marcas === "ninguna" ? null : nivelDeTiempo(stage, h); return n === "doble" && marcas === "sinRojo" ? "sobre" : n; };
   const tl = (o?.timeline || []).filter(t => t?.date && !isNaN(aMs(t.date))).slice().sort((a, b) => aMs(a.date) - aMs(b.date));
   // ventana de pausa: desde «🔕 En espera» hasta el primer evento posterior que sea «🔔 Reactivada» o una transición real (los neutros —edición, merma, precio— no la
   //   cortan); si sigue abierta cierra en `topePausa` (si ya pasó) o ahora.
@@ -278,7 +281,7 @@ export function tiempoPorEtapa(o, { ahora, topePausa = null, secuencia = [], res
     const lista = (b.pausas ||= []), ult = lista[lista.length - 1];
     if (ult && ult.motivo === p.motivo) { ult.hours += h; ult.abierta = p.abierta; return; }   // v10.84.181 — seguidas con el mismo motivo son una: tres «En espera» eran la repetición que Marcelo no entendía
     lista.push({ at: p.start, quien: p.by ? persona(p.by) : null, motivo: p.motivo, abierta: p.abierta, hours: h }); });
-  bloques.forEach(b => { b.esperaAlCliente = (b.pausas || []).some(p => ESPERA_AL_CLIENTE.test(p.motivo || "")); b.nivel = b.esperaAlCliente ? null : nivelDeTiempo(b.stage, b.hours); });
+  bloques.forEach(b => { b.esperaAlCliente = (b.pausas || []).some(p => ESPERA_AL_CLIENTE.test(p.motivo || "")); b.nivel = b.esperaAlCliente ? null : nivelDe(b.stage, b.hours); });
   // de quién es cada tiempo: lo de fuera, de nadie; Máquina, su propio rubro; Validar, de quien falta o de quien llegó al último
   const rubros = new Map();
   const peorNivel = (a, b) => (a === "doble" || b === "doble" ? "doble" : a || b || null);
@@ -292,7 +295,7 @@ export function tiempoPorEtapa(o, { ahora, topePausa = null, secuencia = [], res
     if (b.validaciones) {
       const faltan = b.validaciones.filter(v => v.falta), conTiempo = b.validaciones.filter(v => v.hours != null);
       if (faltan.length) return suma(faltan.map(v => v.quien).join(" y "), "persona", b.hours, nivel);
-      if (conTiempo.length) { const ultimo = conTiempo.reduce((x, y) => (y.hours > x.hours ? y : x)); return suma("Validar", "validar", b.hours, nivelDeTiempo(b.stage, ultimo.hours), r => { r.quienes ||= {}; conTiempo.forEach(v => { r.quienes[v.quien] = (r.quienes[v.quien] || 0) + v.hours; }); }); }
+      if (conTiempo.length) { const ultimo = conTiempo.reduce((x, y) => (y.hours > x.hours ? y : x)); return suma("Validar", "validar", b.hours, nivelDe(b.stage, ultimo.hours), r => { r.quienes ||= {}; conTiempo.forEach(v => { r.quienes[v.quien] = (r.quienes[v.quien] || 0) + v.hours; }); }); }
     }
     suma(b.responsable || nombreEtapa(b.stage), b.responsable ? "persona" : "etapa", b.hours, nivel);
   });
@@ -301,8 +304,8 @@ export function tiempoPorEtapa(o, { ahora, topePausa = null, secuencia = [], res
   const pasados = [];
   vivos.forEach(b => {
     if (b.esperaAlCliente) return;
-    const quienes = (b.validaciones || []).filter(v => nivelDeTiempo(b.stage, v.hours));
-    if (quienes.length) return quienes.forEach(v => pasados.push({ quien: v.quien, etapa: b.stage, hours: v.hours, nivel: nivelDeTiempo(b.stage, v.hours), normal: loNormalDe(b.stage), actual: !!v.falta, validar: true, bloque: bloques.indexOf(b) }));
+    const quienes = (b.validaciones || []).filter(v => nivelDe(b.stage, v.hours));
+    if (quienes.length) return quienes.forEach(v => pasados.push({ quien: v.quien, etapa: b.stage, hours: v.hours, nivel: nivelDe(b.stage, v.hours), normal: loNormalDe(b.stage), actual: !!v.falta, validar: true, bloque: bloques.indexOf(b) }));
     if (b.nivel) pasados.push({ quien: b.stage === "in_production" ? "Máquina" : b.responsable, etapa: b.stage, hours: b.hours, nivel: b.nivel, normal: loNormalDe(b.stage), actual: !!b.current, bloque: bloques.indexOf(b) });
   });
   pasados.sort((x, y) => (y.actual ? 1 : 0) - (x.actual ? 1 : 0) || y.hours / y.normal - x.hours / x.normal);   // v10.84.182 — primero quien la tiene ahora
@@ -322,5 +325,5 @@ export function tiempoPorEtapa(o, { ahora, topePausa = null, secuencia = [], res
     conFuera: actual?.fuera ? { quien: actual.fuera, sigue: actual.responsable } : null };
   if (cierre) bloques.push({ stage: o.stage, at: cierre, by: porCierre, endpoint: true, current: false, isReg: false, razon: null, inicial: false, vez: 1, responsable: null, fuera: null, hours: null, pasos: [] });
   const regresos = bloques.filter(b => b.isReg);
-  return { bloques, regs: regresos.length, razonDelRegreso: regresos[regresos.length - 1]?.razon || null, resumen };
+  return { bloques, regs: regresos.length, razonDelRegreso: regresos[regresos.length - 1]?.razon || null, resumen, nivelDe };
 }

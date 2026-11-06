@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect, lazy, Suspense, Component } from "react";
 import { corregirPrecioEnLaBase, capturarPrecioEnLaBase, revisarPrecioFoliado, corregirPrecioFoliado, corregirRestoEnLaBase } from "./lib/corregirPrecio.js"; // v10.84.112 — «Corregir precio» contra la base, probado con Node (v10.84.115: y «Capturar precio»; v10.84.174: y lo que falta de una orden por partes)
-import { tiempoPorEtapa, tiempoPorPersona, duracion, duracionFina, nivelDeTiempo, loNormalDe, esFestivo, HORARIO_EN_PALABRAS, HORAS_DE_UN_DIA } from "./lib/tiempoPorEtapa.js"; // v10.84.175 — «Tiempo por etapa», probado con Node contra las bitácoras de producción
+import { tiempoPorEtapa, tiempoPorPersona, duracion, duracionFina, loNormalDe, esFestivo, HORARIO_EN_PALABRAS, HORAS_DE_UN_DIA } from "./lib/tiempoPorEtapa.js"; // v10.84.175 — «Tiempo por etapa», probado con Node contra las bitácoras de producción
 import { cancelarUnaDelLote } from "./lib/cancelarEnLote.js"; // v10.84.113 — «Cancelaciones» cancela cada orden completa, probado con Node
 import { cuadrarPartes } from "./lib/cuadrarPartes.js"; // v10.84.3 — aritmetica del reparto, probada con Node
 import { proponerPiezas, descripcionDeOrden } from "./lib/proponerPiezas.js"; // v10.84.102 — casar los conceptos de un CFDI con las órdenes del plan, probado con Node
@@ -2714,7 +2714,8 @@ const hoursAgo=d=>d?Math.round((Date.now()-new Date(d).getTime())/3600000):0;
 // v10.64.4 — horas HÁBILES transcurridas: NO cuenta sábados ni domingos (días completos).
 // Para "estancadas": una orden parada el viernes no acumula días durante el fin de semana.
 // Itera por día (incremento a medianoche local → seguro ante DST) restando el fin de semana.
-const bizHoursAgo=d=>{if(!d)return 0;const start=new Date(d).getTime();const now=Date.now();if(now<=start)return 0;let weekendMs=0;let cur=new Date(start);cur.setHours(0,0,0,0);let guard=0;while(cur.getTime()<now&&guard++<420){const dow=cur.getDay();const dayStart=cur.getTime();const nextMid=new Date(cur.getFullYear(),cur.getMonth(),cur.getDate()+1).getTime();if(dow===0||dow===6){const ds=Math.max(start,dayStart);const de=Math.min(now,nextMid);if(de>ds)weekendMs+=de-ds;}cur=new Date(nextMid);}return Math.round((now-start-weekendMs)/3600000);};
+// v10.84.186 — Marcelo, 5-nov: «festivos no cuentan para entrega, y se descuentan de estancada». Los de ley (`esFestivo`) salen de estas cuentas: `bizHoursAgo` (estancada), `bizDaysSince` (días en la etapa, la Torre), `bizDaysUntil` y `bizDaysBefore` (entrega lejana) y `calcDeliveryDate` (la fecha que se propone). Ninguna tiene gemela en la base ni en otra app (buscado el 5-nov), y las fechas ya guardadas no se reescriben.
+const bizHoursAgo=d=>{if(!d)return 0;const start=new Date(d).getTime();const now=Date.now();if(now<=start)return 0;let weekendMs=0;let cur=new Date(start);cur.setHours(0,0,0,0);let guard=0;while(cur.getTime()<now&&guard++<420){const dow=cur.getDay();const dayStart=cur.getTime();const nextMid=new Date(cur.getFullYear(),cur.getMonth(),cur.getDate()+1).getTime();if(dow===0||dow===6||esFestivo(cur)){const ds=Math.max(start,dayStart);const de=Math.min(now,nextMid);if(de>ds)weekendMs+=de-ds;}cur=new Date(nextMid);}return Math.round((now-start-weekendMs)/3600000);};
 // v10.43.1 FIX M4 — Traduce errores SQL crudos a mensajes legibles para Karla/Gerardo.
 // v10.43.2 FIX M5 — Cobertura de UNIQUE constraints (doble click).
 const humanizeStockError=err=>{
@@ -2750,9 +2751,9 @@ const WAIT_STAGES=["maquila_out","proof_client","maq_sent","maq_in_progress"];
 // Una orden produciendo activamente en CTP/Speedmaster/etc no debe disparar alertas de estancamiento
 // aunque pase mucho tiempo (un tiraje grande puede tomar horas/días en una sola máquina).
 // v10.73.18 — días HÁBILES que faltan para una fecha futura (para exentar pre-producción con entrega lejana)
-function bizDaysUntil(d){if(!d)return 0;const t=new Date(String(d).slice(0,10)+"T12:00:00");if(isNaN(t.getTime()))return 0;let cur=new Date();cur=new Date(cur.getFullYear(),cur.getMonth(),cur.getDate());const end=new Date(t.getFullYear(),t.getMonth(),t.getDate());let n=0;while(cur<end){cur.setDate(cur.getDate()+1);const dow=cur.getDay();if(dow!==0&&dow!==6)n++;if(n>365)break;}return n;}
+function bizDaysUntil(d){if(!d)return 0;const t=new Date(String(d).slice(0,10)+"T12:00:00");if(isNaN(t.getTime()))return 0;let cur=new Date();cur=new Date(cur.getFullYear(),cur.getMonth(),cur.getDate());const end=new Date(t.getFullYear(),t.getMonth(),t.getDate());let n=0;while(cur<end){cur.setDate(cur.getDate()+1);const dow=cur.getDay();if(dow!==0&&dow!==6&&!esFestivo(cur))n++;if(n>365)break;}return n;}
 // v10.73.44b — fecha n días hábiles ANTES de d (para topar la pausa far_due en su instante de auto-reactivación = due − 5 hábiles).
-function bizDaysBefore(d,n){const t=new Date(String(d).slice(0,10)+"T12:00:00");if(isNaN(t.getTime()))return new Date();let cur=new Date(t.getFullYear(),t.getMonth(),t.getDate()),c=0;while(c<n){cur.setDate(cur.getDate()-1);const dow=cur.getDay();if(dow!==0&&dow!==6)c++;if(c>365)break;}return cur;}
+function bizDaysBefore(d,n){const t=new Date(String(d).slice(0,10)+"T12:00:00");if(isNaN(t.getTime()))return new Date();let cur=new Date(t.getFullYear(),t.getMonth(),t.getDate()),c=0;while(c<n){cur.setDate(cur.getDate()-1);const dow=cur.getDay();if(dow!==0&&dow!==6&&!esFestivo(cur))c++;if(c>365)break;}return cur;}
 // v10.73.82 (scan w1sw90ei4, L4) — espejo module-level de las máquinas EN mantenimiento. getStale/diagnoseOrder son
 //   funciones puras module-level y no ven el state React `maintenance`; promoteLog tampoco quiere depender de él (o
 //   invalidaría los deps de 6 useCallback). El Set se sincroniza desde App con un useEffect keyed en [maintenance].
@@ -2955,7 +2956,7 @@ const calcDeliveryDate=(startDate,method,finishes)=>{
   while(added<totalDays){
     d.setDate(d.getDate()+1);
     const day=d.getDay(); // 0=dom, 6=sáb
-    if(day!==0&&day!==6)added++;
+    if(day!==0&&day!==6&&!esFestivo(d))added++;
   }
   return d.toISOString().slice(0,10);
 };
@@ -3391,7 +3392,7 @@ function bizDaysSince(date){
   const cur=new Date(from.getFullYear(),from.getMonth(),from.getDate());
   const n=new Date(); const end=new Date(n.getFullYear(),n.getMonth(),n.getDate());
   let d=0;
-  while(cur<end){ cur.setDate(cur.getDate()+1); const dow=cur.getDay(); if(dow!==0&&dow!==6)d++; if(d>365)break; }
+  while(cur<end){ cur.setDate(cur.getDate()+1); const dow=cur.getDay(); if(dow!==0&&dow!==6&&!esFestivo(cur))d++; if(d>365)break; }
   return d;
 }
 // 🗼 v10.58.52 — TORRE DE CONTROL: motor de diagnóstico central.
@@ -3413,22 +3414,23 @@ function useMinuto(){
   return n;
 }
 // v10.84.177 — la misma cuenta para el panel y para el encabezado del detalle
-function tiemposDeLaOrden(o){
+// v10.84.186 — `conMarcas`: lo que se pinta en el panel y en el encabezado. Lo entregado a tiempo no llega a rojo. La tabla de Analytics (sólo Dirección) la pide con marcas y cuenta lo mismo.
+function tiemposDeLaOrden(o,conMarcas=true){
   // v10.73.44b — tope de una pausa AÚN ABIERTA: el más TEMPRANO entre (a) vencimiento snooze_until y (b) auto-lift far_due
   // (due − 5 días hábiles, v10.73.44). Si el instante de lift es futuro (aún lejana), no topa (falla el test <end=ahora) → la
   // pausa sigue corriendo hasta ahora, correcto. Espeja en el timeline lo que snoozeActive ya hace computado.
   const _capUntil=o?.snooze_until?new Date(String(o.snooze_until).slice(0,10)+"T23:59:59").toISOString():null;
   const _capFarDue=(o?.snooze_kind==="far_due"&&o?.due_date)?bizDaysBefore(o.due_date,5).toISOString():null;
   const topePausa=(_capUntil&&_capFarDue)?(_capUntil<_capFarDue?_capUntil:_capFarDue):(_capUntil||_capFarDue);
-  return tiempoPorEtapa(o,{ahora:new Date().toISOString(),topePausa,secuencia:STAGE_SEQUENCE,responsable:stage=>orderResponsible({...o,stage})?.name,persona:nombreDeFirma,nombreEtapa:s=>SM[s]?.lt||s});
+  return tiempoPorEtapa(o,{ahora:new Date().toISOString(),topePausa,secuencia:STAGE_SEQUENCE,responsable:stage=>orderResponsible({...o,stage})?.name,persona:nombreDeFirma,nombreEtapa:s=>SM[s]?.lt||s,marcas:!conMarcas?"ninguna":entregadaATiempo(o)?"sinRojo":"todas"});
 }
 // v10.84.177 — abierto o cerrado se recuerda entre órdenes, en esta sesión (su crítica: Marcelo revisa decenas, y cada orden arrancaba cerrada)
 let TIEMPOS_ABIERTO=false,TIEMPOS_FECHAS=false;
 // v10.84.177 — en el encabezado, junto a «Le toca a»: cuánto lleva en la etapa, sin ir hasta el panel. Sólo si pasa de lo normal se pinta y lo dice. v10.84.180 — con contra qué («lo normal 23h»), y la pausada no alarma con el
 //   reloj parado (P-0431: «lleva 58h» en rojo y en presente, en pausa desde septiembre, y sólo el cliente la saca de ahí)
-function TiempoEnLaEtapa({order:o}){
+function TiempoEnLaEtapa({order:o,conMarcas=false}){
   const minuto=useMinuto();
-  const b=useMemo(()=>tiemposDeLaOrden(o).bloques.find(x=>x.current),[o,minuto]);
+  const b=useMemo(()=>tiemposDeLaOrden(o,conMarcas).bloques.find(x=>x.current),[o,minuto,conMarcas]);
   if(!b) return null;
   const pausada=snoozeActive(o),n=pausada?null:b.nivel,c=n==="doble"?C.dnInk:n==="sobre"?C.wnInk:null;
   return <span title={"Sólo cuenta el horario de trabajo: lunes a viernes, "+HORARIO_EN_PALABRAS} style={c?{color:c,fontWeight:600}:undefined}>{n?<WarningIcon size={12} weight="bold" aria-hidden="true" style={{verticalAlign:"-2px",marginRight:3}}/>:null}{pausada?"":"lleva "}<b style={{color:c||C.tx}}>{duracion(b.hours)}</b> hábiles {b.fuera?"con "+b.fuera:"en "+(SM[b.stage]?.lt||b.stage)}{pausada?" hasta la pausa":n?" · lo normal "+duracion(loNormalDe(b.stage)):""}</span>;
@@ -3446,7 +3448,8 @@ function SinBitacora({order:o,relacion,onReintentar,estilo}){
     </div>
   </div>;
 }
-function StageFlowHistory({order:o,estilo}){
+// v10.84.186 — Marcelo, 5-nov, por Central: el rojo, el ámbar y el veredicto de quién se pasó, sólo Dirección (`conMarcas`; sin decirlo, sin marcas). Los demás siguen viendo los tiempos: sin «lo normal» ni «nada fuera de lo normal», que callado también diría quién se pasó.
+function StageFlowHistory({order:o,estilo,conMarcas=false}){
   const [open,setOpen]=useState(TIEMPOS_ABIERTO);
   // v10.84.181 — las fechas de lo que no tiene nada que decir, a la mano y no a la vista; se recuerda como abierto o cerrado
   const [conFechas,setConFechas]=useState(TIEMPOS_FECHAS);
@@ -3456,7 +3459,7 @@ function StageFlowHistory({order:o,estilo}){
   // v10.84.181 — y se ve lo que se pasó, aunque quede bajo el corte: leer la alarma y buscar su evidencia era bajar a ciegas
   useLayoutEffect(()=>{if(open&&pidioAbrir.current){raizRef.current?.scrollIntoView({block:"nearest",behavior:"instant"});raizRef.current?.querySelector("[data-peor]")?.scrollIntoView({block:"nearest",behavior:"instant"});}pidioAbrir.current=false;},[open]);
   const minuto=useMinuto();
-  const data=useMemo(()=>tiemposDeLaOrden(o),[o,minuto]);
+  const data=useMemo(()=>tiemposDeLaOrden(o,conMarcas),[o,minuto,conMarcas]);
   // v10.84.181 — con renglones y sin etapas (48 órdenes) desaparecía en silencio, al revés de la que no trae renglones
   if(!data.bloques.length) return estilo?<SinBitacora order={o} relacion="leida" estilo={estilo}/>:null;
   const alternar=()=>{pidioAbrir.current=true;TIEMPOS_ABIERTO=!open;setOpen(!open);};
@@ -3471,7 +3474,7 @@ function StageFlowHistory({order:o,estilo}){
   const verCifra=(h,peso=600,tinta=null)=><span data-cifra="" style={cifra}>{(({horas,minutos})=><>{horas?<span style={{fontWeight:peso,color:tinta||C.tx}}>{horas}</span>:null}{horas&&minutos?" ":""}{minutos?<span style={{fontWeight:400,color:tinta||C.t2}}>{minutos}</span>:null}</>)(duracionFina(h))}</span>;
   // v10.84.175 — los renglones de adentro de una etapa (cada validación, cada paso, cada pausa): comparten sus columnas, y el tiempo cae bajo el total de la etapa para leerlos de arriba abajo. v10.84.180 — los pasos ya no se
   //   marcan: lo normal es de la etapa entera, no de cada máquina. Sólo cada quien en Validar. Lo normal va con los datos, no en la columna: en 300 px le quitaba el ancho a la fecha
-  const renglon=(n,stage,f)=>{const niv=f.marca?nivelDeTiempo(stage,f.h):null;return <div key={f.k} style={{display:"contents"}}>
+  const renglon=(n,stage,f)=>{const niv=f.marca?data.nivelDe(stage,f.h):null;return <div key={f.k} style={{display:"contents"}}>
     <span style={{gridColumn:1,gridRow:n+1,fontSize:11,fontWeight:f.fuerte?700:500,color:C.tx,overflowWrap:"anywhere"}}>{f.nombre}</span>
     <span data-nivel={niv||undefined} style={{...cifra,gridColumn:3,gridRow:n+1,fontSize:11,paddingRight:7,textAlign:"right"}}>{aviso(niv)}{f.pausa?verCifra(f.h,400,C.t2):verCifra(f.h,f.fuerte?700:500,niv?tintaAA(TONO[niv]):null)}</span>
     <span data-fila-meta="" style={{gridColumn:2,gridRow:n+1,fontSize:10,color:C.t2,minWidth:0,overflowWrap:"anywhere"}}>{niv?<span style={{fontWeight:600,color:tintaAA(TONO[niv])}}>lo normal {duracion(loNormalDe(stage))} · </span>:null}{f.meta}</span>
@@ -3495,7 +3498,7 @@ function StageFlowHistory({order:o,estilo}){
       <span id={idPanel+"-v"} data-veredicto="" style={{display:"block",marginTop:4,fontSize:13,fontWeight:600,lineHeight:1.35,color:C.tx,overflowWrap:"anywhere",textWrap:"pretty"}}>
         {pausada?<>En espera desde {fDia(pausada.at).split(",")[0]}{pausada.motivo?": "+pausada.motivo:""}</>:<>{r.verbo} {conHabiles(r.total)}{peor
           ?<> · <span data-nivel={peor.nivel} style={{color:tintaAA(TONO[peor.nivel])}}>{aviso(peor.nivel)}{peor.actual||peor.validar?<>{peor.quien||nombreDeEtapa(peor.etapa)} {peor.actual?"lleva":"tardó"} {duracion(peor.hours)}{peor.quien&&peor.quien!=="Máquina"?" en "+nombreDeEtapa(peor.etapa):""}</>:<>{nombreDeEtapa(peor.etapa)} tardó {duracion(peor.hours)}</>}, lo normal {duracion(peor.normal)}{r.pasados.length>1?" · y "+(r.pasados.length-1)+" más":""}</span></>
-          :r.conFuera?<> · con {r.conFuera.quien}{r.conFuera.sigue?" · la sigue "+r.conFuera.sigue:""}</>:r.verbo==="Duró"?null:<> · {data.regs>0?"ninguna etapa se pasó":"nada fuera de lo normal"}</>}</>}
+          :r.conFuera?<> · con {r.conFuera.quien}{r.conFuera.sigue?" · la sigue "+r.conFuera.sigue:""}</>:!conMarcas||r.verbo==="Duró"?null:<> · {data.regs>0?"ninguna etapa se pasó":"nada fuera de lo normal"}</>}</>}
       </span>
       {!sinRubros&&<span id={idPanel+"-r"} data-resumen="" title={"Sólo cuenta el horario de trabajo: lunes a viernes, "+HORARIO_EN_PALABRAS} style={{display:"block",marginTop:3,fontSize:11,lineHeight:1.5,color:C.t2,overflowWrap:"anywhere"}}>
         {pausada?<>{r.verbo} {conHabiles(r.total)}, sin la pausa{rubros.length?" · ":""}</>:null}
@@ -3511,11 +3514,11 @@ function StageFlowHistory({order:o,estilo}){
           v10.84.180 — un solo renglón: eran tres antes de cada dato, y a 1366 empujaban la etapa actual abajo del corte. La comida y las noches ya las dice el horario; lo de Validar va en Validar y la leyenda de colores sobra.
           v10.84.182 — y de dónde sale «lo normal», siempre: «nada fuera de lo normal» también lo promete. */}
       <div style={{display:"flex",alignItems:"baseline",gap:10,marginBottom:10}}>
-        <div data-nota="" style={{flex:1,minWidth:0,fontSize:11,fontWeight:500,lineHeight:1.45,color:C.t2}}>Sólo cuenta el horario de trabajo: lunes a viernes, {HORARIO_EN_PALABRAS}, sin festivos de ley ni pausas. Lo normal: 9 de cada 10 órdenes tardan menos (180 días, medido el 4-nov).</div>
+        <div data-nota="" style={{flex:1,minWidth:0,fontSize:11,fontWeight:500,lineHeight:1.45,color:C.t2}}>Sólo cuenta el horario de trabajo: lunes a viernes, {HORARIO_EN_PALABRAS}, sin festivos de ley ni pausas.{conMarcas?" Lo normal: 9 de cada 10 órdenes tardan menos (180 días, medido el 4-nov).":""}</div>
         <button type="button" onClick={()=>{TIEMPOS_FECHAS=!conFechas;setConFechas(!conFechas);}} style={{flexShrink:0,minHeight:32,background:"none",border:"none",padding:"2px 0",cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:600,color:C.ac,whiteSpace:"nowrap"}}>{conFechas?"Ocultar fechas":"Ver fechas"}</button>
       </div>
       <ol style={{listStyle:"none",margin:0,padding:0}}>
-      {data.bloques.map((b,i)=>{ const st=SM[b.stage]; const enSusFilas=!b.esperaAlCliente&&(b.validaciones||[]).some(v=>nivelDeTiempo(b.stage,v.hours)); const niv=enSusFilas?null:b.nivel; const c=st?.c||C.t3; const ultimo=i===data.bloques.length-1;
+      {data.bloques.map((b,i)=>{ const st=SM[b.stage]; const enSusFilas=!b.esperaAlCliente&&(b.validaciones||[]).some(v=>data.nivelDe(b.stage,v.hours)); const niv=enSusFilas?null:b.nivel; const c=st?.c||C.t3; const ultimo=i===data.bloques.length-1;
         const varios=b.pasos.length>1, solo=b.pasos[0], quien=nombreDe(b.by), estado=b.current?(snoozeActive(o)?"hasta la pausa · ":"en curso · "):"";
         // v10.84.180 — lo que duró menos de 5 minutos (19% de las etapas) en una línea y en gris, sin su fecha: es la misma de la siguiente. Pesaba igual que «31h» y empujaba lo demás
         const dePaso=!b.endpoint&&!b.current&&!b.isReg&&!b.razon&&!niv&&!varios&&!solo?.maquina&&!b.validaciones&&!b.juntas&&!(b.pausas||[]).length&&!b.fueraDeHorario&&b.hours<5/60;
@@ -5185,7 +5188,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction,oc=null,re
   const avisos=[...alertasDeLaOrden(o),...banderasDeLaOrden(o)];   // v10.84.54 — también «En espera» (arriba decía RETRASO y la espera sólo en el pie)
   const enMaquina=["in_production","packaging","ctp"].includes(o.stage)?(o.machine_log||[]).find(e=>!e.ended):null;
   // v10.84.179 — con bitácora, el panel; de una orden terminada que todavía no la tiene, qué pasa (`relacion` sólo llega en ésas)
-  const panelTiempos=estilo=>!vOwns?null:o.timeline?.length>0?<StageFlowHistory order={o} estilo={estilo}/>:relacion?<SinBitacora order={o} relacion={relacion} onReintentar={onReintentarRelacion} estilo={estilo}/>:null;
+  const panelTiempos=estilo=>!vOwns?null:o.timeline?.length>0?<StageFlowHistory order={o} estilo={estilo} conMarcas={role==="admin"}/>:relacion?<SinBitacora order={o} relacion={relacion} onReintentar={onReintentarRelacion} estilo={estilo}/>:null;
   const nombreMaquina=enMaquina?(MACHINES.find(x=>x.id===enMaquina.machine)?.name||enMaquina.machine):null;   // («Empaque» en Empaque no se repite)
   // (a quién le toca: orderResponsible, lo mismo que la ficha —la maquila de un vendedor con usuario le toca a él, no a Lupita—
   //   y con su misma frase cuando le toca a los dos)
@@ -5225,7 +5228,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction,oc=null,re
             {o.web_folio&&<span style={{fontWeight:600,color:C.t2}}>{o.web_folio}</span>}
             {leToca&&<span style={{display:"inline-flex",alignItems:"center",gap:4}}><UserIcon size={13} weight="bold"/>Le toca a <b style={{color:C.tx}}>{leToca}</b></span>}
             {/* v10.84.177 — el P1 de su crítica, «hay que ir por él»: cuánto lleva en la etapa, sin bajar */}
-            {vOwns&&o.timeline?.length>0&&<TiempoEnLaEtapa order={o}/>}
+            {vOwns&&o.timeline?.length>0&&<TiempoEnLaEtapa order={o} conMarcas={role==="admin"}/>}
           </div>}
         </div>
         <button onClick={cerrarConCuidado} aria-label="Cerrar" title="Cerrar" style={{background:"none",border:"none",cursor:"pointer",color:C.t2,padding:8,display:"inline-flex",alignItems:"center",justifyContent:"center",minWidth:40,minHeight:40,flexShrink:0}}><XIcon size={20} weight="bold"/></button>
@@ -16576,7 +16579,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsp
       </button>
       {!expanded&&(o.waste_log||[]).length>0&&<span style={{fontSize:9,color:C.wn,fontWeight:600}}><TrashIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>{(o.waste_log||[]).reduce((s,w)=>s+(w.pliegos||0),0)+(o.waste_log||[]).reduce((s,w)=>s+(w.qty||0),0)} merma</span>}
     </div>}
-    {!compact&&expanded&&vOwns&&o.timeline?.length>0&&<div onClick={e=>e.stopPropagation()}><StageFlowHistory order={o}/></div>}
+    {!compact&&expanded&&vOwns&&o.timeline?.length>0&&<div onClick={e=>e.stopPropagation()}><StageFlowHistory order={o} conMarcas={role==="admin"}/></div>}
     {!compact&&expanded&&o.timeline?.length>0&&<div onClick={e=>e.stopPropagation()}><Timeline tl={o.timeline}/></div>}
     {/* v10.58.41 — historial campo-a-campo de cambios (carga on-demand).
         v10.58.42 Fix #2: gate vOwns — el historial expone precio/costo maquila/cliente;
@@ -19182,7 +19185,7 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
   const secPrioridad = topPriority && (() => {
     const t = topPriority, venc = isVencida(t), urg = isUrgente(t), resp = orderResponsible(t); // v10.58.65: maquila → vendedor
     const lastAct = t.timeline?.length > 0 ? t.timeline[t.timeline.length - 1].date : t.created_at;
-    const h = bizHoursAgo(lastAct); // v10.64.4 — horas hábiles (sin fines de semana)
+    const h = bizHoursAgo(lastAct); // v10.64.4 — horas hábiles (sin fines de semana). v10.84.186 — ni festivos
     const dias = venc ? diasVencida(t) : 0;
     return (
       <div style={{
