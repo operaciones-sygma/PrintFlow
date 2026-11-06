@@ -1590,6 +1590,20 @@ for (const rol of ["produccion", "preprensa", "german", "karla", "secretaria", "
   const t = (await textoDlg(p)).replace(/\s+/g, " "), m = await dlg(p).locator("[data-nivel]").count();
   ok(`det-248-${rol}-ve-el-tiempo-sin-marcas`, /lleva \S+( \S+)? hábiles en CTP/.test(t) && !/lo normal|nada fuera|ninguna etapa se pasó/.test(t) && m === 0, `${m} marcas; «${(t.match(/lleva.{0,60}/) || [t.slice(0, 200)])[0]}»`);
 });
+// v10.84.186, vuelta 2: el vendedor. La suya la ve sin marcas; la de otro, como siempre, sin tiempos
+await caso("det-249-el-vendedor-ve-lo-suyo-sin-marcas", "caso=tiemposrojo&rol=vendedor", async p => {
+  const t = (await textoDlg(p)).replace(/\s+/g, " "), m = await dlg(p).locator("[data-nivel]").count();
+  ok("det-249-el-vendedor-ve-lo-suyo-sin-marcas", /lleva \S+( \S+)? hábiles en CTP/.test(t) && !/lo normal|nada fuera|ninguna etapa se pasó/.test(t) && m === 0, `${m} marcas; «${(t.match(/lleva.{0,60}/) || [t.slice(0, 200)])[0]}»`);
+});
+await caso("det-250-lo-de-otro-vendedor-sin-tiempos", "caso=tiemposrojo&rol=vendedor&agente=Genaro", async p => {
+  const t = (await textoDlg(p)).replace(/\s+/g, " "), m = await dlg(p).locator("[data-nivel]").count();
+  ok("det-250-lo-de-otro-vendedor-sin-tiempos", !/Tiempo por etapa|hábiles/.test(t) && m === 0, `${m} marcas; «${t.slice(0, 200)}»`);
+});
+// a 1920, la pantalla grande de Marcelo: el mismo renglón
+await caso("det-251-a-1920-tampoco", "caso=tiemposrojo&rol=produccion", async p => {
+  const t = (await textoDlg(p)).replace(/\s+/g, " "), m = await dlg(p).locator("[data-nivel]").count();
+  ok("det-251-a-1920-tampoco", /lleva \S+( \S+)? hábiles en CTP/.test(t) && !/lo normal/.test(t) && m === 0, `${m} marcas`);
+}, { width: 1920, height: 1080 });
 
 await browser.close();
 for (const r of res) console.log(r);

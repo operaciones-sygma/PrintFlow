@@ -2862,6 +2862,43 @@ for (const [quien, conMarcas] of [["gerardo", false], ["karla", false], ["marcel
   const t = await leerTexto(f), marcas = await f.locator("[data-nivel]").count();
   ok(`ses-195-${quien}-en-la-ficha`, /Tiempo por etapa/.test(t) && /hábiles/.test(t) && (conMarcas ? marcas > 0 && /lo normal 23h/.test(t) : marcas === 0 && !/lo normal/.test(t)), `${marcas} marcas; «${(t.match(/Tiempo por etapa.{0,90}/) || [t.slice(0, 200)])[0]}»`);
 });
+// v10.84.186, vuelta 2. El vendedor, con lo suyo; y lo entregado: su bitácora se lee al abrir (regla 12) y su fecha llega por `reload`, que contesta sólo lo que pide
+await caso("ses-196-genaro-ve-lo-suyo-sin-marcas", async ({ p, s }) => {
+  s.filas = enSalidas("P-0999", { created_by: "genaro", agent: "Genaro" });
+  await aTodas(p, s, "genaro");
+  await fichaDe(p, "P-0999").click();
+  const dlg = p.getByRole("dialog").first(); await esperaPanel(dlg);
+  const t = await leerTexto(dlg), marcas = await dlg.locator("[data-nivel]").count();
+  ok("ses-196-genaro-ve-lo-suyo-sin-marcas", marcas === 0 && !/lo normal|nada fuera|ninguna etapa se pasó/.test(t) && /lleva \S+( \S+)? hábiles en Salidas/.test(t), `${marcas} marcas; «${(t.match(/lleva.{0,60}/) || [t.slice(0, 200)])[0]}»`);
+});
+// Noemí tardó 13 h en Validar (lo normal, 5) y estuvo 70 h en Salidas (lo normal, 23): las dos, el doble. Quedó lista el 6-oct y se marcó entregada el 16
+const ENTREGADA_AL_DOBLE = (pn, due_date) => { const ev = (f, to_stage, by_user, action) => ({ order_id: "OP-" + pn, action, by_user, color: "#8e8e93", created_at: f.replace(" ", "T") + "-06:00", to_stage });
+  return { orders: [ordenK(pn, { stage: "delivered", due_date, created_at: "2026-10-05T09:00:00-06:00", delivered_at: "2026-10-16T12:00:00-06:00", validated_by_production: true, validated_by_preprensa: true })],
+    order_timeline: [ev("2026-10-05 09:00:00", "draft", "secretaria", "📋 Orden creada"), ev("2026-10-05 10:00:00", null, "produccion", "✅ Validada por Producción"), ev("2026-10-06 13:00:00", null, "preprensa", "✅ Validada por Pre-prensa"), ev("2026-10-06 13:00:00", "design", "preprensa", "📝 → 🎨 Ambos validaron → Diseño"), ev("2026-10-06 15:00:00", "salidas", "produccion", "📦 Empaque → 📤 Salidas"), ev("2026-10-16 12:00:00", "delivered", "karla", "🎉 Entregada")] }; };
+const nivelesDelDetalle = async (p, pn, quien) => {
+  await fichaDe(p, pn).click();
+  const dlg = p.getByRole("dialog").first(); await esperaPanel(dlg);
+  await dlg.getByRole("button", { name: /Tiempo por etapa/ }).click(); await p.waitForTimeout(300);
+  return dlg.locator("[data-nivel]").evaluateAll(l => l.map(x => x.getAttribute("data-nivel")));
+};
+await caso("ses-197-lo-entregado-a-tiempo-a-direccion-en-ambar", async ({ p, s }) => {
+  s.filas = ENTREGADA_AL_DOBLE("P-1001", "2026-10-06");
+  await aTodas(p, s);
+  const n = await nivelesDelDetalle(p, "P-1001");
+  ok("ses-197-lo-entregado-a-tiempo-a-direccion-en-ambar", n.length >= 2 && n.every(x => x === "sobre"), n.join());
+});
+await caso("ses-198-lo-entregado-tarde-a-direccion-en-rojo", async ({ p, s }) => {
+  s.filas = ENTREGADA_AL_DOBLE("P-1002", "2026-10-01");
+  await aTodas(p, s);
+  const n = await nivelesDelDetalle(p, "P-1002");
+  ok("ses-198-lo-entregado-tarde-a-direccion-en-rojo", n.includes("doble"), n.join());
+});
+await caso("ses-199-lo-entregado-a-karla-sin-marcas", async ({ p, s }) => {
+  s.filas = ENTREGADA_AL_DOBLE("P-1003", "2026-10-01");
+  await aTodas(p, s, "karla");
+  const n = await nivelesDelDetalle(p, "P-1003"), t = await leerTexto(p.getByRole("dialog").first());
+  ok("ses-199-lo-entregado-a-karla-sin-marcas", n.length === 0 && !/lo normal/.test(t) && /70h/.test(t), `${n.join()} · «${(t.match(/Tiempo por etapa.{0,120}/) || [t.slice(0, 200)])[0]}»`);
+});
 
 await browser.close();
 await servidor.close();

@@ -2,7 +2,7 @@
 // la pone la tanda en `window.__orden` antes de cargar (con la bitácora de verdad: tests/romper/tiempos.mjs); `window.__cambiar(campos)` la cambia con el panel
 // abierto, como el tiempo real. El panel no le pide nada a la base: lee la bitácora que la orden ya trae.
 // Uso: node gen-tiempos.mjs <App.jsx> <dirSalida>
-// Variantes por URL: ancho=552 (el del detalle a 1366; 300, una columna angosta) · rol=admin (quien no es Dirección ve los tiempos sin marcas: en App lo decide `role`, y lo prueba `sesion`)
+// Variantes por URL: ancho=552 (el del detalle a 1366; 300, una columna angosta) · rol=admin (quien no es Dirección ve los tiempos sin marcas: en App lo decide `role`, y lo prueba `sesion`; rol=sindecir, montado sin `conMarcas`)
 import fs from "node:fs";
 import path from "node:path";
 import { LIGA_FUENTES, copiarFuentes } from "./fuentes.mjs";
@@ -27,7 +27,7 @@ const ANCHO = Number(Q.get("ancho") || 552), ROL = Q.get("rol") || "admin";`,
   return <div style={{ background: C.canvas, minHeight: "100vh", padding: 20, fontFamily: "'Geist',sans-serif" }}>
     <div id="listo" style={{ display: "none" }}>listo</div>
     <div id="caja" style={{ width: ANCHO, maxWidth: "100%", background: C.bg, borderRadius: 14, padding: 16 }}>
-      <StageFlowHistory order={orden} conMarcas={ROL === "admin"} />
+      <StageFlowHistory order={orden} {...(ROL === "sindecir" ? {} : { conMarcas: ROL === "admin" })} />
     </div>
   </div>;
 }

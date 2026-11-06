@@ -1313,12 +1313,153 @@ await caso("tie-232-a-los-demas-lo-mayor", SEIS_RUBROS(), async p => {
   ok("tie-232-a-los-demas-lo-mayor", /Máquina 30h/.test(r) && /Karla 20h/.test(r) && /Noemí 10h/.test(r) && !/Gerardo 2h 30m/.test(r), `«${r}»`);
 }, { rol: "produccion", abrir: false });
 
+// ── v10.84.186, vuelta 2: por donde no se diseñó ──
+// el límite: quedó lista el mismo día de su fecha, a las 3 de la tarde
+await caso("tie-233-lista-el-mismo-dia-de-su-fecha", AL_DOBLE("P-0797", "2026-10-13"), async p => {
+  const n = await nivelesDeTodo(p);
+  ok("tie-233-lista-el-mismo-dia-de-su-fecha", n.length >= 3 && n.every(x => x === "sobre"), n.join());
+});
+// sin pasar por Salidas, lo decide la hora de la entrega: en el día de su fecha, en México, aunque en UTC ya sea otro día
+const SIN_SALIDAS = (pn, cuando) => orden(pn, { stage: "delivered", due_date: "2026-10-23", created_at: H("2026-10-12 09:00:00"), delivered_at: H(cuando) }, [
+  ["2026-10-12 09:00:00", "draft", "secretaria", "📋 Orden creada"],
+  ["2026-10-12 10:00:00", null, "produccion", "✅ Validada por Producción"],
+  ["2026-10-13 13:00:00", null, "preprensa", "✅ Validada por Pre-prensa"],
+  ["2026-10-13 13:00:00", "design", "preprensa", "📝 → 🎨 Ambos validaron → Diseño"],
+  [cuando, "delivered", "karla", "🎉 Entregada"],
+]);
+await caso("tie-234-a-las-11-de-la-noche-de-su-fecha-es-a-tiempo", SIN_SALIDAS("P-0798", "2026-10-23 23:30:00"), async p => {
+  const n = await nivelesDeTodo(p);
+  ok("tie-234-a-las-11-de-la-noche-de-su-fecha-es-a-tiempo", n.length >= 2 && n.every(x => x === "sobre"), n.join());
+});
+await caso("tie-235-a-las-12-10-del-dia-siguiente-ya-no", SIN_SALIDAS("P-0799", "2026-10-24 00:10:00"), async p => {
+  const n = await nivelesDeTodo(p);
+  ok("tie-235-a-las-12-10-del-dia-siguiente-ya-no", n.includes("doble"), n.join());
+});
+// fechas basura: no se sabe que llegó a tiempo, así que como hoy, y sin tronar
+for (const [pn, extra] of [["P-0800", { due_date: "no-es-fecha" }], ["P-0801", { due_date: "" }], ["P-0802", { due_date: "2026-10-23", delivered_at: "no-es-fecha" }]]) await caso(`tie-236-fecha-basura-${pn}`, { ...AL_DOBLE(pn, null), ...extra }, async p => {
+  const n = await nivelesDeTodo(p);
+  ok(`tie-236-fecha-basura-${pn}`, n.includes("doble"), `${JSON.stringify(extra)}: ${n.join()}`);
+});
+// la maquila tiene sus propias etapas: «lista» es recibida. Capturada 45 h (lo normal, 16: el doble)
+const MAQUILA_AL_DOBLE = (pn, due_date) => orden(pn, { stage: "maq_delivered", order_type: "maquila", due_date, created_at: H("2026-10-12 09:00:00"), delivered_at: H("2026-10-23 12:00:00") }, [
+  ["2026-10-12 09:00:00", "maq_created", "secretaria", "📋 Orden creada"],
+  ["2026-10-19 09:00:00", "maq_sent", "secretaria", "📋 Creada (Maquila) → 🚚 Enviada a Maquila"],
+  ["2026-10-20 09:00:00", "maq_received", "karla", "🚚 Enviada a Maquila → 📥 Recibida de Maquila"],
+  ["2026-10-23 12:00:00", "maq_delivered", "karla", "🎉 Entregada"],
+]);
+await caso("tie-237-la-maquila-a-tiempo-en-ambar", MAQUILA_AL_DOBLE("P-0803", "2026-10-20"), async p => {
+  const n = await nivelesDeTodo(p);
+  ok("tie-237-la-maquila-a-tiempo-en-ambar", n.length >= 1 && n.every(x => x === "sobre"), n.join());
+});
+await caso("tie-238-la-maquila-tarde-en-rojo", MAQUILA_AL_DOBLE("P-0804", "2026-10-15"), async p => {
+  const n = await nivelesDeTodo(p);
+  ok("tie-238-la-maquila-tarde-en-rojo", n.includes("doble"), n.join());
+});
+// quien no es Dirección, en los otros modos del panel
+// (una pausa que no espera al cliente: la del cliente no se marca ni a Dirección). 36 h en Salidas, lo normal 23
+const PAUSADA_POR_LA_PLANTA = () => orden("P-0814", { stage: "salidas", created_at: H("2026-10-19 09:30:00"), snooze_reason: "Esperando autorización", snooze_stage: "salidas", snoozed_by: "karla" }, [
+  ["2026-10-19 09:30:00", "draft", "secretaria", "📋 Orden creada"], ["2026-10-19 10:00:00", "salidas", "produccion", "📦 Empaque → 📤 Salidas"], ["2026-10-23 10:00:00", null, "karla", "🔕 En espera: Esperando autorización"]]);
+await caso("tie-239-la-pausada-a-direccion-con-su-marca", PAUSADA_POR_LA_PLANTA(), async p => {
+  const n = await nivelesDeTodo(p), t = await texto(p);
+  ok("tie-239-la-pausada-a-direccion-con-su-marca", n.includes("sobre") && /lo normal 23h/.test(t), `${n.join()} · «${t.slice(0, 220)}»`);
+});
+await caso("tie-239b-la-pausada-a-los-demas-sin-marca", PAUSADA_POR_LA_PLANTA(), async p => {
+  const n = await nivelesDeTodo(p), v = await veredicto(p), t = await texto(p);
+  ok("tie-239b-la-pausada-a-los-demas-sin-marca", n.length === 0 && /^En espera desde/.test(v || "") && /hasta la pausa/.test(t) && !/lo normal/.test(t), `${n.join()} · «${v}» · «${t.slice(0, 220)}»`);
+}, { rol: "karla" });
+await caso("tie-240-con-fechas-tampoco", AL_DOBLE("P-0805", "2026-10-12"), async p => {
+  const n = await nivelesDeTodo(p), t = await texto(p);
+  ok("tie-240-con-fechas-tampoco", n.length === 0 && !/lo normal/.test(t) && /lun 12-oct/.test(t), `${n.join()} · «${t.slice(0, 260)}»`);
+}, { rol: "karla", fechas: true });
+// ni escondido: lo que no se pinta tampoco va en un atributo o en lo que oye el lector de pantalla
+const SE_DELATA = /data-nivel|data-peor|lo normal|se pasó|nada fuera|ninguna etapa/i;
+for (const abrir of [false, true]) await caso(`tie-241-ni-en-el-html-${abrir ? "abierto" : "cerrado"}`, AL_DOBLE("P-0806", "2026-10-12"), async p => {
+  const h = await p.evaluate(() => document.getElementById("caja").outerHTML), m = h.match(SE_DELATA);
+  ok(`tie-241-ni-en-el-html-${abrir ? "abierto" : "cerrado"}`, !m, m ? `«${h.slice(Math.max(0, m.index - 60), m.index + 60)}»` : "");
+}, { rol: "preprensa", abrir });
+// ni el color: lo que Dirección ve de más (el rojo y el ámbar) a los demás no les sale en ningún texto
+const coloresDeTexto = p => p.evaluate(() => [...new Set([...document.querySelectorAll("#caja *")].filter(x => [...x.childNodes].some(n => n.nodeType === 3 && n.textContent.trim())).map(x => getComputedStyle(x).color))]);
+let COLORES_SANOS = [], COLORES_DE_MARCA = [];
+await caso("tie-242-ni-el-color", SANA(), async p => { COLORES_SANOS = await coloresDeTexto(p); });
+await caso("tie-242-ni-el-color", AL_DOBLE("P-0807", "2026-10-12"), async p => { COLORES_DE_MARCA = (await coloresDeTexto(p)).filter(c => !COLORES_SANOS.includes(c)); });
+await caso("tie-242-ni-el-color", AL_DOBLE("P-0808", "2026-10-12"), async p => {
+  const c = await coloresDeTexto(p);
+  ok("tie-242-ni-el-color", COLORES_DE_MARCA.length > 0 && !c.some(x => COLORES_DE_MARCA.includes(x)), `de marca: ${COLORES_DE_MARCA.join(" ")} · a producción: ${c.join(" ")}`);
+}, { rol: "produccion" });
+// el dato cambia con el panel abierto (el tiempo real): le corrigen la fecha, se entrega, regresa
+await caso("tie-243-le-corrigen-la-fecha-con-el-panel-abierto", AL_DOBLE("P-0809", "2026-10-12"), async p => {
+  const n0 = await nivelesDeTodo(p);
+  await p.evaluate(() => window.__cambiar({ due_date: "2026-10-23" })); await p.waitForTimeout(150);
+  const n1 = await nivelesDeTodo(p);
+  await p.evaluate(() => window.__cambiar({ due_date: "2026-10-12" })); await p.waitForTimeout(150);
+  const n2 = await nivelesDeTodo(p);
+  ok("tie-243-le-corrigen-la-fecha-con-el-panel-abierto", n0.includes("doble") && n1.length >= 3 && n1.every(x => x === "sobre") && n2.includes("doble"), `${n0.join()} → ${n1.join()} → ${n2.join()}`);
+});
+await caso("tie-244-se-entrega-y-regresa-con-el-panel-abierto", { ...SE_PASO_ATRAS(), due_date: "2026-11-20" }, async p => {
+  const n0 = await nivelesDeTodo(p);
+  await p.evaluate(ent => window.__cambiar({ stage: "delivered", delivered_at: ent }), H("2026-11-04 10:00:00")); await p.waitForTimeout(150);
+  const n1 = await nivelesDeTodo(p);
+  await p.evaluate(() => window.__cambiar({ stage: "design", delivered_at: null })); await p.waitForTimeout(150);   // regresar a producción borra su fecha de entrega (App: `upd.delivered_at=null`)
+  const n2 = await nivelesDeTodo(p);
+  ok("tie-244-se-entrega-y-regresa-con-el-panel-abierto", n0.includes("doble") && n1.length >= 1 && n1.every(x => x === "sobre") && n2.includes("doble"), `${n0.join()} → ${n1.join()} → ${n2.join()}`);
+});
+// lo que es un hecho y no un veredicto se sigue diciendo: con quién está y quién la sigue
+await caso("tie-245-lo-de-fuera-se-sigue-diciendo", { ...P0702(), maq_provider: "MAKILA" }, async p => {
+  const t = await texto(p), n = await nivelesDeTodo(p);
+  ok("tie-245-lo-de-fuera-se-sigue-diciendo", /Proceso en Maquila · con MAKILA · la sigue Lupita/.test(t) && n.length === 0 && !/nada fuera/.test(t), `${n.join()} · «${t.slice(0, 260)}»`);
+}, { rol: "karla" });
+const CON_EL_MAQUILADOR = () => orden("P-0810", { stage: "maq_in_progress", order_type: "maquila", maq_provider: "MAKILA", created_at: H("2026-10-27 09:00:00") }, [
+  ["2026-10-27 09:00:00", "maq_created", "secretaria", "📋 Orden creada"],
+  ["2026-10-27 10:00:00", "maq_sent", "secretaria", "📋 Creada (Maquila) → 🚚 Enviada a Maquila"],
+  ["2026-10-27 11:00:00", "maq_in_progress", "secretaria", "🚚 Enviada a Maquila → ⚙️ Proceso en Maquila"],
+]);
+await caso("tie-246-sigue-con-el-maquilador-sin-veredicto", CON_EL_MAQUILADOR(), async p => {
+  const v = await veredicto(p);
+  ok("tie-246-sigue-con-el-maquilador-sin-veredicto", /^Lleva .* · con MAKILA · la sigue Lupita$/.test(v || ""), `«${v}»`);
+}, { rol: "karla", abrir: false });
+// a lo angosto, con un nombre sin dónde partirlo, y en la pantalla grande de Marcelo: sin marcas tampoco se sale nada
+await caso("tie-247-a-lo-angosto-no-se-sale", { ...P0702(), maq_provider: SIN_CORTES }, async p => {
+  const m = await seSale(p), t = await texto(p);
+  ok("tie-247-a-lo-angosto-no-se-sale", m.length === 0 && t.includes(SIN_CORTES), m.join(" · "));
+}, { rol: "karla", ancho: 300, viewport: { width: 390, height: 844 } });
+await caso("tie-248-a-1920-no-se-sale", AL_DOBLE("P-0812", "2026-10-12"), async p => {
+  const m = await seSale(p), t = await texto(p);
+  ok("tie-248-a-1920-no-se-sale", m.length === 0 && !/lo normal/.test(t), m.join(" · "));
+}, { rol: "produccion", ancho: 760, viewport: { width: 1920, height: 1080 } });
+// quien monte el panel sin decir quién lo ve no marca: cierra en la duda
+await caso("tie-249-sin-decirlo-no-marca", AL_DOBLE("P-0813", "2026-10-12"), async p => {
+  const n = await nivelesDeTodo(p), v = await veredicto(p);
+  ok("tie-249-sin-decirlo-no-marca", n.length === 0 && v === "Tardó 84h hábiles (≈9 días)", `${n.join()} · «${v}»`);
+}, { rol: "sindecir" });
+
 await browser.close();
 
 // ── la cuenta, sin pantalla (con la hora de México) ──
 process.env.TZ = "America/Mexico_City";
 const { horasDeJornada, duracion, HORAS_DE_UN_DIA, HORARIO_EN_PALABRAS, tiempoPorEtapa } = await import("../../src/lib/tiempoPorEtapa.js");
 const cuenta2 = (n, a, b, esperado, pausas) => { const h = horasDeJornada(H(a), H(b), pausas); ok(n, Math.abs(h - esperado) < 1e-6, `${a} a ${b}: ${h} h (debía ${esperado})`); };
+// v10.84.186, vuelta 2: las marcas son pintura, no cuenta. Con todas las bitácoras de arriba: ni una cifra cambia, en «sinRojo» sale la misma gente y ningún doble, y en «ninguna» no queda nada
+if (!process.env.SOLO || new RegExp(process.env.SOLO).test("tie-250")) {
+  const TODAS = [P0726(), P0721(), P0609(), P0702(), SANA(), SE_PASO_ATRAS(), PAUSADA_PASADA(), AL_DOBLE("P-0790", "2026-10-23"), SEIS_RUBROS(), MAQUILA_AL_DOBLE("P-0803", "2026-10-20"), CON_EL_MAQUILADOR()];
+  const con = (o, marcas) => tiempoPorEtapa(o, { ahora: AHORA.toISOString(), responsable: s => "R-" + s, marcas });
+  const cifras = c => JSON.stringify({ b: c.bloques, total: c.resumen.total, regs: c.regs, r: [...c.resumen.rubros].sort((x, y) => x.quien.localeCompare(y.quien)).map(x => [x.quien, x.hours]) }, (k, v) => (k === "nivel" ? undefined : v));
+  const quienes = c => JSON.stringify(c.resumen.pasados.map(x => [x.quien, x.etapa, x.hours, x.actual]));
+  const nivelesDe = c => [...c.bloques.map(b => b.nivel), ...c.resumen.rubros.map(x => x.nivel), ...c.resumen.pasados.map(x => x.nivel)].filter(Boolean);
+  const malasCifras = [], malosSinRojo = [], malosNinguna = [];
+  let dobles = 0;
+  for (const o of TODAS) {
+    const t = con(o, "todas"), s = con(o, "sinRojo"), n = con(o, "ninguna");
+    dobles += nivelesDe(t).filter(x => x === "doble").length;
+    if (cifras(t) !== cifras(s) || cifras(t) !== cifras(n)) malasCifras.push(o.production_number);
+    if (nivelesDe(s).includes("doble") || quienes(t) !== quienes(s)) malosSinRojo.push(o.production_number);
+    if (nivelesDe(n).length || n.resumen.pasados.length) malosNinguna.push(o.production_number);
+  }
+  ok("tie-250-las-marcas-no-cambian-ni-una-cifra", dobles > 0 && malasCifras.length === 0, `${dobles} dobles en las de arriba; cambian: ${malasCifras.join()}`);
+  ok("tie-251-sin-rojo-es-la-misma-gente-sin-un-doble", dobles > 0 && malosSinRojo.length === 0, malosSinRojo.join());
+  ok("tie-252-ninguna-no-deja-nada", malosNinguna.length === 0, malosNinguna.join());
+  const c = marcas => con(SANA(), marcas).nivelDe;
+  ok("tie-253-nivelde-dice-lo-mismo-que-se-pinta", c("todas")("draft", 11) === "doble" && c("todas")("draft", 6) === "sobre" && c("todas")("draft", 1) === null && c("sinRojo")("draft", 11) === "sobre" && c("sinRojo")("draft", 6) === "sobre" && c("sinRojo")("draft", 1) === null && c("ninguna")("draft", 11) === null, "");
+}
 if (!process.env.SOLO || new RegExp(process.env.SOLO).test("tie-50")) {
   cuenta2("tie-50-un-dia-entero", "2026-11-02 00:00:00", "2026-11-03 00:00:00", 9);
   cuenta2("tie-51-el-fin-de-semana-no-cuenta", "2026-10-31 00:00:00", "2026-11-02 00:00:00", 0);

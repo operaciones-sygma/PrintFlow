@@ -80,6 +80,43 @@ ok("hab-21-sin-festivo-no-cambia", propone("2026-11-03 10:00:00", "digital") ===
 a("2026-11-03 10:00:00");
 ok("hab-22-el-2-de-noviembre-se-trabaja", F.bizDaysSince(H("2026-10-30 12:00:00")) === 2, `del viernes 30 al martes 3: el lunes 2 y el martes; salió ${F.bizDaysSince(H("2026-10-30 12:00:00"))}`);
 
+// ── vuelta 2: por donde no se diseñó ──
+// dos festivos con sus fines de semana: del jueves 24-dic al mediodía al lunes 4-ene al mediodía son 11 días, menos 25, 26, 27, 1, 2 y 3
+a("2027-01-04 12:00:00");
+const h23 = F.bizHoursAgo(H("2026-12-24 12:00:00"));
+ok("hab-23-navidad-y-ano-nuevo-juntos", h23 === 120, `12 + 24 × 4 + 12 = 120 h; salió ${h23}`);
+a("2026-11-16 12:00:00");
+const h24 = F.bizHoursAgo(H("2026-11-16 10:00:00"));
+ok("hab-24-todo-adentro-del-festivo", h24 === 0, `se movió y se mira el mismo lunes 16: nada cuenta; salió ${h24}`);
+a("2026-11-17 09:00:00");
+const h25 = F.bizHoursAgo(H("2026-11-14 10:00:00"));
+ok("hab-25-del-sabado-al-martes-despues-del-festivo", h25 === 9, `el sábado, el domingo y el lunes 16 no cuentan: 9 h del martes; salió ${h25}`);
+// un día antes nunca cae en lo que no se trabaja
+const uno = [["2026-11-17", "2026-11-13"], ["2026-12-28", "2026-12-24"], ["2027-01-04", "2026-12-31"]].map(([d, e]) => [d, dia(F.bizDaysBefore(d, 1)), e]);
+ok("hab-26-un-dia-antes-salta-el-festivo", uno.every(([, x, e]) => x === e), JSON.stringify(uno));
+ok("hab-27-desde-el-festivo-mismo", propone("2026-11-16 10:00:00", "digital") === "2026-11-20", `el festivo no cuenta como arranque distinto: 17, 18, 19 y 20; salió ${propone("2026-11-16 10:00:00", "digital")}`);
+// a las 7:30 de la noche en México ya es el día siguiente en UTC, y la fecha sale con toISOString: no se puede correr un día
+ok("hab-28-de-noche-no-se-corre-al-dia-siguiente", propone("2026-11-11 19:30:00", "digital") === "2026-11-18", `${propone("2026-11-11 19:30:00", "digital")}`);
+// lo que parece festivo y ya no lo es: la ley los movió a lunes (Marcelo: «sólo» los de ley), y el 1-oct sólo cada seis años
+a("2027-02-04 12:00:00");
+ok("hab-29-el-5-de-febrero-se-trabaja", F.bizDaysUntil("2027-02-08") === 2, `del jueves 4 al lunes 8: el viernes 5 y el lunes 8; salió ${F.bizDaysUntil("2027-02-08")}`);
+a("2027-02-02 12:00:00");
+ok("hab-30-el-primer-lunes-de-febrero-no", F.bizDaysSince(H("2027-01-29 12:00:00")) === 1, `del viernes 29 al martes 2: sólo el martes; salió ${F.bizDaysSince(H("2027-01-29 12:00:00"))}`);
+a("2026-11-19 12:00:00");
+ok("hab-31-el-20-de-noviembre-se-trabaja", F.bizDaysUntil("2026-11-20") === 1, `${F.bizDaysUntil("2026-11-20")}`);
+a("2030-10-02 12:00:00");
+ok("hab-32-el-1-de-octubre-del-cambio-de-gobierno", F.bizHoursAgo(H("2030-09-30 12:00:00")) === 24, `lunes 12 h + martes festivo + miércoles 12 h; salió ${F.bizHoursAgo(H("2030-09-30 12:00:00"))}`);
+a("2026-10-02 12:00:00");
+ok("hab-33-el-1-de-octubre-de-este-ano-se-trabaja", F.bizHoursAgo(H("2026-09-30 12:00:00")) === 48, `${F.bizHoursAgo(H("2026-09-30 12:00:00"))}`);
+// las dos cuentas de la entrega lejana hablan igual: el día que la pausa se levanta (5 hábiles antes) es el día que ya faltan 5
+const hablan = ["2026-11-10", "2026-11-17", "2026-11-20", "2026-12-30", "2027-01-05", "2027-02-03"].map(d => { a(dia(F.bizDaysBefore(d, 5)) + " 12:00:00"); return [d, F.bizDaysUntil(d)]; });
+ok("hab-34-las-dos-cuentas-de-la-entrega-lejana-dicen-lo-mismo", hablan.every(([, n]) => n === 5), JSON.stringify(hablan));
+// sin dato o con basura nadie truena. `bizDaysSince` no recibe vacío: quien la llama ya lo revisó
+a("2026-11-17 10:00:00");
+let basura = "";
+try { basura = [F.bizHoursAgo(null), F.bizDaysUntil(null), F.bizDaysUntil(""), F.bizDaysUntil("no es fecha"), F.bizDaysSince("no es fecha")].join(); } catch (e) { basura = "truena: " + e.message; }
+ok("hab-35-sin-dato-o-con-basura-no-truena", basura === "0,0,0,0,0", basura);
+
 for (const r of res) console.log(r);
 const fallan = res.filter(r => r.startsWith("FALLA")).length;
 console.log(`\nhabiles: ${res.length - fallan} pasan, ${fallan} fallan`);

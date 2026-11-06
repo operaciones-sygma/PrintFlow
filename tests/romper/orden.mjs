@@ -2334,6 +2334,15 @@ await caso("ord-337 «Editar Specs» abierta desde antes no regresa el precio co
   ok("ord-337 «Editar Specs» (manda la forma entera) abierta desde antes de que corrigieran el precio no lo regresa", Number(o?.price) === 2400, `precio en la base ${o?.price}`);
 });
 
+// v10.84.186 — Marcelo, 5-nov: «festivos no cuentan para entrega». «Sugerir fecha» de la forma: 8 días hábiles desde el viernes 6-nov, sin el lunes 16; y de noche no se corre un día
+for (const [n, reloj, esperado] of [["ord-339 «Sugerir fecha» salta el festivo", "2026-11-06T10:00:00-06:00", "2026-11-19"], ["ord-340 «Sugerir fecha» de noche no se corre un día", "2026-11-06T19:30:00-06:00", "2026-11-19"]]) await caso(n, "", async p => {
+  await p.clock.setFixedTime(new Date(reloj));
+  await p.getByRole("button", { name: "Sugerir fecha" }).click();
+  await espera(p, 100);
+  const v = await p.locator("#ff-entrega").inputValue();
+  ok(n, v === esperado, `propuso ${v}`);
+});
+
 await browser.close();
 const fallas = res.filter(r => r.startsWith("FALLA")).length;
 console.log(res.join("\n"));
