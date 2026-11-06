@@ -12,6 +12,20 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.185b (datos) — P-0736: 40 piezas, como dice F-268 — 5-nov-2026
+
+**Qué pasaba.** Al rehacer F-267 (Rio Grande, de Genaro) como F-268, de 20 a 40 piezas a $150, Karla subió el precio de la orden a $6,000 y le ligó F-268 (18:29-18:30), pero la cantidad se quedó en 20: la hoja de producción habría salido con la mitad. Salió al revisar lo que hizo Karla, cuando Marcelo lo pidió.
+
+**Qué se cambió** (19:14:08, con el OK escrito de Marcelo, «si arregla lo que falta», firmado `admin`; `docs/migrations/v10.84.185b_datos_p0736.sql`). `orders.quantity` de 20 a 40 por UPDATE con su sesión, como la pantalla, y su renglón en la línea de tiempo. La orden quedó marcada «Editada tras facturar» (una etiqueta en PrintFlow, no le deja tarea a nadie) y sigue pidiendo «REIMPRIMIR»; la siguiente hoja sale como versión 2. No toca a Alpha: F-268 ya decía 40.
+
+**Sin aviso en la campana.** De 19:00 a 9:00 y en fin de semana, `skip_silent_window_notifications` descarta todo aviso en silencio, así que este cambio no le llegó a nadie. A Gerardo y a Karla se lo dice Marcelo.
+
+**Cómo se probó.** Ensayo con reversa como `authenticated`, con la sesión de Marcelo: 40 piezas, mismo precio, etapa y folio; F-268, su CFDI y sus renglones idénticos por huella (md5); la OC-1087 en $6,000, las 193 discrepancias y la bitácora de cobranza sin cambio. Al aplicar, un solo bloque con esos mismos frenos. Releído en otra consulta. Invariantes 93 de 93 (19:18). La vuelta atrás, ensayada con reversa.
+
+**Qué NO se tocó.** F-268 dice «11X08 CM» y la orden y F-267 dicen 11×28: corregirla obliga a rehacerla y a otra cancelación ante el SAT; lo decide Marcelo. La hoja impresa del 4-nov sigue diciendo 20: hay que reimprimirla, y eso lo hace una persona.
+
+**Vuelta atrás.** El bloque al final de la migración: regresa la cantidad a 20 (la etiqueta se queda). Sólo tiene sentido si las 20 eran las correctas, y entonces lo que estaría mal es F-268.
+
 ## v10.84.185 — «Tiempos»: lo que enseñó la revisión en producción — 5-nov-2026
 
 **Qué pasaba.** Al revisar la 184 en producción, sin escribir: Listas en 90 días decía «1 · 0%», como si ese 1 no contara. Y las maquilas de Lupita en octubre decían «mediana 16m» y «9 de cada 10: 5m», que parece un error: son cuentas distintas, porque 13 de las 14 fueron de paso y sólo «9 de cada 10» las cuenta.
