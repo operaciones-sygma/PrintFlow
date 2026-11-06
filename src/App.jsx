@@ -18281,7 +18281,8 @@ const fmtCorto=n=>new Intl.NumberFormat("es-MX",{style:"currency",currency:"MXN"
 const enPlural=(n,uno,varios)=>n+" "+(n===1?uno:varios);
 // v10.84.184 — «Tiempos» (Marcelo, 4-nov: «eso sirve para ver cuánto tiempo se tardó cada responsable, la etapa de validación tiene 2, Noemí y Gerardo, veo que tardan horas en aprobarla, pero no sé quién tardó»; 5-nov, a la tabla: «te doy el sí»): lo que el panel
 //   dice de una orden, junto y por periodo, con la misma cuenta (`tiemposDeLaOrden`, `tiempoPorPersona`). Sólo Dirección, como toda esta pantalla. La bitácora de lo terminado la trae «Cargar datos completos», y la pantalla se enciende ANTES de que llegue: sin ella no hay cifras (`bitacoraLeida`, regla 12).
-const parteEnTexto=p=>{const n=Math.round(p*100);return p>0&&n===0?"<1%":n+"%"};
+// v10.84.185 — lo que enseñó producción en la 184: «1 · 0%» y «200 · 100%» (de 201) dicen lo que no es; en las puntas, «<1%» y «>99%». Y la nota dice que «9 de cada 10» cuenta las de paso: con casi todo de paso sale menor que la mediana (las maquilas de Lupita en octubre, 16m y 5m), y sin decirlo parece un error.
+const parteEnTexto=p=>{const n=Math.round(p*100);return p>0&&n===0?"<1%":p<1&&n===100?">99%":n+"%"};
 const fechaConAnio=d=>d.getDate()+" "+MESES_CORTOS[d.getMonth()]+" "+d.getFullYear();
 function TiemposPorPersona({orders,rango,txtRango,desde,leida,onAbrirOrden}){
   const [abierto,setAbierto]=useState(null);
@@ -18324,7 +18325,7 @@ function TiemposPorPersona({orders,rango,txtRango,desde,leida,onAbrirOrden}){
                 <td data-c="mediana" style={num}>{f.mediana==null?"—":duracion(f.mediana)}</td>
                 <td data-c="p90" style={num}>{f.nueve==null?"—":duracion(f.nueve)}</td>
                 <td data-c="normal" style={num}>{duracion(f.normal)}</td>
-                <td data-c="pasaron" style={num}>{f.sePasaron.toLocaleString("es-MX")}{f.sePasaron>0?" · "+Math.round(100*f.sePasaron/f.veces)+"%":""}</td>
+                <td data-c="pasaron" style={num}>{f.sePasaron.toLocaleString("es-MX")}{f.sePasaron>0?" · "+parteEnTexto(f.sePasaron/f.veces):""}</td>
                 <td data-c="parte" style={num}>{parteEnTexto(f.parte)}</td>
               </tr>,
               ab&&<tr key={k+"-lentas"}><td colSpan={8} style={{padding:"0 0 8px"}}><div data-lentas="" style={{padding:"6px 10px",background:C.bg,borderRadius:8}}>
@@ -18342,7 +18343,7 @@ function TiemposPorPersona({orders,rango,txtRango,desde,leida,onAbrirOrden}){
       <div data-tiempos-nota="" style={{display:"grid",gap:3,marginTop:12,fontSize:11,lineHeight:1.45,color:C.t2}}>
         <div>Cuenta cuando salió de la etapa (en Validar, cuando firmó cada quien); lo que sigue ahí, no, ni la etapa en la que se canceló. No se le cuenta a nadie lo que esperó al cliente ({t.noCuentan.cliente}) ni al maquilador ({t.noCuentan.fuera}).</div>
         <div>Responsable: quien responde de la etapa; sólo en Validar la bitácora dice quién firmó y cuándo.</div>
-        <div>De paso: estuvo menos de 5 minutos dentro del horario de trabajo; no entra en la mediana. Mediana: la mitad tardó menos. 9 de cada 10: tardaron menos que eso; con menos de 10 veces no se calcula.</div>
+        <div>De paso: estuvo menos de 5 minutos dentro del horario de trabajo; no entra en la mediana. Mediana: la mitad tardó menos. 9 de cada 10: tardaron menos que eso, contando las de paso; con menos de 10 veces no se calcula.</div>
         <div>Lo normal: 9 de cada 10 órdenes tardan menos (180 días, medido el 4-nov). Se pasaron: las que llegaron a lo normal o más.{desde?" La bitácora empieza el "+fechaConAnio(desde)+".":""}</div>
       </div></>}
     </div>

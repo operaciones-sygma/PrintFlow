@@ -12,7 +12,16 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
-## v10.84.184 — «Tiempos» en Analytics: cuánto tarda cada responsable, por etapa — 5-nov-2026
+## v10.84.185 — «Tiempos»: lo que enseñó la revisión en producción — 5-nov-2026
+
+**Qué pasaba.** Al revisar la 184 en producción, sin escribir: Listas en 90 días decía «1 · 0%», como si ese 1 no contara. Y las maquilas de Lupita en octubre decían «mediana 16m» y «9 de cada 10: 5m», que parece un error: son cuentas distintas, porque 13 de las 14 fueron de paso y sólo «9 de cada 10» las cuenta.
+
+**Qué se cambió** (la pantalla; la base no). En las puntas, «<1%» y «>99%»: nunca «0%» ni «100%» si no lo son. La nota dice que «9 de cada 10» cuenta las de paso.
+
+**Cómo se probó.** **Vuelta 1**, escritas antes del arreglo: `per-86` y `per-87`, caían las 2. **Vuelta 2**, el otro extremo: `per-88` a `per-90`, caía 1 de 3 (200 de 201 decía «100%»); las dos que pasaron a la primera se sabotearon y cayeron. `per-68` aceptaba sólo dígitos en «Del tiempo»: ahora también «>99%».
+
+**Sin probar.** En un teléfono de verdad y con un lector de pantalla de verdad.
+
 
 **Qué pasaba.** Marcelo, 4-nov: «eso sirve para ver cuánto tiempo se tardó cada responsable, la etapa de validación tiene 2, Noemí y Gerardo, veo que tardan horas en aprobarla, pero no sé quién tardó». El panel de la 175 lo dice orden por orden: para saber quién tarda había que abrir decenas. 5-nov, a la tabla persona × etapa que salió de la crítica: **«te doy el sí»**.
 

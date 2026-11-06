@@ -524,7 +524,7 @@ await caso("per-67-la-maquila-nacida-en-validar-no-se-valida", [orden("P-1019", 
 await caso("per-68-mas-de-cien-mil-por-ciento-no", [validada("P-1020", DIAS[0], 300, 300), orden("P-1021", { stage: "ctp" }, [["2026-10-05 09:00:00", "design", "secretaria", "📋 Orden creada"], ["2026-10-05 09:06:00", "ctp", "preprensa", "🎨 Diseño → 💿 CTP"]]), ...Array.from({ length: 60 }, (_, i) => orden("P-20" + String(i).padStart(2, "0"), { stage: "placas_listas" }, [["2026-09-01 09:00:00", "ctp", "preprensa", "🎨 Diseño → 💿 CTP"], ["2026-10-09 09:00:00", "placas_listas", "german", "💿 CTP → 📋 Placas Listas"]]))], async p => {
   const d = await fila(p, "Noemí", "design"), g = await fila(p, "Germán", "ctp");
   // seis minutos contra miles de horas de CTP: «<1%», no «0%» (sí tiene tiempo); y una etapa de 100% de lo marcado no se sale de su columna
-  ok("per-68-mas-de-cien-mil-por-ciento-no", d.parte === "<1%" && /^60\b/.test(g.pasaron || "") && /100\s?%/.test(g.pasaron || "") && /^\d+%$/.test(g.parte || ""), `${JSON.stringify(d)} ${JSON.stringify(g)}`);
+  ok("per-68-mas-de-cien-mil-por-ciento-no", d.parte === "<1%" && /^60\b/.test(g.pasaron || "") && /100\s?%/.test(g.pasaron || "") && /^>?\d+%$/.test(g.parte || ""), `${JSON.stringify(d)} ${JSON.stringify(g)}`);
 });
 
 // ── vuelta 3: lo que dejaron los arreglos de la 2, y lo que quedaba por donde no se diseñó ──
@@ -644,6 +644,31 @@ await caso("per-85-a-768-la-pagina-no-se-desliza", [DE_PUNTA_A_PUNTA()], async p
   const m = await p.evaluate(() => ({ pagina: document.documentElement.scrollWidth - innerWidth, derecha: Math.round(document.querySelector("[data-tiempos-caja]").getBoundingClientRect().right), ancho: innerWidth }));
   ok("per-85-a-768-la-pagina-no-se-desliza", m.pagina <= 0 && m.derecha <= m.ancho, JSON.stringify(m));
 }, { viewport: { width: 768, height: 900 } });
+
+// ── v10.84.185: lo que enseñó la revisión en producción de la 184 ──
+await caso("per-86-una-entre-muchas-no-dice-cero-por-ciento", [validada("P-1401", DIAS[0], 300, 5), ...Array.from({ length: 400 }, (_, i) => validada("P-" + (6000 + i), DIAS[i % DIAS.length], 60, 5))], async p => {
+  const n = await fila(p, "Noemí", "draft");
+  // Listas en 90 días: 1 de 401 salía «1 · 0%», que se lee como que el 1 no cuenta
+  ok("per-86-una-entre-muchas-no-dice-cero-por-ciento", n.veces === "401" && /^1 · <1\s?%$/.test(n.pasaron || ""), JSON.stringify(n));
+});
+await caso("per-87-la-nota-dice-por-que-nueve-de-diez-puede-ser-menor", [...Array.from({ length: 13 }, (_, i) => DISENO_Y_CTP("P-141" + String(i).padStart(2, "0"), 5, 60)), DISENO_Y_CTP("P-1430", 16, 60)], async p => {
+  const d = await fila(p, "Noemí", "design"), t = await nota(p);
+  // las maquilas de Lupita en octubre: 13 de 14 de paso, mediana 16m y «9 de cada 10» 5m. Son cuentas distintas, y sin decirlo parece un error
+  ok("per-87-la-nota-dice-por-que-nueve-de-diez-puede-ser-menor", d.veces === "14" && d.depaso === "13" && d.mediana === "16m" && d.p90 === "5m" && /9 de cada 10: tardaron menos que eso, contando las de paso/.test(t), `${JSON.stringify(d)} «${t.slice(0, 420)}»`);
+});
+await caso("per-88-casi-todas-no-dice-cien-por-ciento", [validada("P-1440", DIAS[0], 60, 5), ...Array.from({ length: 200 }, (_, i) => validada("P-" + (7000 + i), DIAS[i % DIAS.length], 300, 5))], async p => {
+  const n = await fila(p, "Noemí", "draft");
+  // 200 de 201: «100%» diría que no se salvó ninguna, y una sí
+  ok("per-88-casi-todas-no-dice-cien-por-ciento", n.veces === "201" && /^200 · >99\s?%$/.test(n.pasaron || ""), JSON.stringify(n));
+});
+await caso("per-89-una-de-doscientas-ya-es-uno-por-ciento", [validada("P-1441", DIAS[0], 300, 5), ...Array.from({ length: 199 }, (_, i) => validada("P-" + (7300 + i), DIAS[i % DIAS.length], 60, 5))], async p => {
+  const n = await fila(p, "Noemí", "draft");   // 0.5% redondea a 1%: el «<1%» es sólo para lo que redondearía a cero
+  ok("per-89-una-de-doscientas-ya-es-uno-por-ciento", n.veces === "200" && /^1 · 1\s?%$/.test(n.pasaron || ""), JSON.stringify(n));
+});
+await caso("per-90-todas-si-dice-cien-por-ciento", [validada("P-1442", DIAS[0], 300, 5), validada("P-1443", DIAS[1], 300, 5)], async p => {
+  const n = await fila(p, "Noemí", "draft");
+  ok("per-90-todas-si-dice-cien-por-ciento", /^2 · 100\s?%$/.test(n.pasaron || ""), JSON.stringify(n));
+});
 
 await browser.close();
 
