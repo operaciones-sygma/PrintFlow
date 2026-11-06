@@ -33,7 +33,7 @@ const { puedeCorregirPrecio, errorEnPalabras, fmt, restoParaCorregir } = new Fun
 // «Reimprimir» (cor-22 a cor-25): diagnoseOrder y el despertador VIVOS, con sus dependencias (extraer.mjs), en Node
 const { codigo: codDiag } = extraer(fs.readFileSync(path.join(RAIZ, "src", "App.jsx"), "utf8"), ["diagnoseOrder", "getWakeupItems"], { simulados: ["supabase"] });
 const tmpDiag = path.join(os.tmpdir(), "pf-corregir-diag-" + process.pid + ".mjs");
-fs.writeFileSync(tmpDiag, [...new Set(codDiag.match(/\b[A-Z][A-Za-z0-9]*Icon\b/g) || [])].map(i => `const ${i} = () => null;`).join("\n")
+fs.writeFileSync(tmpDiag, `import { esFestivo } from ${JSON.stringify(pathToFileURL(path.join(RAIZ, "src", "lib", "tiempoPorEtapa.js")).href)};\n` + [...new Set(codDiag.match(/\b[A-Z][A-Za-z0-9]*Icon\b/g) || [])].map(i => `const ${i} = () => null;`).join("\n")
   + "\nconst supabase = {};\n" + codDiag + "\nexport { diagnoseOrder, getWakeupItems };\n");
 const { diagnoseOrder, getWakeupItems } = await import(pathToFileURL(tmpDiag).href);
 fs.rmSync(tmpDiag, { force: true });

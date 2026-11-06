@@ -2837,6 +2837,32 @@ await caso("ses-192-solo-direccion", async ({ p, s }) => {
   ok("ses-192-solo-direccion", n === 0, `Karla ve Analytics: ${n}`);
 });
 
+// v10.84.186 — Marcelo, 5-nov, por Central: el rojo, el ámbar y quién se pasó, sólo Dirección; los tiempos, todos; en el detalle y en la ficha. Con la app real: el rol lo da la sesión, no el banco. Vuelta 1: escritas antes del código
+for (const quien of ["gerardo", "noemi", "german", "karla", "lupita"]) await caso(`ses-193-${quien}-ve-los-tiempos-sin-marcas-en-el-detalle`, async ({ p, s }) => {
+  s.filas = enSalidas("P-0996");
+  await aTodas(p, s, quien);
+  await fichaDe(p, "P-0996").click();
+  const dlg = p.getByRole("dialog").first(); await esperaPanel(dlg);
+  const t = await leerTexto(dlg), marcas = await dlg.locator("[data-nivel]").count();
+  ok(`ses-193-${quien}-ve-los-tiempos-sin-marcas-en-el-detalle`, marcas === 0 && !/lo normal|nada fuera|ninguna etapa se pasó/.test(t) && /lleva \S+( \S+)? hábiles en Salidas/.test(t), `${marcas} marcas; «${(t.match(/lleva.{0,60}/) || [t.slice(0, 200)])[0]}»`);
+});
+await caso("ses-194-direccion-si-ve-las-marcas-en-el-detalle", async ({ p, s }) => {
+  s.filas = enSalidas("P-0997");
+  await aTodas(p, s);
+  await fichaDe(p, "P-0997").click();
+  const dlg = p.getByRole("dialog").first(); await esperaPanel(dlg);
+  const t = await leerTexto(dlg), marcas = await dlg.locator("[data-nivel]").count();
+  ok("ses-194-direccion-si-ve-las-marcas-en-el-detalle", marcas > 0 && /lo normal 23h/.test(t), `${marcas} marcas; «${(t.match(/lleva.{0,60}/) || [t.slice(0, 200)])[0]}»`);
+});
+for (const [quien, conMarcas] of [["gerardo", false], ["karla", false], ["marcelo", true]]) await caso(`ses-195-${quien}-en-la-ficha`, async ({ p, s }) => {
+  s.filas = enSalidas("P-0998");
+  await aTodas(p, s, quien);
+  const f = fichaDe(p, "P-0998");
+  await f.getByRole("button", { name: /Historial/ }).first().click(); await p.waitForTimeout(400);
+  const t = await leerTexto(f), marcas = await f.locator("[data-nivel]").count();
+  ok(`ses-195-${quien}-en-la-ficha`, /Tiempo por etapa/.test(t) && /hábiles/.test(t) && (conMarcas ? marcas > 0 && /lo normal 23h/.test(t) : marcas === 0 && !/lo normal/.test(t)), `${marcas} marcas; «${(t.match(/Tiempo por etapa.{0,90}/) || [t.slice(0, 200)])[0]}»`);
+});
+
 await browser.close();
 await servidor.close();
 fin();

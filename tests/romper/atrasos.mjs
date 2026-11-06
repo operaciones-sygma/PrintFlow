@@ -21,7 +21,7 @@ globalThis.Date = class extends D0 { constructor(...a) { if (a.length) super(...
 const QUIERO = ["vencidaAhora", "esperaAlCliente", "entregadaATiempo", "getIncompleteData", "diagnoseOrder", "getWakeupItems"];
 const { codigo } = extraer(fs.readFileSync(path.join(RAIZ, "src", "App.jsx"), "utf8"), QUIERO, { simulados: ["supabase"] });
 const tmp = path.join(os.tmpdir(), "pf-atrasos-" + process.pid + ".mjs");
-fs.writeFileSync(tmp, [...new Set(codigo.match(/\b[A-Z][A-Za-z0-9]*Icon\b/g) || [])].map(i => `const ${i} = () => null;`).join("\n")
+fs.writeFileSync(tmp, `import { esFestivo } from ${JSON.stringify(pathToFileURL(path.join(RAIZ, "src", "lib", "tiempoPorEtapa.js")).href)};\n` + [...new Set(codigo.match(/\b[A-Z][A-Za-z0-9]*Icon\b/g) || [])].map(i => `const ${i} = () => null;`).join("\n")
   + "\nconst supabase = {};\n" + codigo + "\nexport const F = {" + QUIERO.map(n => `${n}: typeof ${n} === "undefined" ? null : ${n}`).join(", ") + "};\n");
 const { F } = await import(pathToFileURL(tmp).href);
 fs.rmSync(tmp, { force: true });

@@ -147,7 +147,7 @@ const P0702 = () => orden("P-0702", { stage: "maq_delivered", order_type: "maqui
   ["2026-11-02 10:06:29", null, "karla", "📄 Asignado folio F-250 (Factura) · ✅ Entregada (Maquila) · ⏳ Pendiente cobro"],
 ]);
 
-async function caso(nombre, o, fn, { viewport = { width: 1366, height: 768 }, ancho = 552, abrir = true, reloj = false, fechas = false } = {}) {
+async function caso(nombre, o, fn, { viewport = { width: 1366, height: 768 }, ancho = 552, abrir = true, reloj = false, fechas = false, rol = "admin" } = {}) {
   if (process.env.SOLO && !new RegExp(process.env.SOLO).test(nombre)) return;
   const ctx = await browser.newContext({ viewport, timezoneId: "America/Mexico_City", locale: "es-MX" });
   const page = await ctx.newPage();
@@ -158,7 +158,7 @@ async function caso(nombre, o, fn, { viewport = { width: 1366, height: 768 }, an
     page.setDefaultTimeout(6000); page.setDefaultNavigationTimeout(30000);
     if (reloj) await page.clock.install({ time: AHORA }); else await page.clock.setFixedTime(AHORA);
     await page.addInitScript(x => { window.__orden = x; }, o);
-    await page.goto(`http://127.0.0.1:${PORT}/?ancho=${ancho}`);
+    await page.goto(`http://127.0.0.1:${PORT}/?ancho=${ancho}&rol=${rol}`);
     await page.locator("#listo").waitFor({ state: "attached", timeout: 30000 });
     if (abrir) { await page.getByRole("button", { name: /Tiempo por etapa/ }).click(); await page.waitForTimeout(120); }
     if (fechas) { await page.getByRole("button", { name: "Ver fechas" }).click(); await page.waitForTimeout(80); }   // v10.84.181 — las fechas de lo que no tiene nada que decir se piden
@@ -1234,6 +1234,84 @@ await caso("tie-44-a-futuro-no-da-negativo", conEventos("P-0755", { stage: "desi
   const t = await texto(p);
   ok("tie-44-a-futuro-no-da-negativo", /en curso · <1m/.test(t) && !/NaN/.test(t), `panel: «${t.slice(0, 240)}»`);
 });
+
+// ── v10.84.186: las respuestas de Marcelo del 5-nov (por Central): lo entregado a tiempo no va en rojo, y el rojo, el ámbar y quién se pasó sólo los ve Dirección. Vuelta 1: escritas antes del código ──
+// entregada el 23-oct: Validar 13 h (Noemí 13 h, lo normal 5: el doble; Gerardo 1 h), Diseño 1 h y Salidas 70 h (lo normal 23: el doble). La fecha de entrega decide si llegó a tiempo
+const AL_DOBLE = (pn, due_date) => orden(pn, { stage: "delivered", due_date, created_at: H("2026-10-12 09:00:00"), delivered_at: H("2026-10-23 12:00:00") }, [
+  ["2026-10-12 09:00:00", "draft", "secretaria", "📋 Orden creada"],
+  ["2026-10-12 10:00:00", null, "produccion", "✅ Validada por Producción"],
+  ["2026-10-13 13:00:00", null, "preprensa", "✅ Validada por Pre-prensa"],
+  ["2026-10-13 13:00:00", "design", "preprensa", "📝 → 🎨 Ambos validaron → Diseño"],
+  ["2026-10-13 15:00:00", "salidas", "produccion", "📦 Empaque → 📤 Salidas"],
+  ["2026-10-23 12:00:00", "delivered", "karla", "🎉 Entregada"],
+]);
+const nivelesDeTodo = p => p.evaluate(() => [...document.querySelectorAll("#caja [data-nivel]")].map(x => x.getAttribute("data-nivel")));
+await caso("tie-220-entregada-a-tiempo-baja-a-ambar", AL_DOBLE("P-0790", "2026-10-23"), async p => {
+  const n = await nivelesDeTodo(p), v = await veredicto(p);
+  ok("tie-220-entregada-a-tiempo-baja-a-ambar", n.length >= 3 && n.every(x => x === "sobre") && /^Tardó 84h hábiles \(≈9 días\) · Salidas tardó 70h, lo normal 23h · y 1 más/.test(v || ""), `${n.join()} «${v}»`);
+});
+await caso("tie-221-quedo-lista-a-tiempo-tambien", AL_DOBLE("P-0791", "2026-10-20"), async p => {
+  const n = await nivelesDeTodo(p);   // se marcó entregada el 23, y quedó lista el 13: «a tiempo» es haber quedado lista (Marcelo, 17-oct)
+  ok("tie-221-quedo-lista-a-tiempo-tambien", n.length >= 3 && n.every(x => x === "sobre"), n.join());
+});
+await caso("tie-222-la-que-llego-tarde-sigue-en-rojo", AL_DOBLE("P-0792", "2026-10-12"), async p => {
+  const n = await nivelesDeTodo(p);
+  ok("tie-222-la-que-llego-tarde-sigue-en-rojo", n.includes("doble"), n.join());
+});
+await caso("tie-223-sin-fecha-sigue-en-rojo", AL_DOBLE("P-0793", null), async p => {
+  const n = await nivelesDeTodo(p);
+  ok("tie-223-sin-fecha-sigue-en-rojo", n.includes("doble"), n.join());
+});
+await caso("tie-224-la-que-sigue-en-curso-sigue-en-rojo", { ...SE_PASO_ATRAS(), due_date: "2026-11-20" }, async p => {
+  const n = await nivelesDeTodo(p);
+  ok("tie-224-la-que-sigue-en-curso-sigue-en-rojo", n.includes("doble"), n.join());
+});
+await caso("tie-225-quien-no-es-direccion-ve-los-tiempos-sin-marcas", AL_DOBLE("P-0794", "2026-10-12"), async p => {
+  const n = await nivelesDeTodo(p), v = await veredicto(p), t = await texto(p), peor = await p.locator("#caja [data-peor]").count();
+  ok("tie-225-quien-no-es-direccion-ve-los-tiempos-sin-marcas", n.length === 0 && peor === 0 && v === "Tardó 84h hábiles (≈9 días)" && !/lo normal/.test(t) && /13h/.test(t) && /70h/.test(t), `${n.join()} · ${peor} · «${v}» · «${t.slice(0, 200)}»`);
+}, { rol: "produccion" });
+await caso("tie-226-cerrado-tambien-dice-los-tiempos", AL_DOBLE("P-0795", "2026-10-12"), async p => {
+  const v = await veredicto(p), r = await resumenDe(p), iconos = await p.locator("#caja [data-veredicto] svg").count();
+  ok("tie-226-cerrado-tambien-dice-los-tiempos", v === "Tardó 84h hábiles (≈9 días)" && iconos === 0 && /Validar \(Noemí 13h, Gerardo 1h\)/.test(r || "") && /Karla 70h/.test(r || ""), `«${v}» · ${iconos} · «${r}»`);
+}, { rol: "preprensa", abrir: false });
+// callado también lo diría: si «nada fuera de lo normal» sólo sale cuando no se pasó nadie, que no salga es el veredicto
+await caso("tie-227-tampoco-dice-que-va-bien", SANA(), async p => {
+  const v = await veredicto(p);
+  ok("tie-227-tampoco-dice-que-va-bien", v === "Lleva 24h hábiles (≈3 días)", `«${v}»`);
+}, { rol: "karla", abrir: false });
+await caso("tie-228-ni-que-ninguna-se-paso-pero-si-que-regreso", P0609(), async p => {
+  const g = await p.evaluate(() => document.querySelector("#caja button").innerText.replace(/\s+/g, " "));
+  ok("tie-228-ni-que-ninguna-se-paso-pero-si-que-regreso", /regresó 1 vez: cambio de medida/.test(g) && !/ninguna etapa se pasó|nada fuera de lo normal/.test(g), `«${g.slice(0, 200)}»`);
+}, { rol: "secretaria", abrir: false });
+await caso("tie-229-la-nota-no-habla-de-lo-normal", SANA(), async p => {
+  const t = await p.evaluate(() => document.querySelector("#caja [data-nota]")?.innerText.replace(/\s+/g, " ").trim() ?? "");
+  ok("tie-229-la-nota-no-habla-de-lo-normal", /sin festivos de ley ni pausas\.$/.test(t) && !/Lo normal/.test(t), `«${t}»`);
+}, { rol: "german" });
+await caso("tie-230-en-curso-tampoco-se-marca", SE_PASO_ATRAS(), async p => {
+  const n = await nivelesDeTodo(p), v = await veredicto(p);
+  ok("tie-230-en-curso-tampoco-se-marca", n.length === 0 && v === "Lleva 24h hábiles (≈3 días)", `${n.join()} · «${v}»`);
+}, { rol: "preprensa" });
+// seis rubros: a la vista caben tres. A Dirección, lo que se pasó aunque sea chico (Gerardo, 2h 30m en Placas Listas; lo normal, 2 h); a los demás, lo mayor: quién sale no puede delatar quién se pasó
+const SEIS_RUBROS = () => orden("P-0796", { stage: "delivered", created_at: H("2026-10-05 09:00:00"), delivered_at: H("2026-10-14 16:30:00") }, [
+  ["2026-10-05 09:00:00", "draft", "secretaria", "📋 Orden creada"],
+  ["2026-10-05 09:30:00", null, "produccion", "✅ Validada por Producción"],
+  ["2026-10-05 10:00:00", null, "preprensa", "✅ Validada por Pre-prensa"],
+  ["2026-10-05 10:00:00", "design", "preprensa", "📝 → 🎨 Ambos validaron → Diseño"],
+  ["2026-10-06 11:00:00", "ctp", "preprensa", "🎨 Diseño → 💿 CTP"],
+  ["2026-10-06 18:00:00", "placas_listas", "german", "💿 CTP → 📋 Placas Listas"],
+  ["2026-10-07 10:30:00", "in_production", "produccion", "🏭 Printmaster 52"],
+  ["2026-10-12 13:30:00", "salidas", "produccion", "📦 Empaque → 📤 Salidas"],
+  ["2026-10-14 16:30:00", "delivered", "karla", "🎉 Entregada"],
+]);
+const rubrosALaVista = p => p.evaluate(() => [...document.querySelectorAll("#caja [data-rubro]")].map(x => x.innerText.replace(/^\s*·\s*/, "").trim()).join(" | "));
+await caso("tie-231-a-direccion-lo-que-se-paso-aunque-sea-chico", SEIS_RUBROS(), async p => {
+  const r = await rubrosALaVista(p);
+  ok("tie-231-a-direccion-lo-que-se-paso-aunque-sea-chico", /Máquina 30h/.test(r) && /Karla 20h/.test(r) && /Gerardo 2h 30m/.test(r) && !/Noemí 10h/.test(r), `«${r}»`);
+}, { abrir: false });
+await caso("tie-232-a-los-demas-lo-mayor", SEIS_RUBROS(), async p => {
+  const r = await rubrosALaVista(p);
+  ok("tie-232-a-los-demas-lo-mayor", /Máquina 30h/.test(r) && /Karla 20h/.test(r) && /Noemí 10h/.test(r) && !/Gerardo 2h 30m/.test(r), `«${r}»`);
+}, { rol: "produccion", abrir: false });
 
 await browser.close();
 

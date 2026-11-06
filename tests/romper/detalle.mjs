@@ -1581,6 +1581,16 @@ await caso("det-236-no-se-lo-dice-a-quien-no-puede", "caso=resto&rol=secretaria"
   ok("det-236-no-se-lo-dice-a-quien-no-puede", /Se factura con Facturar siguiente parte\./.test(t) && !/en «Más»/.test(t), t.match(/Facturado.{0,160}/)?.[0] || "(no dice «Facturado»)");
 });
 
+// v10.84.186 — Marcelo, 5-nov, por Central: el rojo, el ámbar y quién se pasó, sólo Dirección; los tiempos, todos. Vuelta 1: escritas antes del código
+await caso("det-247-direccion-ve-lo-que-se-paso", "caso=tiemposrojo&rol=admin", async p => {
+  const t = (await textoDlg(p)).replace(/\s+/g, " "), m = await dlg(p).locator("[data-nivel]").count();
+  ok("det-247-direccion-ve-lo-que-se-paso", /lleva \S+( \S+)? hábiles en CTP · lo normal 8h/.test(t) && m > 0, `${m} marcas; «${(t.match(/lleva.{0,60}/) || [t.slice(0, 200)])[0]}»`);
+});
+for (const rol of ["produccion", "preprensa", "german", "karla", "secretaria", "visor"]) await caso(`det-248-${rol}-ve-el-tiempo-sin-marcas`, `caso=tiemposrojo&rol=${rol}`, async p => {
+  const t = (await textoDlg(p)).replace(/\s+/g, " "), m = await dlg(p).locator("[data-nivel]").count();
+  ok(`det-248-${rol}-ve-el-tiempo-sin-marcas`, /lleva \S+( \S+)? hábiles en CTP/.test(t) && !/lo normal|nada fuera|ninguna etapa se pasó/.test(t) && m === 0, `${m} marcas; «${(t.match(/lleva.{0,60}/) || [t.slice(0, 200)])[0]}»`);
+});
+
 await browser.close();
 for (const r of res) console.log(r);
 const fallan = res.filter(r => r.startsWith("FALLA")).length;

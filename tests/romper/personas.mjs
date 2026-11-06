@@ -670,6 +670,14 @@ await caso("per-90-todas-si-dice-cien-por-ciento", [validada("P-1442", DIAS[0], 
   ok("per-90-todas-si-dice-cien-por-ciento", /^2 · 100\s?%$/.test(n.pasaron || ""), JSON.stringify(n));
 });
 
+// ── v10.84.186: lo entregado a tiempo baja a ámbar en el panel, y esta tabla cuenta lo mismo: se pasó es se pasó ──
+const SALIDAS_AL_DOBLE = (pn, due_date) => orden(pn, { stage: "delivered", due_date, delivered_at: H("2026-10-12 12:00:00") }, [["2026-10-01 09:00:00", "salidas", "produccion", "📦 Empaque → 📤 Salidas"], ["2026-10-12 12:00:00", "delivered", "karla", "🎉 Entregada"]]);
+await caso("per-91-la-entregada-a-tiempo-se-cuenta-igual", [SALIDAS_AL_DOBLE("P-1501", "2026-10-12"), SALIDAS_AL_DOBLE("P-1502", "2026-09-30")], async p => {
+  const k = await fila(p, "Karla", "salidas");
+  // del 1 al 12 de octubre: 66 h en Salidas (lo normal, 23: el doble). Una a tiempo y otra tarde: las dos se pasaron
+  ok("per-91-la-entregada-a-tiempo-se-cuenta-igual", k.veces === "2" && /^2 · 100\s?%$/.test(k.pasaron || ""), JSON.stringify(k));
+});
+
 await browser.close();
 
 // ── la cuenta, sin pantalla ──

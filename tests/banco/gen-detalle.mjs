@@ -60,6 +60,8 @@ const partes = [
   //   v10.84.149 — y `vencidaAhora` pregunta `listaATiempo` (con `listaEn` y `finDeLaEntrega`): si el App.jsx las trae
   ...opcional(L.some(l => l.startsWith("const vencidaAhora=")), () => [line(/^const ETAPAS_LISTA=/, "ETAPAS_LISTA"), line(/^const esperaAlCliente=/, "esperaAlCliente"),
     ...(L.some(l => l.startsWith("const listaATiempo=")) ? [line(/^const listaEn=/, "listaEn"), line(/^const finDeLaEntrega=/, "finDeLaEntrega"), line(/^const listaATiempo=/, "listaATiempo")] : []),
+    // v10.84.186 — la cuenta del panel pregunta si se entregó a tiempo: lo entregado a tiempo no llega a rojo
+    ...(L.some(l => l.startsWith("const entregadaATiempo=")) ? [hasta(/^const entregadaATiempo=/, /^};\s*$/, "entregadaATiempo")] : []),
     line(/^const vencidaAhora=/, "vencidaAhora")].join("\n")),
   // v10.84.150 — la franja de la pausa del detalle dice «Ya pidió factura · Asignar folio» a Karla (`etiquetaYaPidio`, con `seFoliaConAsignar`): si el App.jsx las trae
   ...opcional(L.some(l => l.startsWith("const etiquetaYaPidio=")), () => [line(/^const seFoliaConAsignar=/, "seFoliaConAsignar"), line(/^const etiquetaYaPidio=/, "etiquetaYaPidio")].join("\n")),
@@ -208,6 +210,10 @@ CASOS.tiemposviva = { ...BASE, production_number: "P-0705", stage: "in_productio
   ["2026-10-28T21:54:28Z", "design", "produccion", "📝 → 🎨 Ambos validaron → Diseño"], ["2026-10-30T01:25:34Z", "ready", "preprensa", "🎨 Diseño → ✅ Lista para imprimir"], ["2026-10-30T16:20:06Z", "in_production", "produccion", "🏭 Printmaster 74 (turno 3)"]]) };
 CASOS.tiemposmaquila = { ...BASE, production_number: "P-0702", stage: "maq_in_progress", order_type: "maquila", maq_provider: "MAKILA", created_at: "2026-10-28T00:20:44Z", image_url: null, image_url_2: null, timeline: bitacora2([
   ["2026-10-28T00:20:45Z", "maq_created", "secretaria", "📋 Orden creada"], ["2026-10-28T00:20:56Z", "maq_sent", "secretaria", "📋 Creada (Maquila) → 🚚 Enviada a Maquila"], ["2026-10-28T00:20:57Z", "maq_in_progress", "secretaria", "🚚 Enviada a Maquila → ⚙️ Proceso en Maquila"]]) };
+// v10.84.186 — lleva semanas en CTP (lo normal, 8 h): Dirección ve que se pasó; los demás, sólo el tiempo
+CASOS.tiemposrojo = { ...BASE, production_number: "P-0707", stage: "ctp", created_at: "2026-10-01T15:00:00Z", image_url_2: null, delivered_at: null, timeline: bitacora2([
+  ["2026-10-01T15:00:00Z", "draft", "secretaria", "📋 Orden creada"], ["2026-10-01T15:10:00Z", null, "preprensa", "✅ Validada por Pre-prensa"], ["2026-10-01T15:20:00Z", null, "produccion", "✅ Validada por Producción"],
+  ["2026-10-01T15:20:00Z", "design", "produccion", "📝 → 🎨 Ambos validaron → Diseño"], ["2026-10-01T16:00:00Z", "ctp", "preprensa", "🎨 Diseño → 💿 CTP"]]) };
 const categoriaDe = t => CATS.categoriaSugerida(t) ?? (String(t || "").trim() && !CATS.esVentaDeInventario(t) ? "otro" : null);
 Object.values(CASOS).forEach(o => { if (!("categoria" in o)) o.categoria = categoriaDe(o.product_type); });
 // etapa=… cambia la etapa del caso (para barrer etapas y roles); cliente=… cambia el nombre del cliente

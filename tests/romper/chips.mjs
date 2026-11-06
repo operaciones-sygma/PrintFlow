@@ -15,7 +15,7 @@ const { codigo } = extraer(fuente, ["getTaskFilters", "GUIDES"], { simulados: ["
 // los íconos (Phosphor) se importan en App.jsx: aquí, de mentira
 const iconos = [...new Set(codigo.match(/\b[A-Z][A-Za-z0-9]*Icon\b/g) || [])];
 const tmp = path.join(os.tmpdir(), "pf-chips-" + process.pid + ".mjs");
-fs.writeFileSync(tmp, iconos.map(i => `const ${i} = () => null;`).join("\n") + "\nconst supabase = {};\n" + codigo + "\nexport { getTaskFilters, GUIDES };\n");
+fs.writeFileSync(tmp, `import { esFestivo } from ${JSON.stringify(pathToFileURL(path.join(RAIZ, "src", "lib", "tiempoPorEtapa.js")).href)};\n` + iconos.map(i => `const ${i} = () => null;`).join("\n") + "\nconst supabase = {};\n" + codigo + "\nexport { getTaskFilters, GUIDES };\n");
 const { getTaskFilters, GUIDES } = await import(pathToFileURL(tmp).href);
 fs.rmSync(tmp, { force: true });
 const res = [];
@@ -59,7 +59,7 @@ let queTeToca = null;
 try {
   const { codigo: c2 } = extraer(fuente, ["queTeToca"], { simulados: ["supabase"] });
   const tmp2 = path.join(os.tmpdir(), "pf-tetoca-" + process.pid + ".mjs");
-  fs.writeFileSync(tmp2, c2 + "\nexport { queTeToca };\n");
+  fs.writeFileSync(tmp2, `import { esFestivo } from ${JSON.stringify(pathToFileURL(path.join(RAIZ, "src", "lib", "tiempoPorEtapa.js")).href)};\n` + c2 + "\nexport { queTeToca };\n");
   try { ({ queTeToca } = await import(pathToFileURL(tmp2).href)); } finally { fs.rmSync(tmp2, { force: true }); }
 } catch { /* antes de v10.84.95 no existe */ }
 const tt = (o, r, u = r) => queTeToca ? queTeToca(o, r, u) : "(no existe la regla)";
