@@ -20,6 +20,10 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 **Cómo se probó.** **Vuelta 1**, escritas antes del arreglo: `per-86` y `per-87`, caían las 2. **Vuelta 2**, el otro extremo: `per-88` a `per-90`, caía 1 de 3 (200 de 201 decía «100%»); las dos que pasaron a la primera se sabotearon y cayeron. `per-68` aceptaba sólo dígitos en «Del tiempo»: ahora también «>99%».
 
+**En producción.** 5-nov ~18:55, READY `dpl_Ssc9YojiVZqVv5s6FKg7ojrkpXeX`, commit `501ccb9`. Candado 3186 de 3186 (5 nuevas), de a 4, 1371 s, a la primera y sin inestables. Revisado en producción sin escribir, como Dirección, a 1366 y 1920: Listas en 90 días ya dice «1 · <1%», la nota dice lo de «9 de cada 10» y nada se sale; sin errores de la página. Lo único cortado, como en la 184: las imágenes que el archivado diario comprime al entrar como Dirección.
+
+**Vuelta atrás.** `git revert --no-edit 501ccb9` (se detiene en `CHANGELOG.md`: `git checkout --ours CHANGELOG.md && git add CHANGELOG.md && git revert --continue`) y subir (ensayada en un worktree: deja `src`, `scripts`, `tests` y `DESIGN.md` como d218162, el código de la 184), o promover `dpl_BBEKkdwwnsyuUmWVi4GZJs2W1kKp` (el código de la 184). La base no cambió.
+
 **Sin probar.** En un teléfono de verdad y con un lector de pantalla de verdad.
 
 
