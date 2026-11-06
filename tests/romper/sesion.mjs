@@ -11,7 +11,8 @@
 // diciendo por qué; la que se cierra MIENTRAS se entra no deja la app abierta como anónima; y la prueba nunca da la entrada por
 // hecha con un tiempo fijo: espera la señal (la app abierta, o la pantalla de entrar sin «Verificando…»).
 // Uso: node tests/romper/sesion.mjs [dir-capturas]   (lo corre scripts/probar.mjs)   ·   SOLO=<regex> corre sólo esos casos
-//   SESION_PARTE=1 hasta ses-119, 2 desde ses-120, 3 desde ses-200 (v10.84.173 y v10.84.189: ya no cabía en los 12 minutos de una tanda; cada parte compila aparte y en su puerto); sin SESION_PARTE, todos
+//   SESION_PARTE=1 hasta ses-119, 2 desde ses-120, 3 desde ses-200 (v10.84.173 y v10.84.189: ya no cabía en los 12 minutos de una tanda; cada parte compila aparte y en su puerto),
+//   4 desde ses-300 (v10.84.190, la cuenta: una sola cuenta nombre@sygma.mx); sin SESION_PARTE, todos
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -20,7 +21,7 @@ import { chromium } from "playwright";
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const OUT = process.argv[2] || path.join(RAIZ, "tests", "salida", "sesion");
 const PARTE = process.env.SESION_PARTE || "";
-const DIST = path.join(RAIZ, "tests", "salida", "sesion-dist" + (PARTE === "2" || PARTE === "3" ? "-" + PARTE : ""));
+const DIST = path.join(RAIZ, "tests", "salida", "sesion-dist" + (PARTE === "2" || PARTE === "3" || PARTE === "4" ? "-" + PARTE : ""));
 fs.mkdirSync(OUT, { recursive: true });
 const SIMULADA = "https://simulada.supabase.co";
 const ANON = "llave-anon-simulada";
@@ -47,7 +48,7 @@ try {
 }
 // (16-oct, la auditoría del candado: era el 5190, el del banco de «plan»; de a 6 tandas corrieron juntas y «plan» no pudo servir su banco. Ahora un
 //   puerto fuera de los de los bancos, 5183-5199; can-g10 lo vigila)
-const servidor = await preview({ root: RAIZ, logLevel: "error", build: { outDir: DIST }, preview: { host: "127.0.0.1", ...(PARTE === "3" ? { port: 5472 } : PARTE === "2" ? { port: 5471 } : { port: 5470 }), strictPort: false } });
+const servidor = await preview({ root: RAIZ, logLevel: "error", build: { outDir: DIST }, preview: { host: "127.0.0.1", ...(PARTE === "4" ? { port: 5473 } : PARTE === "3" ? { port: 5472 } : PARTE === "2" ? { port: 5471 } : { port: 5470 }), strictPort: false } });
 const BASE = String(servidor.resolvedUrls?.local?.[0] || "http://127.0.0.1:5470/").replace(/\/$/, "");
 const ORIGEN = new URL(BASE).origin;
 
@@ -66,6 +67,8 @@ function simulada() {
   return {
     usuarios: USUARIOS(), porSid: new Map(), porRt: new Map(), cuenta: 0,
     salidas: [], peticiones: [], raras: [],
+    correos: [],       // v10.84.190 — lo que le llegó a Auth, tal cual, en cada entrada
+    comoPidioPerfil: [],   // v10.84.190 — con qué función se pidió el perfil, en orden
     entradas: 0, renovaciones: 0, preguntasAuth: 0, perfiles: 0,
     // perillas: cómo contesta cada cosa
     entrar: "ok",      // ok | red                         (POST /auth/v1/token?grant_type=password)
@@ -85,22 +88,27 @@ function simulada() {
   };
 }
 const b64u = o => Buffer.from(JSON.stringify(o)).toString("base64url");
-const usuarioAuth = (username, u) => ({ id: u.uid, aud: "authenticated", role: "authenticated", email: username + "@padillahnos.local",
-  app_metadata: { provider: "email", providers: ["email"], username }, user_metadata: {}, identities: [], is_anonymous: false,
+// v10.84.190 — una cuenta puede traer su propio correo (`email`: lupita@sygma.mx) y un usuario de PrintFlow que no se parece (`username`: secretaria); sin `email`, la de
+//   siempre (nombre@padillahnos.local). `metaUsername` es lo que trae app_metadata.username (las de @sygma.mx no traen nada, como en producción).
+const correoDe = (clave, u) => u.email || clave + "@padillahnos.local";
+const metaDe = (clave, u) => ({ provider: "email", providers: ["email"], ...(u.metaUsername ? { username: u.metaUsername } : u.email ? {} : { username: clave }) });
+const usuarioAuth = (username, u) => ({ id: u.uid, aud: "authenticated", role: "authenticated", email: correoDe(username, u),
+  app_metadata: metaDe(username, u), user_metadata: {}, identities: [], is_anonymous: false,
   created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z" });
 function sesionNueva(s, username, sid) {
   const u = s.usuarios[username];
   if (!sid) { sid = "sid-" + (++s.cuenta); s.porSid.set(sid, { username, viva: true }); }
   const ahora = Math.floor(Date.now() / 1000), exp = ahora + 3600, rt = "rt-" + sid + "-" + (++s.cuenta);
   s.porRt.set(rt, sid);
-  const at = b64u({ alg: "HS256", typ: "JWT" }) + "." + b64u({ aud: "authenticated", exp, iat: ahora, sub: u.uid, email: username + "@padillahnos.local",
-    role: "authenticated", session_id: sid, aal: "aal1", is_anonymous: false, app_metadata: { provider: "email", providers: ["email"], username },
+  const at = b64u({ alg: "HS256", typ: "JWT" }) + "." + b64u({ aud: "authenticated", exp, iat: ahora, sub: u.uid, email: correoDe(username, u),
+    role: "authenticated", session_id: sid, aal: "aal1", is_anonymous: false, app_metadata: metaDe(username, u),
     user_metadata: {} }) + ".firma-simulada";
   return { access_token: at, token_type: "bearer", expires_in: 3600, expires_at: exp, refresh_token: rt, user: usuarioAuth(username, u) };
 }
 // como un logout global desde otra app u otro equipo: las sesiones de esa cuenta mueren en el servidor (el JWT sigue firmado)
 const cerrarSesionesDe = (s, username) => { for (const v of s.porSid.values()) if (v.username === username) v.viva = false; };
 const sidDe = tok => { try { return JSON.parse(Buffer.from(tok.split(".")[1], "base64url").toString()).session_id || null; } catch { return null; } };
+const subDe = tok => { try { return JSON.parse(Buffer.from(tok.split(".")[1], "base64url").toString()).sub || null; } catch { return null; } };   // el auth.uid() de la base
 
 async function rutear(ctx, s) {
   await ctx.routeWebSocket(/\/realtime\//, ws => ws.close());   // sin tiempo real: la app usa su respaldo (recarga cada 20 s)
@@ -125,8 +133,11 @@ async function rutear(ctx, s) {
       const gt = url.searchParams.get("grant_type");
       if (gt === "password") {
         s.entradas++;
+        s.correos.push(cuerpo.email);
         if (s.entrar === "red") return route.abort("internetdisconnected");
-        const username = String(cuerpo.email || "").split("@")[0], u = s.usuarios[username];
+        // v10.84.190 — como Auth: la cuenta se busca por su correo completo, sin mayúsculas y sin recortar nada (antes, lo de antes de la @ en cualquier dominio).
+        const correo = String(cuerpo.email || "").toLowerCase();
+        const username = Object.keys(s.usuarios).find(k => correoDe(k, s.usuarios[k]) === correo), u = username && s.usuarios[username];
         if (!u || u.pass !== cuerpo.password) return J(400, { code: "invalid_credentials", error_code: "invalid_credentials", msg: "Invalid login credentials" });
         return J(200, sesionNueva(s, username));
       }
@@ -160,14 +171,22 @@ async function rutear(ctx, s) {
     }
     if (ruta.startsWith("/rest/v1/")) {
       s.peticiones.push({ t: Date.now(), m, ruta, quien, viva, cuerpo, orderId: url.searchParams.get("order_id"), qs: url.search });   // v10.84.172 — con su cuerpo: lo que se escribe en la bitácora y en los avisos
-      if (ruta === "/rest/v1/rpc/get_user_session") {
+      if (esPerfil(ruta)) {
         s.perfiles++;
+        s.comoPidioPerfil.push(ruta.slice("/rest/v1/rpc/".length));
         if (s.alPedirPerfil) { const f = s.alPedirPerfil; s.alPedirPerfil = null; await f(req.frame().page()); }
         if (s.perfil === "red") return route.abort("internetdisconnected");
         if (s.perfil === "falla") return J(503, { message: "upstream connect error (prueba)" });
-        const u = s.usuarios[cuerpo.p_username];
-        if (!u || u.inactivo) return J(200, []);
-        return J(200, [{ username: cuerpo.p_username, role: u.role, display_name: u.display_name, active: true }]);
+        // v10.84.190 — las dos como en la base: get_user_session busca por el NOMBRE que le pasan (el usuario de PrintFlow, no la clave de la cuenta) y
+        //   get_my_session por la CUENTA de la sesión (auth.uid()); como anónima, ésta no se puede ni llamar (REVOKE: la regla 5). `sinPerfil`: esa cuenta no tiene renglón en public.users.
+        if (ruta.endsWith("/get_my_session") && quien !== "usuario") return J(401, { code: "42501", message: "permission denied for function get_my_session", details: null, hint: null });
+        const claves = Object.keys(s.usuarios);
+        const clave = ruta.endsWith("/get_my_session")
+          ? claves.find(k => s.usuarios[k].uid === subDe(tok))
+          : claves.find(k => (s.usuarios[k].username || k) === cuerpo.p_username);
+        const u = clave && s.usuarios[clave];
+        if (!u || u.inactivo || u.sinPerfil) return J(200, []);
+        return J(200, [{ username: u.username || clave, role: u.role, display_name: u.display_name, active: true }]);
       }
       // PostgREST sólo revisa la firma y el vencimiento del JWT: con una sesión muerta en Auth, las lecturas siguen pasando.
       // Como anónimo, nada (la app de verdad recibe «permission denied»).
@@ -249,6 +268,8 @@ async function entrar(p, s, usuario = "karla", pass = "buena") {
   return esperarEntrada(p);
 }
 const RELACIONADAS = new Set(["order_timeline", "order_comments", "order_waste", "order_machine_log", "order_notes"]);
+// v10.84.190 — las dos maneras de pedir el perfil: por la cuenta (la de hoy) y por el nombre (la de antes; la corrida doble y la vuelta atrás la siguen usando)
+function esPerfil(ruta) { return ruta === "/rest/v1/rpc/get_user_session" || ruta === "/rest/v1/rpc/get_my_session"; }
 async function abrirYEntrar(p, s, usuario = "karla") {
   const e0 = await abrir(p);
   if (e0 !== "login") throw new Error("al abrir no salió la pantalla de entrar (" + e0 + ")");
@@ -273,14 +294,14 @@ const cerrarAMediaEntrada = s => { s.renovar = "rechaza"; s.alPedirPerfil = asyn
 const AVISO_CERRADA = /tu sesión se cerró/i;
 const RUIDO = /No se pudo leer de la base|permission denied|No tienes permiso|42501/i;
 const soloLocales = s => s.salidas.every(x => x === "local");
-const anonimasDesde = (s, t0) => s.peticiones.filter(x => x.t >= t0 && x.quien === "anon" && x.ruta !== "/rest/v1/rpc/get_user_session").length;
+const anonimasDesde = (s, t0) => s.peticiones.filter(x => x.t >= t0 && x.quien === "anon" && !esPerfil(x.ruta)).length;
 // v10.84.165 — cuáles fueron (ses-07 salió inestable el 20-oct con «como anónima 1» y no decía cuál): el método, la ruta y cuándo, desde t0
-const cualesAnonimas = (s, t0) => s.peticiones.filter(x => x.t >= t0 && x.quien === "anon" && x.ruta !== "/rest/v1/rpc/get_user_session")
+const cualesAnonimas = (s, t0) => s.peticiones.filter(x => x.t >= t0 && x.quien === "anon" && !esPerfil(x.ruta))
   .map(x => x.m + " " + x.ruta.replace("/rest/v1/", "") + " +" + (x.t - t0) + "ms").join(", ");
 
 async function caso(nombre, fn, { viewport = { width: 1366, height: 768 } } = {}) {
   const numeroDelCaso = Number((/^ses-(\d+)/.exec(nombre) || [])[1]);
-  if (PARTE && (numeroDelCaso >= 200 ? "3" : numeroDelCaso >= 120 ? "2" : "1") !== PARTE) return;
+  if (PARTE && (numeroDelCaso >= 300 ? "4" : numeroDelCaso >= 200 ? "3" : numeroDelCaso >= 120 ? "2" : "1") !== PARTE) return;
   if (process.env.SOLO && !new RegExp(process.env.SOLO).test(nombre)) return;
   const s = simulada();
   const ctx = await browser.newContext({ viewport });
@@ -884,7 +905,7 @@ const ORDENES_GERMAN = () => [
   ordenK("P-0599", { stage: "ctp", client: "IMPRENTA LEON", product_type: "Volantes", categoria: "folletos" }),
   ordenK("P-0598", { stage: "ctp", client: "CERVECERIA MODELO", product_type: "Etiquetas", categoria: "etiquetas", created_at: haceH(130) }),
 ];
-const escrituras = (s, t0) => s.peticiones.filter(x => x.t >= t0 && x.m !== "GET" && x.m !== "HEAD" && x.ruta !== "/rest/v1/rpc/get_user_session"
+const escrituras = (s, t0) => s.peticiones.filter(x => x.t >= t0 && x.m !== "GET" && x.m !== "HEAD" && !esPerfil(x.ruta)
   && x.ruta !== "/rest/v1/rpc/log_wakeup_ack" && x.ruta !== "/rest/v1/notifications").map(x => x.m + " " + x.ruta);
 await caso("ses-48-german-a-ctp-en-mantenimiento-no-manda", async ({ p, s }) => {
   s.filas = { orders: ORDENES_GERMAN(), maintenance_log: [{ id: "m-ctp", machine_id: "pp_ctp", started_at: haceH(1), ended_at: null, notes: "Cambio de lámpara", started_by: "german" }] };
@@ -3173,6 +3194,115 @@ await caso("ses-229-la-web-sigue-calculando-al-validar", async ({ p, s }) => {
   await esperarQue(() => escritoEn(s, "orders", "PATCH").length > 0, 6000);
   const u = escritoEn(s, "orders", "PATCH")[0]?.cuerpo;
   ok("ses-229-la-web-sigue-calculando-al-validar", u?.due_date === "2026-11-24" && !!u?.delivery_calculated_at, JSON.stringify(u));
+});
+
+// ════════════════════════ v10.84.190: el perfil por la cuenta, no por el nombre (paso 2 de una sola cuenta) ════════════════════════
+// Una sesión guardada de la cuenta `clave`, como si ya hubiera entrado en este navegador: sin escribir su nombre en ningún lado.
+async function guardarSesionDe(ctx, s, clave) {
+  const ses = sesionNueva(s, clave);
+  await ctx.addInitScript(([k, v]) => { if (!sessionStorage.getItem("__sembrada")) { sessionStorage.setItem("__sembrada", "1"); localStorage.setItem(k, v); } },
+    ["sb-simulada-auth-token", JSON.stringify(ses)]);
+}
+const perfilGuardado = p => p.evaluate(() => { try { return JSON.parse(localStorage.getItem("pf-session")); } catch { return null; } });
+const UID_LUPITA_NUEVA = "00000000-0000-4000-8000-000000000020";
+const lupitaLigada = () => ({ uid: UID_LUPITA_NUEVA, pass: "buena", role: "secretaria", display_name: "Lupita", username: "secretaria", email: "lupita@sygma.mx" });
+
+await caso("ses-300-entrar-pide-el-perfil-por-la-cuenta", async ({ p, s }) => {
+  await abrirYEntrar(p, s, "karla");
+  const v = await perfilGuardado(p);
+  ok("ses-300-entrar-pide-el-perfil-por-la-cuenta", s.comoPidioPerfil.length > 0 && s.comoPidioPerfil.every(x => x === "get_my_session") && v?.username === "karla" && v?.role === "karla",
+    `pidió con ${s.comoPidioPerfil.join(", ") || "nada"}; perfil ${JSON.stringify(v)}`);
+});
+await caso("ses-301-abrir-pide-el-perfil-por-la-cuenta", async ({ p, s }) => {
+  await abrirYEntrar(p, s, "gerardo");
+  s.comoPidioPerfil.length = 0;
+  await p.reload();
+  const e = await esperarEntrada(p);
+  ok("ses-301-abrir-pide-el-perfil-por-la-cuenta", e === "app" && s.comoPidioPerfil.length > 0 && s.comoPidioPerfil.every(x => x === "get_my_session"),
+    `al recargar: ${e}; pidió con ${s.comoPidioPerfil.join(", ") || "nada"}`);
+});
+await caso("ses-302-el-correo-no-se-parece-a-su-usuario", async ({ p, s, ctx }) => {
+  // lupita@sygma.mx con su renglón de PrintFlow, «secretaria» (el 29-nov): por el nombre buscaría «lupita» y diría que la cuenta ya no está activa
+  delete s.usuarios.lupita;
+  s.usuarios.lupitaNueva = lupitaLigada();
+  await guardarSesionDe(ctx, s, "lupitaNueva");
+  const e = await abrir(p);
+  const v = await perfilGuardado(p), t = await texto(p);
+  ok("ses-302-el-correo-no-se-parece-a-su-usuario", e === "app" && v?.username === "secretaria" && v?.role === "secretaria" && v?.displayName === "Lupita" && !/ya no está activa/.test(t),
+    `abrió: ${e}; perfil ${JSON.stringify(v)}; «${t.slice(0, 100)}»`);
+});
+await caso("ses-303-el-nombre-de-la-sesion-no-da-el-perfil-de-otro", async ({ p, s, ctx }) => {
+  // la cuenta de Gerardo con app_metadata.username de otra persona: manda la cuenta, no lo que venga escrito en la sesión
+  s.usuarios.gerardo.metaUsername = "marcelo";
+  await guardarSesionDe(ctx, s, "gerardo");
+  const e = await abrir(p);
+  const v = await perfilGuardado(p);
+  ok("ses-303-el-nombre-de-la-sesion-no-da-el-perfil-de-otro", e === "app" && v?.username === "gerardo" && v?.role === "produccion", `abrió: ${e}; perfil ${JSON.stringify(v)}`);
+});
+await caso("ses-304-sesion-guardada-de-una-cuenta-sin-printflow", async ({ p, s, ctx }) => {
+  // Lucero, Manuel: cuentas de verdad, sin renglón en public.users. Sale sólo de aquí: sus otras apps siguen.
+  s.usuarios.lucero = { uid: "00000000-0000-4000-8000-000000000021", pass: "buena", role: "tesoreria", display_name: "Lucero", email: "lucero@sygma.mx", sinPerfil: true };
+  await guardarSesionDe(ctx, s, "lucero");
+  const e = await abrir(p);
+  await esperarQue(() => s.salidas.length > 0, 5000);
+  const t = await texto(p);
+  ok("ses-304-sesion-guardada-de-una-cuenta-sin-printflow", e === "login" && /no está activa|no tiene/i.test(t) && soloLocales(s) && s.salidas.length >= 1 && !(await sesionGuardada(p)),
+    `abrió: ${e}; salidas ${s.salidas.join(" ") || "ninguna"}; «${t.slice(0, 120)}»`);
+});
+await caso("ses-305-entrar-con-una-cuenta-desactivada", async ({ p, s }) => {
+  s.usuarios.gerardo.inactivo = true;
+  const e0 = await abrir(p);
+  const e = await entrar(p, s, "gerardo");
+  const t = await texto(p);
+  ok("ses-305-entrar-con-una-cuenta-desactivada", e0 === "login" && e === "login" && /ya no está activa/.test(t) && soloLocales(s) && !(await sesionGuardada(p)), `${e}; «${t.slice(0, 120)}»`);
+});
+await caso("ses-306-abrir-con-una-cuenta-desactivada", async ({ p, s, ctx }) => {
+  s.usuarios.gerardo.inactivo = true;
+  await guardarSesionDe(ctx, s, "gerardo");
+  const e = await abrir(p);
+  await esperarQue(() => s.salidas.length > 0, 5000);
+  const t = await texto(p);
+  ok("ses-306-abrir-con-una-cuenta-desactivada", e === "login" && /ya no está activa/.test(t) && soloLocales(s), `${e}; salidas ${s.salidas.join(" ") || "ninguna"}`);
+});
+await caso("ses-307-cambia-el-correo-y-conserva-la-cuenta", async ({ p, s }) => {
+  // El 29-nov: Gerardo pasa a gerardo@sygma.mx con el mismo id. Quien ya estaba adentro no se entera: ni lo saca ni le cambia el perfil.
+  await abrirYEntrar(p, s, "gerardo");
+  s.usuarios.gerardo.email = "gerardo@sygma.mx";
+  await p.reload();
+  const e = await esperarEntrada(p);
+  const v = await perfilGuardado(p);
+  ok("ses-307-cambia-el-correo-y-conserva-la-cuenta", e === "app" && v?.username === "gerardo" && v?.role === "produccion" && s.salidas.length === 0, `${e}; perfil ${JSON.stringify(v)}; salidas ${s.salidas.join(" ") || "ninguna"}`);
+});
+await caso("ses-308-salir-y-entrar-con-otra-cuenta-en-el-mismo-navegador", async ({ p, s }) => {
+  await abrirYEntrar(p, s, "karla");
+  await p.getByRole("button", { name: "Salir", exact: true }).click();
+  await esperarLogin(p);
+  const e = await entrar(p, s, "gerardo");
+  const v = await perfilGuardado(p);
+  ok("ses-308-salir-y-entrar-con-otra-cuenta-en-el-mismo-navegador", e === "app" && v?.username === "gerardo" && v?.role === "produccion", `${e}; perfil ${JSON.stringify(v)}`);
+});
+await caso("ses-309-la-pantalla-de-entrar-no-pide-ningun-perfil", async ({ p, s }) => {
+  const e = await abrir(p);
+  await new Promise(r => setTimeout(r, 800));
+  ok("ses-309-la-pantalla-de-entrar-no-pide-ningun-perfil", e === "login" && s.perfiles === 0, `${e}; pidió ${s.comoPidioPerfil.join(", ") || "nada"}`);
+});
+await caso("ses-310-la-base-no-contesta-el-perfil-al-entrar", async ({ p, s }) => {
+  s.perfil = "falla";
+  await abrir(p);
+  const e = await entrar(p, s, "karla");
+  const t = await texto(p);
+  ok("ses-310-la-base-no-contesta-el-perfil-al-entrar", e === "login" && /no se pudo comprobar/i.test(t) && !/incorrect|ya no está activa/i.test(t) && soloLocales(s), `${e}; «${t.slice(0, 120)}»`);
+});
+await caso("ses-311-sin-red-el-perfil-al-abrir-no-saca-a-nadie", async ({ p, s, ctx }) => {
+  s.perfil = "red";
+  await guardarSesionDe(ctx, s, "karla");
+  await p.goto(BASE + "/");
+  const hay = await p.getByRole("button", { name: "Reintentar" }).waitFor({ state: "visible", timeout: 30000 }).then(() => true, () => false);
+  const guardada = await sesionGuardada(p);
+  s.perfil = "ok";
+  if (hay) await p.getByRole("button", { name: "Reintentar" }).click();
+  const e = await esperarEntrada(p);
+  ok("ses-311-sin-red-el-perfil-al-abrir-no-saca-a-nadie", hay && guardada && s.salidas.length === 0 && e === "app", `«Reintentar» ${hay}; guardada ${guardada}; salidas ${s.salidas.join(" ") || "ninguna"}; después ${e}`);
 });
 
 await browser.close();
