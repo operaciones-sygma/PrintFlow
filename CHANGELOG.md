@@ -12,6 +12,42 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.186 — Festivos en estancada y en las entregas; el rojo, sólo Dirección y no en lo entregado a tiempo — 5-nov-2026
+
+**Qué pasaba.** El panel «Tiempo por etapa» ya no contaba los festivos, pero el resto de la app sí: una orden parada el viernes 13-nov amanecía el martes 17 con «44h sin avance» cuando sólo llevaba 20, y «Sugerir fecha» podía proponer el 1 de enero. Además, 24 de las 291 órdenes entregadas a tiempo traían rojo en su panel, y cualquiera que abriera el detalle veía quién se pasó.
+
+**Lo que contestó Marcelo** (5-nov ~19:10, por Central): «1. No 2. Si festivos no cuentan para entrega, y si se descuentan de estancada. 3 no entiendo 4 Lo que recomiendes 5 y 6 también abierto a recomendaciones», y «ya que sea el último critique de printflow». Queda así:
+- Los sábados no cuentan. Se queda como está.
+- Los festivos de ley se descuentan de las fechas de entrega y de «estancada».
+- «Lo normal» no cambia. Central se lo explica y avisa si decide otra cosa.
+- Lo entregado a tiempo baja de rojo a ámbar. Lo que llegó tarde, lo que sigue en curso y lo que no tiene fecha, como hoy.
+- El rojo, el ámbar y quién se pasó, sólo Dirección. Los demás ven los tiempos.
+- Ya no hay más críticas de PrintFlow.
+
+**Lo medido antes de construir** (sólo lectura).
+- Las fechas guardadas no se reescriben (4 de las 12 abiertas con fecha caen después del 16-nov).
+- Hoy «estancada» cambia de cifra en 1 orden y de nivel en ninguna. El 9-nov una orden deja de ser «lejana». Desde el 17-nov, lo parado antes del 16 cuenta 24 h menos.
+- `calcDeliveryDate` la usan la forma y las órdenes web (1 en la historia).
+- Rojo por grupo: a tiempo 24 de 291, tarde 68 de 217, sin fecha 25 de 324, en curso 0 de 39.
+- Sin gemela: `public.is_business_hours` (silencio de avisos y clasificar precio) y `cobranza.es_feriado_bancario` son otra cosa, y no se tocaron.
+
+**Qué se cambió** (la pantalla; la base no).
+- 🔑 `esFestivo` en `bizHoursAgo` (estancada), `bizDaysSince` (días en la etapa, la Torre: no estaba en la lista de Central, pero es la misma regla), `bizDaysUntil` y `bizDaysBefore` (entrega lejana) y `calcDeliveryDate` (la fecha que se propone).
+- 🔑 `tiempoPorEtapa` con `marcas`: «sinRojo» baja el doble a ámbar y «ninguna» quita marcas y veredicto; devuelve `nivelDe`, y quien pinte un nivel usa ése. **Son pintura**: ni una cifra cambia, y en «sinRojo» sale la misma gente.
+- 🔑 `conMarcas={role==="admin"}` en los tres montajes (el panel del detalle, su encabezado y la ficha). Sin decirlo, no marca: cierra en la duda.
+- **Callar también dice** (DESIGN.md): a quien no es Dirección tampoco le sale «nada fuera de lo normal» ni «ninguna etapa se pasó», ni la regla de «lo normal», y los rubros a la vista son los mayores, no los que se pasaron. Lo que es un hecho se sigue diciendo: con quién está, quién la sigue, que regresó y por qué.
+- La tabla «Tiempos» de Analytics (sólo Dirección) cuenta lo mismo: un ámbar se cuenta igual que un rojo.
+
+**Cómo se probó.**
+- **Vuelta 1**, escrita antes del código y corrida contra el de antes: 52 pruebas, **caían 38**; las otras 14 son controles de lo que no debe cambiar (la que llegó tarde sigue en rojo, una semana sin festivo da igual). Tanda nueva `habiles` (sin navegador, con el reloj en cada caso), `tie-220` a `tie-232`, `det-247` y `det-248`, `ses-193` a `ses-195` (la app real: el rol lo da la sesión) y `per-91`.
+- **Vuelta 2**, por donde no se diseñó: 47 pruebas. Navidad y Año Nuevo juntos, todo dentro de un festivo, los que ya no son de ley (5-feb, 20-nov, el 1-oct de los otros años), de noche, con basura; lo entregado en el límite de su fecha (a las 23:30 sí, a las 00:10 del día siguiente no), la maquila, fechas basura, la pausa, «Ver fechas», el vendedor con lo suyo y con lo de otro, el dato que cambia con el panel abierto, 300 y 1920 px, y que a los demás no les llegue ni en el HTML ni en el color. **No encontró fallas de fondo.** Cayeron 2 por supuestos míos (`bizDaysSince(null)`, que nadie llama así, y cómo se escribe la fecha), y reescribí 3 que no podían fallar (una pausa del cliente, que no se marca ni a Dirección; un texto corto a 300 px; una cifra de hace dos años, que se quitó).
+- **Sabotajes**: 46 de 46 cayeron por su causa. A la primera 2 no cayeron por cómo los armé (un filtro que dejaba fuera `det-249`, y un sabotaje que tapaba a otro); repetidos aparte, cayeron.
+- Las tandas que copian esas cuentas (`atrasos`, `chips`, `corregir`, `torre`, `dashboard`, `despertador`, `ficha`, `tiempos`, `detalle`, `personas`): 869 de 869, con una inestable de la red (`tie-30`, `ERR_NO_BUFFER_SPACE` al abrir la página, revisada).
+
+**Qué NO se tocó.** La base. Las fechas ya guardadas. «Lo normal». Los sábados. La cuenta de la tabla «Tiempos».
+
+**Para Marcelo.** `public.is_business_hours` tampoco conoce los festivos: los avisos saldrán el lunes 16-nov como en un día normal, cuando nadie está. Cambiarlo es de base y con su OK.
+
 ## v10.84.185b (datos) — P-0736: 40 piezas, como dice F-268 — 5-nov-2026
 
 **Qué pasaba.** Al rehacer F-267 (Rio Grande, de Genaro) como F-268, de 20 a 40 piezas a $150, Karla subió el precio de la orden a $6,000 y le ligó F-268 (18:29-18:30), pero la cantidad se quedó en 20: la hoja de producción habría salido con la mitad. Salió al revisar lo que hizo Karla, cuando Marcelo lo pidió.
