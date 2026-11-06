@@ -32,7 +32,7 @@ const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
 const OUT = path.join(RAIZ, "tests/salida/corregir-foliada"); fs.mkdirSync(OUT, { recursive: true });
 const CRED = JSON.parse(fs.readFileSync(process.env.PF_CREDENCIAL || "C:/Users/padil/claude-navegador/credencial-printflow.json", "utf8"));
 const LECTURAS = new Set(["client_credit_balance", "get_app_config", "get_client_aliases", "get_client_billing_info",
-  "get_client_seller_label", "get_folio_emitter_enabled", "get_last_contact_for_client", "get_pantone_by_code", "get_user_session",
+  "get_client_seller_label", "get_folio_emitter_enabled", "get_last_contact_for_client", "get_pantone_by_code", "get_my_session",
   "list_anticipo_clients", "list_consecutive_cobranza_folios", "list_corona_oc_invoices", "list_linkable_invoices_for_oc",
   "list_linkable_invoices_for_order", "list_linkable_invoices_for_split", "list_stock_clients", "load_credit_ledger",
   "oc_shared_folio_is_cancelled", "ordenes_saldo_consumido", "order_folio_is_cancelled", "pf_archivos_del_bucket", "resolve_client_for_order",
@@ -113,7 +113,7 @@ async function entrar(estado = {}) {
         nota: o.production_number + " quedó en $" + o.price.toLocaleString("en-US", { minimumFractionDigits: 2 }) + " sin IVA y " + o.invoice_folio + " en $"
           + (Math.round(o.price * 116) / 100).toLocaleString("en-US", { minimumFractionDigits: 2 }) + ", con el mismo folio: ya la puedes timbrar." }) }); }
     if (rpc && LECTURAS.has(rpc)) {
-      if (rpc === "get_user_session") { const resp = await route.fetch(); let j = await resp.json().catch(() => null); if (Array.isArray(j) && j[0]) j = [{ ...j[0], role: estado.rol || "karla" }]; return route.fulfill({ response: resp, json: j }); }
+      if (rpc === "get_my_session") { const resp = await route.fetch(); let j = await resp.json().catch(() => null); if (Array.isArray(j) && j[0]) j = [{ ...j[0], role: estado.rol || "karla" }]; return route.fulfill({ response: resp, json: j }); }
       return route.continue();
     }
     const e = { m, a: rpc ? "rpc/" + rpc : tabla || ruta, q: Object.fromEntries(q), cuerpo };

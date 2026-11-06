@@ -1741,7 +1741,7 @@ const db = {
   async login(username, password) {
     // v10.73.48 — AUTH F2-full: SOLO Supabase Auth (se retiró el fallback legacy verify_user_password; todos migraron).
     // El empleado teclea su username → email sintético username@padillahnos.local. Tras signIn se re-verifica 'active'
-    // en public.users vía get_user_session (bloquea desactivados aunque su cuenta auth siga viva) y se toman rol +
+    // en public.users vía get_my_session (bloquea desactivados aunque su cuenta auth siga viva) y se toman rol +
     // display_name FRESCOS de la BD (un cambio de rol aplica al entrar, no queda el app_metadata stale del JWT).
     // v10.84.71 — un rechazo devuelve {error} con el PORQUÉ (antes null en todo, y la pantalla decía «Usuario o contraseña
     //   incorrectos» también con la red caída o con una cuenta de otra app: tanda sesion, ses-12, 13 y 15).
@@ -1755,7 +1755,9 @@ const db = {
       }
       authData=r.data;
     }catch(e){ console.warn("[login] auth:",e?.message); return {error:AVISO_ENTRAR_SIN_RED}; }
-    const {data:sess,error:sErr}=await supabase.rpc("get_user_session",{p_username:authData.user.app_metadata?.username||username});
+    // v10.84.190 — el perfil de la CUENTA que acaba de entrar (auth.uid()), no el de un nombre. Una sola cuenta nombre@sygma.mx (Marcelo, 19-oct): con
+    //   lupita@sygma.mx el nombre buscaba «lupita», y su usuario de PrintFlow es «secretaria» (tanda sesion-4, ses-302). Y un app_metadata.username de otra persona daba el perfil de esa persona (ses-303).
+    const {data:sess,error:sErr}=await supabase.rpc("get_my_session");
     const dbUser=Array.isArray(sess)&&sess.length>0?sess[0]:null;
     // desactivado o error → la sesión no queda viva (sólo la de aquí); un error de la base no dice que la cuenta no exista
     if(sErr){ try{await supabase.auth.signOut({scope:"local"})}catch(e){} return {error:AVISO_CUENTA_SIN_RED}; }
@@ -21913,12 +21915,12 @@ export default function PrintFlow() {
           // guardada, la pantalla de entrar a secas
           setAvisoEntrada(sesErr||HABIA_SESION_AL_CARGAR?{tipo:"cerrada",texto:AVISO_SESION_CERRADA}:null); setAuthChecked(true); return;
         }
-        const sessionUsername=authSess.user.app_metadata?.username||String(authSess.user.email||"").split("@")[0]||null;
         // v10.58.0 — Re-verificación via RPC server-side (acceso directo a public.users
         // revocado para anon). La RPC solo retorna identidad básica si el user sigue activo.
+        // v10.84.190 — por la cuenta de la sesión, no por su nombre (ver db.login).
         const [{error:authErr},resp]=await Promise.all([
           supabase.auth.getUser().catch(e=>({error:e})),
-          supabase.rpc("get_user_session",{p_username:sessionUsername}),
+          supabase.rpc("get_my_session"),
         ]);
         if(sesionCerradaPorAuth(authErr)) return fuera("cerrada",AVISO_SESION_CERRADA);
         if(resp.error) return sinRed();   // la base no contestó: eso no dice que la cuenta no exista

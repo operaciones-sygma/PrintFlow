@@ -1,9 +1,9 @@
 // LA SESIÓN CONTRA EL AUTH Y LA BASE DE VERDAD (v10.84.71). La tanda tests/romper/sesion.mjs simula Auth; ésta comprueba con la app
 // REAL (compilada o publicada) y la cuenta de pruebas que lo que esa tanda supone es lo que contestan Auth y la base: que una sesión
-// buena se recupera al abrir (getUser + get_user_session de verdad) y que nada saca a nadie. Sin escribir nada: las escrituras y la
+// buena se recupera al abrir (getUser + get_my_session de verdad) y que nada saca a nadie. Sin escribir nada: las escrituras y la
 // salida se cortan en este navegador (la salida se anota y no llega a Auth), y las fallas se SIMULAN sólo aquí.
 //  A. entrar y recargar: la app abre las dos veces, y al recargar se le preguntó a Auth (GET /auth/v1/user);
-//  B. al recargar, get_user_session no contesta (la red, sólo aquí): «No se pudo comprobar tu sesión» con «Reintentar», ninguna
+//  B. al recargar, get_my_session no contesta (la red, sólo aquí): «No se pudo comprobar tu sesión» con «Reintentar», ninguna
 //     salida; sin el corte, «Reintentar» abre sin contraseña;
 //  C. Auth ya no renueva la sesión (la renovación se rechaza sólo aquí): lleva a entrar con «Tu sesión se cerró…», sin salidas globales;
 //  D. «Salir»: sale sólo de aquí (scope=local) y la pantalla de entrar no dice que la sesión se cerró sola.
@@ -47,7 +47,7 @@ async function contexto(e) {
     if (ruta === "/auth/v1/token" && /grant_type=refresh_token/.test(url) && e.rechazarRenovacion)
       return route.fulfill({ status: 400, contentType: "application/json", headers: { "x-supabase-api-version": "2024-01-01" },
         body: JSON.stringify({ code: "refresh_token_not_found", error_code: "refresh_token_not_found", msg: "Invalid Refresh Token: Refresh Token Not Found" }) });
-    if (ruta === "/rest/v1/rpc/get_user_session") { e.perfiles++; if (e.sinRedAlPerfil) return route.abort("internetdisconnected"); return route.continue(); }
+    if (ruta === "/rest/v1/rpc/get_my_session") { e.perfiles++; if (e.sinRedAlPerfil) return route.abort("internetdisconnected"); return route.continue(); }
     if (m === "GET" || m === "HEAD" || m === "OPTIONS" || ruta.startsWith("/auth/v1/")) return route.continue().catch(() => {});
     if (ruta.startsWith("/storage/v1/object/sign/") || ruta.startsWith("/storage/v1/object/list/")) return route.continue();
     if (/^\/rest\/v1\/rpc\/(get_|list_|search_|load_|validate_|resolve_|client_credit_balance|ordenes_saldo_consumido|order_folio_is_cancelled|oc_shared_folio_is_cancelled|sugerencia_folios|pf_archivos_del_bucket)/.test(ruta)) return route.continue();

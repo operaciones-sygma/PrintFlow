@@ -19,7 +19,7 @@ const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
 const OUT = path.join(RAIZ, "tests/salida/lectura-falla"); fs.mkdirSync(OUT, { recursive: true });
 const CRED = JSON.parse(fs.readFileSync(process.env.PF_CREDENCIAL || "C:/Users/padil/claude-navegador/credencial-printflow.json", "utf8"));
 const LECTURAS = new Set(["client_credit_balance", "get_app_config", "get_client_aliases", "get_client_billing_info",
-  "get_client_seller_label", "get_folio_emitter_enabled", "get_last_contact_for_client", "get_pantone_by_code", "get_user_session",
+  "get_client_seller_label", "get_folio_emitter_enabled", "get_last_contact_for_client", "get_pantone_by_code", "get_my_session",
   "list_anticipo_clients", "list_consecutive_cobranza_folios", "list_corona_oc_invoices", "list_linkable_invoices_for_oc",
   "list_linkable_invoices_for_order", "list_linkable_invoices_for_split", "list_stock_clients", "load_credit_ledger",
   "oc_shared_folio_is_cancelled", "ordenes_saldo_consumido", "order_folio_is_cancelled", "pf_archivos_del_bucket", "resolve_client_for_order",
@@ -46,7 +46,7 @@ async function entrar(estado) {
     if (ruta.startsWith("/storage/v1/object/sign/") || ruta.startsWith("/storage/v1/object/list/")) return route.continue();
     const rpc = (/^\/rest\/v1\/rpc\/([a-z0-9_]+)$/.exec(ruta) || [])[1];
     if (rpc && LECTURAS.has(rpc)) {
-      if (rpc === "get_user_session") { const resp = await route.fetch(); let j = await resp.json().catch(() => null); if (Array.isArray(j) && j[0]) j = [{ ...j[0], role: "produccion" }]; return route.fulfill({ response: resp, json: j }); }
+      if (rpc === "get_my_session") { const resp = await route.fetch(); let j = await resp.json().catch(() => null); if (Array.isArray(j) && j[0]) j = [{ ...j[0], role: "produccion" }]; return route.fulfill({ response: resp, json: j }); }
       return route.continue();
     }
     cortes.add(m + " " + (rpc ? "rpc/" + rpc : ruta));

@@ -177,6 +177,9 @@ async function rutear(ctx, s) {
         if (s.alPedirPerfil) { const f = s.alPedirPerfil; s.alPedirPerfil = null; await f(req.frame().page()); }
         if (s.perfil === "red") return route.abort("internetdisconnected");
         if (s.perfil === "falla") return J(503, { message: "upstream connect error (prueba)" });
+        // v10.84.190 — la app subió antes que la base (PGRST202), y una respuesta sin nada
+        if (s.perfil === "no-existe") return J(404, { code: "PGRST202", message: "Could not find the function public.get_my_session without parameters in the schema cache", details: null, hint: null });
+        if (s.perfil === "nulo") return J(200, null);
         // v10.84.190 — las dos como en la base: get_user_session busca por el NOMBRE que le pasan (el usuario de PrintFlow, no la clave de la cuenta) y
         //   get_my_session por la CUENTA de la sesión (auth.uid()); como anónima, ésta no se puede ni llamar (REVOKE: la regla 5). `sinPerfil`: esa cuenta no tiene renglón en public.users.
         if (ruta.endsWith("/get_my_session") && quien !== "usuario") return J(401, { code: "42501", message: "permission denied for function get_my_session", details: null, hint: null });
@@ -3303,6 +3306,47 @@ await caso("ses-311-sin-red-el-perfil-al-abrir-no-saca-a-nadie", async ({ p, s, 
   if (hay) await p.getByRole("button", { name: "Reintentar" }).click();
   const e = await esperarEntrada(p);
   ok("ses-311-sin-red-el-perfil-al-abrir-no-saca-a-nadie", hay && guardada && s.salidas.length === 0 && e === "app", `«Reintentar» ${hay}; guardada ${guardada}; salidas ${s.salidas.join(" ") || "ninguna"}; después ${e}`);
+});
+
+// ── v10.84.190, vuelta 2: por donde no se diseñó ──
+await caso("ses-312-le-cambian-el-rol-y-al-recargar-manda-el-nuevo", async ({ p, s }) => {
+  await abrirYEntrar(p, s, "gerardo");
+  s.usuarios.gerardo.role = "visor";
+  await p.reload();
+  const e = await esperarEntrada(p);
+  const v = await perfilGuardado(p);
+  ok("ses-312-le-cambian-el-rol-y-al-recargar-manda-el-nuevo", e === "app" && v?.role === "visor", `${e}; perfil ${JSON.stringify(v)}`);
+});
+await caso("ses-313-la-app-subio-antes-que-la-base-al-abrir-no-saca-a-nadie", async ({ p, s, ctx }) => {
+  s.perfil = "no-existe";
+  await guardarSesionDe(ctx, s, "karla");
+  await p.goto(BASE + "/");
+  const hay = await p.getByRole("button", { name: "Reintentar" }).waitFor({ state: "visible", timeout: 30000 }).then(() => true, () => false);
+  const guardada = await sesionGuardada(p);
+  ok("ses-313-la-app-subio-antes-que-la-base-al-abrir-no-saca-a-nadie", hay && guardada && s.salidas.length === 0, `«Reintentar» ${hay}; guardada ${guardada}; salidas ${s.salidas.join(" ") || "ninguna"}`);
+});
+await caso("ses-314-la-app-subio-antes-que-la-base-al-entrar-no-dice-que-la-desactivaron", async ({ p, s }) => {
+  s.perfil = "no-existe";
+  await abrir(p);
+  const e = await entrar(p, s, "karla");
+  const t = await texto(p);
+  ok("ses-314-la-app-subio-antes-que-la-base-al-entrar-no-dice-que-la-desactivaron", e === "login" && /no se pudo comprobar/i.test(t) && !/ya no está activa|incorrect/i.test(t) && soloLocales(s), `${e}; «${t.slice(0, 120)}»`);
+});
+await caso("ses-315-la-base-contesta-sin-nada", async ({ p, s }) => {
+  s.perfil = "nulo";
+  await abrir(p);
+  const e = await entrar(p, s, "karla");
+  const t = await texto(p);
+  ok("ses-315-la-base-contesta-sin-nada", e === "login" && /ya no está activa/.test(t) && soloLocales(s) && !(await sesionGuardada(p)), `${e}; «${t.slice(0, 120)}»`);
+});
+await caso("ses-316-dos-pestanas-otra-cuenta-la-segunda-no-toma-el-perfil-de-la-primera", async ({ p, s, nueva }) => {
+  await abrirYEntrar(p, s, "karla");
+  const antes = s.comoPidioPerfil.length;
+  const b = await nueva();
+  await b.goto(BASE + "/");
+  const e = await esperarEntrada(b);
+  const v = await perfilGuardado(b);
+  ok("ses-316-dos-pestanas-otra-cuenta-la-segunda-no-toma-el-perfil-de-la-primera", e === "app" && v?.username === "karla" && s.comoPidioPerfil.length > antes, `${e}; ${JSON.stringify(v)}`);
 });
 
 await browser.close();

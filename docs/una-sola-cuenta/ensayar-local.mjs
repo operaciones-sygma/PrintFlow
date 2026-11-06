@@ -43,6 +43,15 @@ create function cobranza.is_internal_employee() returns boolean language sql sta
     OR EXISTS (SELECT 1 FROM public.users pu WHERE pu.user_id = auth.uid() AND pu.active)
   );
 $f$;
+create function public.get_user_session(p_username text) returns table(username text, role text, display_name text, active boolean) language plpgsql stable security definer set search_path to 'public', 'cobranza', 'pg_temp' as $f$
+BEGIN
+  IF NOT cobranza.is_internal_employee() THEN
+    RAISE EXCEPTION 'Acceso restringido a personal interno' USING ERRCODE='42501';
+  END IF;
+  RETURN QUERY
+  SELECT u.username, u.role, u.display_name, u.active FROM public.users u WHERE u.username = p_username AND u.active = true LIMIT 1;
+END;
+$f$;
 create function public.pf_uid_role() returns text language sql stable security definer set search_path to 'public', 'cobranza', 'pg_temp' as $f$
   SELECT COALESCE(
     (SELECT role FROM public.users WHERE user_id = auth.uid() AND active = true LIMIT 1),
