@@ -48,6 +48,12 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 **Para Marcelo.** `public.is_business_hours` tampoco conoce los festivos: los avisos saldrán el lunes 16-nov como en un día normal, cuando nadie está. Cambiarlo es de base y con su OK.
 
+**En producción.** 5-nov ~22:31, READY `dpl_BC1RyqpNYNqrDLhhig33ge9ckeDq`, commits `48bead0` a `45f4a44`. Candado 3285 de 3285 (99 nuevas), de a 4, 1454 s, sin regresiones, con una inestable de la red (`tie-224`, `ERR_NO_BUFFER_SPACE` al abrir la página, revisada). Revisado en producción sin escribir, a 1366 y 1920, con la cuenta de pruebas. Como Dirección: P-0395, entregada a tiempo, en ámbar («Empaque tardó 64h, lo normal 24h»); P-0428, tarde, y P-0608, sin fecha, en rojo; P-0721, en curso, con su marca. Como Producción, Karla y Lupita, esas mismas: los tiempos, sin marcas, sin «lo normal» ni en el HTML. Sin errores de la página. Lo único cortado, como en la 185: las imágenes que el archivado diario comprime al entrar como Dirección.
+
+**Vuelta atrás.** `git revert --no-edit 45f4a44 e6a49d6 5c77d7f 9e1412a 48bead0` (se detiene en `CHANGELOG.md`: `git checkout --ours CHANGELOG.md && git add CHANGELOG.md && git revert --continue`) y subir (ensayada en un worktree: deja `src`, `scripts`, `tests` y `DESIGN.md` como 0819225, el código de la 185), o promover `dpl_5n62c51yQ97wPYfxeUQkzg72Yr3s` (el código de la 185). La base no cambió.
+
+**Sin probar.** En un teléfono de verdad y con un lector de pantalla de verdad. «Aprobar la orden web» con su fecha: se probó la cuenta (`calcDeliveryDate`) y «Sugerir fecha» en la forma, no ese botón. Y el primer festivo de verdad, el lunes 16-nov: las cifras de ese día se probaron con el reloj puesto, no en producción.
+
 ## v10.84.185b (datos) — P-0736: 40 piezas, como dice F-268 — 5-nov-2026
 
 **Qué pasaba.** Al rehacer F-267 (Rio Grande, de Genaro) como F-268, de 20 a 40 piezas a $150, Karla subió el precio de la orden a $6,000 y le ligó F-268 (18:29-18:30), pero la cantidad se quedó en 20: la hoja de producción habría salido con la mitad. Salió al revisar lo que hizo Karla, cuando Marcelo lo pidió.
