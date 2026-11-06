@@ -134,7 +134,9 @@ async function rutear(ctx, s) {
       if (gt === "password") {
         s.entradas++;
         s.correos.push(cuerpo.email);
+        if (s.retrasoAuth) await new Promise(r => setTimeout(r, s.retrasoAuth));   // v10.84.191 — Auth lento: lo que se aprieta mientras tanto
         if (s.entrar === "red") return route.abort("internetdisconnected");
+        if (s.entrar === "muchos") return J(429, { code: "over_request_rate_limit", error_code: "over_request_rate_limit", msg: "Request rate limit reached" });
         // v10.84.190 — como Auth: la cuenta se busca por su correo completo, sin mayúsculas y sin recortar nada (antes, lo de antes de la @ en cualquier dominio).
         const correo = String(cuerpo.email || "").toLowerCase();
         const username = Object.keys(s.usuarios).find(k => correoDe(k, s.usuarios[k]) === correo), u = username && s.usuarios[username];
@@ -233,7 +235,8 @@ async function rutear(ctx, s) {
 // ── la persona frente a la pantalla ──
 let browser;
 try { browser = await chromium.launch({ headless: true }); } catch { browser = await chromium.launch({ headless: true, channel: "chrome" }); }
-const LOGIN = 'input[placeholder="Ej: gerardo, noemi, admin"]';
+// v10.84.191 — la casilla por su autocompletar: el letrero cambió (corrida doble: la de antes sigue por su placeholder)
+const LOGIN = 'input[autocomplete="username"], input[placeholder="Ej: gerardo, noemi, admin"]';
 const texto = p => p.evaluate(() => document.body.innerText.replace(/\s+/g, " "));
 const estado = p => p.evaluate(sel => {
   if ([...document.querySelectorAll("button")].some(b => b.textContent.trim() === "Salir" && b.offsetParent)) return "app";
@@ -3347,6 +3350,215 @@ await caso("ses-316-dos-pestanas-otra-cuenta-la-segunda-no-toma-el-perfil-de-la-
   const e = await esperarEntrada(b);
   const v = await perfilGuardado(b);
   ok("ses-316-dos-pestanas-otra-cuenta-la-segunda-no-toma-el-perfil-de-la-primera", e === "app" && v?.username === "karla" && s.comoPidioPerfil.length > antes, `${e}; ${JSON.stringify(v)}`);
+});
+
+// ════════════════════════ v10.84.191: también con el correo completo (paso 3 de una sola cuenta) ════════════════════════
+const UID_KARLA_NUEVA = "00000000-0000-4000-8000-000000000030";
+// El 29-nov: karla@sygma.mx (la cuenta de CobranzaFlow) con el renglón de PrintFlow de Karla, y la cuenta de antes sin renglón.
+const ligarKarla = s => { s.usuarios.karla.sinPerfil = true; s.usuarios.karlaNueva = { uid: UID_KARLA_NUEVA, pass: "buena", role: "karla", display_name: "Karla", username: "karla", email: "karla@sygma.mx" }; };
+const ultimoCorreo = s => s.correos[s.correos.length - 1];
+const avisoDeEntrada = p => p.locator('[role="alert"]').first().innerText().catch(() => "");
+
+await caso("ses-320-el-nombre-de-siempre-sigue-entrando", async ({ p, s }) => {
+  await abrir(p);
+  const e = await entrar(p, s, "gerardo");
+  ok("ses-320-el-nombre-de-siempre-sigue-entrando", e === "app" && ultimoCorreo(s) === "gerardo@padillahnos.local", `${e}; a Auth le llegó ${ultimoCorreo(s)}`);
+});
+await caso("ses-321-el-nombre-con-mayusculas-y-espacios", async ({ p, s }) => {
+  await abrir(p);
+  const e = await entrar(p, s, "  GERARDO ");
+  ok("ses-321-el-nombre-con-mayusculas-y-espacios", e === "app" && ultimoCorreo(s) === "gerardo@padillahnos.local", `${e}; a Auth le llegó ${ultimoCorreo(s)}`);
+});
+await caso("ses-322-con-el-correo-completo", async ({ p, s }) => {
+  ligarKarla(s);
+  await abrir(p);
+  const e = await entrar(p, s, "karla@sygma.mx");
+  const v = await perfilGuardado(p);
+  ok("ses-322-con-el-correo-completo", e === "app" && ultimoCorreo(s) === "karla@sygma.mx" && v?.username === "karla" && v?.role === "karla", `${e}; a Auth le llegó ${ultimoCorreo(s)}; perfil ${JSON.stringify(v)}`);
+});
+await caso("ses-323-el-correo-con-mayusculas-y-espacios", async ({ p, s }) => {
+  ligarKarla(s);
+  await abrir(p);
+  const e = await entrar(p, s, "  Karla@SYGMA.mx ");
+  ok("ses-323-el-correo-con-mayusculas-y-espacios", e === "app" && ultimoCorreo(s) === "karla@sygma.mx", `${e}; a Auth le llegó ${ultimoCorreo(s)}`);
+});
+await caso("ses-324-con-acento-como-se-llaman", async ({ p, s }) => {
+  // Noemí y Germán escriben su nombre como se escribe; el correo no lleva acentos
+  s.usuarios.noemi.email = "noemi@sygma.mx";
+  await abrir(p);
+  const e1 = await entrar(p, s, "Noemí@sygma.mx");
+  const c1 = ultimoCorreo(s);
+  await p.getByRole("button", { name: "Salir", exact: true }).click().catch(() => {});
+  await esperarLogin(p);
+  const e2 = await entrar(p, s, "Germán");
+  ok("ses-324-con-acento-como-se-llaman", e1 === "app" && c1 === "noemi@sygma.mx" && e2 === "app" && ultimoCorreo(s) === "german@padillahnos.local", `${e1} con ${c1}; ${e2} con ${ultimoCorreo(s)}`);
+});
+await caso("ses-325-correo-bueno-sin-printflow", async ({ p, s }) => {
+  // Lucero o Manuel: su contraseña está bien y no tienen PrintFlow. No es «la desactivaron», y no se le cierra nada más que aquí.
+  s.usuarios.lucero = { uid: "00000000-0000-4000-8000-000000000021", pass: "buena", role: "tesoreria", display_name: "Lucero", email: "lucero@sygma.mx", sinPerfil: true };
+  await abrir(p);
+  const e = await entrar(p, s, "lucero@sygma.mx");
+  await esperarQue(() => s.salidas.length > 0, 5000);
+  const t = await texto(p);
+  ok("ses-325-correo-bueno-sin-printflow", e === "login" && /todavía no tiene PrintFlow/.test(t) && !/desactivaron|ya no está activa|incorrect/i.test(t) && soloLocales(s) && s.salidas.length >= 1 && !(await sesionGuardada(p)),
+    `${e}; salidas ${s.salidas.join(" ") || "ninguna"}; «${t.slice(0, 160)}»`);
+});
+await caso("ses-326-correo-con-contrasena-mala", async ({ p, s }) => {
+  ligarKarla(s);
+  await abrir(p);
+  const e = await entrar(p, s, "karla@sygma.mx", "mala");
+  const t = await avisoDeEntrada(p);
+  ok("ses-326-correo-con-contrasena-mala", e === "login" && /correo o contraseña incorrectos/i.test(t) && s.salidas.length === 0, `${e}; «${t}»`);
+});
+await caso("ses-327-el-correo-de-antes-completo", async ({ p, s }) => {
+  await abrir(p);
+  const e = await entrar(p, s, "karla@padillahnos.local");
+  ok("ses-327-el-correo-de-antes-completo", e === "app" && ultimoCorreo(s) === "karla@padillahnos.local", `${e}; a Auth le llegó ${ultimoCorreo(s)}`);
+});
+// Los datos raros del catálogo de break-ui: nada truena, Auth contesta lo suyo y lo que trae @ nunca se le pega el dominio de antes.
+for (const [i, raro] of [
+  ["a", "a@b.co"],
+  ["b", "bartholomew.fitzgerald@northwind-industries-holdings.example.com"],
+  ["c", "first.last+billing-notifications@example.com"],
+  ["d", "@sygma.mx"],
+  ["e", "karla@"],
+  ["f", "<script>alert(1)</script>@sygma.mx"],
+  ["g", "🦊@sygma.mx"],
+  ["h", "نور@sygma.mx"],
+  ["i", "a@b@c.example.com"],
+  ["j", "x".repeat(2000) + "@sygma.mx"],
+].map(([k, v]) => [k, v])) {
+  await caso("ses-328-" + i + "-dato-raro", async ({ p, s }) => {
+    await abrir(p);
+    const e = await entrar(p, s, raro);
+    const t = await avisoDeEntrada(p);
+    const c = String(ultimoCorreo(s) || "");
+    const cabe = await p.locator(LOGIN).first().evaluate(el => { const r = el.getBoundingClientRect(); return r.right <= document.documentElement.clientWidth && document.documentElement.scrollWidth <= document.documentElement.clientWidth; });
+    ok("ses-328-" + i + "-dato-raro", e === "login" && /incorrectos/i.test(t) && !c.endsWith("@padillahnos.local") && cabe, `${e}; «${t}»; a Auth: ${c.slice(0, 60)}; cabe ${cabe}`);
+  });
+}
+await caso("ses-329-doble-enter-es-una-sola-entrada", async ({ p, s }) => {
+  ligarKarla(s);
+  await abrir(p);
+  await p.locator(LOGIN).fill("karla@sygma.mx");
+  const pass = p.getByPlaceholder("Contraseña");
+  await pass.fill("buena");
+  await p.evaluate(() => { const c = [...document.querySelectorAll('input[type="password"]')][0]; c.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); c.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); });
+  const e = await esperarEntrada(p);
+  ok("ses-329-doble-enter-es-una-sola-entrada", e === "app" && s.entradas === 1, `${e}; ${s.entradas} entradas a Auth`);
+});
+await caso("ses-330-doble-clic-en-entrar-es-una-sola-entrada", async ({ p, s }) => {
+  ligarKarla(s);
+  await abrir(p);
+  await p.locator(LOGIN).fill("karla@sygma.mx");
+  await p.getByPlaceholder("Contraseña").fill("buena");
+  await p.evaluate(() => { const b = [...document.querySelectorAll("button")].find(x => x.textContent.trim() === "Entrar"); b.click(); b.click(); });
+  const e = await esperarEntrada(p);
+  ok("ses-330-doble-clic-en-entrar-es-una-sola-entrada", e === "app" && s.entradas === 1, `${e}; ${s.entradas} entradas a Auth`);
+});
+for (const [tam, viewport] of [["1366", { width: 1366, height: 768 }], ["1920", { width: 1920, height: 1080 }], ["390", { width: 390, height: 844 }]]) {
+  await caso("ses-331-" + tam + "-la-pantalla-dice-que-se-puede-con-correo", async ({ p }) => {
+    await abrir(p);
+    const c = p.locator(LOGIN).first();
+    const ph = await c.getAttribute("placeholder"), etiqueta = await texto(p);
+    const atr = await c.evaluate(el => ({ ac: el.getAttribute("autocomplete"), cap: el.getAttribute("autocapitalize"), sp: el.getAttribute("spellcheck"), im: el.getAttribute("inputmode") }));
+    const dentro = await c.evaluate(el => { const r = el.getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth; });
+    ok("ses-331-" + tam + "-la-pantalla-dice-que-se-puede-con-correo", /usuario o correo/i.test(etiqueta) && /correo/i.test(ph || "") && !/admin/i.test(ph || "") && atr.ac === "username" && atr.cap === "none" && atr.sp === "false" && dentro,
+      `letrero «${ph}»; atributos ${JSON.stringify(atr)}; dentro ${dentro}`);
+  }, { viewport });
+}
+await caso("ses-332-correo-sin-red", async ({ p, s }) => {
+  ligarKarla(s);
+  s.entrar = "red";
+  await abrir(p);
+  const e = await entrar(p, s, "karla@sygma.mx");
+  const t = await avisoDeEntrada(p);
+  ok("ses-332-correo-sin-red", e === "login" && /no se pudo conectar/i.test(t) && !/incorrect/i.test(t), `${e}; «${t}»`);
+});
+await caso("ses-333-el-dia-del-cambio-la-cuenta-de-antes-abierta-y-luego-la-nueva", async ({ p, s }) => {
+  // Lunes 30-nov en la mañana: Karla abre con la sesión de su cuenta de antes, ya sin renglón; entra con la nueva y queda igual que antes.
+  await abrirYEntrar(p, s, "karla");
+  const antes = await perfilGuardado(p);
+  ligarKarla(s);
+  await p.reload();
+  const e1 = await esperarEntrada(p);
+  const e2 = e1 === "login" ? await entrar(p, s, "karla@sygma.mx") : e1;
+  const v = await perfilGuardado(p);
+  ok("ses-333-el-dia-del-cambio-la-cuenta-de-antes-abierta-y-luego-la-nueva", e1 === "login" && e2 === "app" && v?.username === antes?.username && v?.role === antes?.role && soloLocales(s), `${e1} → ${e2}; ${JSON.stringify(antes)} → ${JSON.stringify(v)}`);
+});
+await caso("ses-334-gerardo-cambio-de-correo-con-el-nombre-ya-no-y-con-el-correo-si", async ({ p, s }) => {
+  // El 29-nov, a Gerardo (el mismo id y la misma contraseña): el nombre le pega el dominio de antes y Auth ya no lo conoce; el correo nuevo entra
+  s.usuarios.gerardo.email = "gerardo@sygma.mx";
+  await abrir(p);
+  const e1 = await entrar(p, s, "gerardo");
+  const t = await avisoDeEntrada(p);
+  const e2 = await entrar(p, s, "gerardo@sygma.mx");
+  const v = await perfilGuardado(p);
+  ok("ses-334-gerardo-cambio-de-correo-con-el-nombre-ya-no-y-con-el-correo-si", e1 === "login" && /incorrectos/i.test(t) && e2 === "app" && v?.username === "gerardo", `${e1} «${t}» → ${e2}; ${JSON.stringify(v)}`);
+});
+
+// ── v10.84.191, vuelta 2: por donde no se diseñó ──
+await caso("ses-335-sin-escribir-nada-de-verdad", async ({ p, s }) => {
+  await abrir(p);
+  await p.locator(LOGIN).fill("     ");
+  await p.getByPlaceholder("Contraseña").fill("buena");
+  await p.getByRole("button", { name: "Entrar" }).click();
+  await new Promise(r => setTimeout(r, 400));
+  const t = await avisoDeEntrada(p);
+  ok("ses-335-sin-escribir-nada-de-verdad", s.entradas === 0 && /usuario o correo/i.test(t), `${s.entradas} entradas a Auth; «${t}»`);
+});
+await caso("ses-336-la-contrasena-va-tal-cual", async ({ p, s }) => {
+  // A las contraseñas no se les quitan espacios ni mayúsculas: lo que se recorta es sólo el correo.
+  ligarKarla(s);
+  s.usuarios.karlaNueva.pass = " Con Espacios ";
+  await abrir(p);
+  const e = await entrar(p, s, "karla@sygma.mx", " Con Espacios ");
+  ok("ses-336-la-contrasena-va-tal-cual", e === "app", e);
+});
+await caso("ses-337-se-equivoca-y-vuelve-a-intentar", async ({ p, s }) => {
+  ligarKarla(s);
+  await abrir(p);
+  const e1 = await entrar(p, s, "karla@sygma.mx", "mala");
+  const e2 = await entrar(p, s, "karla@sygma.mx", "buena");
+  ok("ses-337-se-equivoca-y-vuelve-a-intentar", e1 === "login" && e2 === "app" && s.entradas === 2, `${e1} → ${e2}; ${s.entradas} entradas`);
+});
+await caso("ses-338-enter-otra-vez-con-auth-lento", async ({ p, s }) => {
+  ligarKarla(s);
+  s.retrasoAuth = 1500;
+  await abrir(p);
+  await p.locator(LOGIN).fill("karla@sygma.mx");
+  const pass = p.getByPlaceholder("Contraseña");
+  await pass.fill("buena");
+  await pass.press("Enter");
+  await new Promise(r => setTimeout(r, 500));
+  await pass.press("Enter").catch(() => {});
+  const e = await esperarEntrada(p);
+  ok("ses-338-enter-otra-vez-con-auth-lento", e === "app" && s.entradas === 1, `${e}; ${s.entradas} entradas a Auth`);
+});
+await caso("ses-339-demasiados-intentos-con-correo", async ({ p, s }) => {
+  ligarKarla(s);
+  s.entrar = "muchos";
+  await abrir(p);
+  const e = await entrar(p, s, "karla@sygma.mx");
+  const t = await avisoDeEntrada(p);
+  ok("ses-339-demasiados-intentos-con-correo", e === "login" && /demasiados intentos/i.test(t) && !/incorrect/i.test(t), `${e}; «${t}»`);
+});
+await caso("ses-340-de-una-cuenta-sin-printflow-a-la-de-siempre", async ({ p, s }) => {
+  s.usuarios.lucero = { uid: "00000000-0000-4000-8000-000000000021", pass: "buena", role: "tesoreria", display_name: "Lucero", email: "lucero@sygma.mx", sinPerfil: true };
+  await abrir(p);
+  const e1 = await entrar(p, s, "lucero@sygma.mx");
+  const e2 = await entrar(p, s, "karla");
+  const t = await texto(p), v = await perfilGuardado(p);
+  ok("ses-340-de-una-cuenta-sin-printflow-a-la-de-siempre", e1 === "login" && e2 === "app" && v?.username === "karla" && !/todavía no tiene PrintFlow/.test(t), `${e1} → ${e2}; ${JSON.stringify(v)}`);
+});
+await caso("ses-341-rol-de-otra-app-con-correo", async ({ p, s }) => {
+  // Arturo, después del cambio: arturo@sygma.mx y su rol es de Almacén. Lo dice como siempre, y no se le cierra Almacén.
+  s.usuarios.arturo = { uid: "00000000-0000-4000-8000-000000000022", pass: "buena", role: "almacen", display_name: "Arturo", username: "arturo", email: "arturo@sygma.mx" };
+  await abrir(p);
+  const e = await entrar(p, s, "arturo@sygma.mx");
+  await esperarQue(() => s.salidas.length > 0, 5000);
+  const t = await texto(p);
+  ok("ses-341-rol-de-otra-app-con-correo", e === "login" && /no tiene acceso a PrintFlow/i.test(t) && soloLocales(s), `${e}; salidas ${s.salidas.join(" ") || "ninguna"}; «${t.slice(0, 120)}»`);
 });
 
 await browser.close();

@@ -28,7 +28,7 @@ const ok = (nombre, c, x) => { res.push((c ? "BIEN " : "MAL  ") + " " + nombre +
 const LLAVE = /^sb-.*-auth-token$/;
 const texto = p => p.evaluate(() => document.body.innerText.replace(/\s+/g, " "));
 const enApp = p => p.evaluate(() => [...document.querySelectorAll("button")].some(b => b.textContent.trim() === "Salir" && b.offsetParent));
-const enLogin = p => p.evaluate(() => !!document.querySelector('input[placeholder^="Ej: gerardo"]') && !/Verificando|Comprobando/.test(document.body.innerText));
+const enLogin = p => p.evaluate(() => !!document.querySelector('input[autocomplete="username"], input[placeholder^="Ej: gerardo"]') && !/Verificando|Comprobando/.test(document.body.innerText));
 async function esperar(p, cond, s = 30) { for (let k = 0; k < s * 5; k++) { if (await cond(p).catch(() => false)) return true; await p.waitForTimeout(200); } return false; }
 const cerrarEstorbos = async p => {   // la bienvenida del rol y el «Despertador» del día tapan los clics
   for (let i = 0; i < 2; i++) { await p.keyboard.press("Escape"); await p.waitForTimeout(150); }

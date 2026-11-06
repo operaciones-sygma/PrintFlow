@@ -384,10 +384,18 @@ try{ supabase.auth.onAuthStateChange((_e,s)=>{ AUTH_UID=s?.user?.id||null; }); }
 const AVISO_SESION_CERRADA="Tu sesión se cerró: saliste en otra ventana, o se cerró desde otro equipo o desde otra app. Vuelve a entrar para seguir.";
 const AVISO_SIN_PERFIL="Esta cuenta ya no está activa en PrintFlow (la desactivaron o ya no existe). Si es un error, pídele a Marcelo que la revise.";
 const AVISO_SIN_ACCESO="Esa cuenta no tiene acceso a PrintFlow (es de otra app de SYGMA).";
+// v10.84.191 — entró con su correo, la contraseña está bien y esa cuenta no tiene renglón en PrintFlow: Lucero o Manuel, o Karla antes del cambio de cuentas. No es «la desactivaron».
+const AVISO_SIN_LIGAR="Tu contraseña está bien, pero esa cuenta todavía no tiene PrintFlow. Si ya usas PrintFlow, entra con tu usuario de siempre; si no, pídele a Marcelo que te dé acceso.";
 const AVISO_ABRIR_SIN_RED="No se pudo comprobar tu sesión: falló la conexión o el servidor no contestó. Tu sesión sigue guardada en este equipo: «Reintentar» la abre sin escribir la contraseña.";
 const AVISO_ENTRAR_SIN_RED="No se pudo conectar para entrar: falló la conexión o el servidor no contestó. Revisa el internet y vuelve a intentar.";
 const AVISO_CUENTA_SIN_RED="No se pudo comprobar tu cuenta: falló la conexión o el servidor no contestó. Vuelve a intentar.";
 const ROLES_PF=["admin","karla","secretaria","vendedor","produccion","preprensa","german","visor"];   // v10.77.6 (lista blanca; ver db.login)
+// v10.84.191 — lo que se escribe en «Usuario o correo», como lo conoce Auth. Con @, es el correo; sin ella, el usuario de siempre (nombre@padillahnos.local, hasta el cambio
+//   de cuentas: docs/una-sola-cuenta/LEEME.md). Sin espacios ni mayúsculas, y sin acentos: Noemí y Germán escriben su nombre como se escribe y las cuentas no los llevan.
+const correoDeEntrada=escrito=>{
+  const t=String(escrito||"").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+  return t.includes("@")?t:t+"@padillahnos.local";
+};
 const esFallaDeRed=e=>!!e&&(e.name==="AuthRetryableFetchError"||e.status===0||e.status>=500||/fetch|network|conexi/i.test(String(e.message||"")));
 // Auth dice que la sesión ya no existe (la cerraron en otro lado): AuthSessionMissingError («session_not_found»), o el token rechazado
 const sesionCerradaPorAuth=e=>!!e&&(e.name==="AuthSessionMissingError"||e.status===401||e.status===403);
@@ -1738,7 +1746,7 @@ const db = {
       }
     }
   },
-  async login(username, password) {
+  async login(escrito, password) {
     // v10.73.48 — AUTH F2-full: SOLO Supabase Auth (se retiró el fallback legacy verify_user_password; todos migraron).
     // El empleado teclea su username → email sintético username@padillahnos.local. Tras signIn se re-verifica 'active'
     // en public.users vía get_my_session (bloquea desactivados aunque su cuenta auth siga viva) y se toman rol +
@@ -1747,11 +1755,11 @@ const db = {
     //   incorrectos» también con la red caída o con una cuenta de otra app: tanda sesion, ses-12, 13 y 15).
     let authData;
     try{
-      const r=await supabase.auth.signInWithPassword({email:username+"@padillahnos.local",password});
+      const r=await supabase.auth.signInWithPassword({email:correoDeEntrada(escrito),password});
       if(r.error||!r.data?.user){
         if(esFallaDeRed(r.error)) return {error:AVISO_ENTRAR_SIN_RED};
         if(r.error?.status===429) return {error:"Demasiados intentos seguidos. Espera un minuto y vuelve a intentar."};
-        return {error:"Usuario o contraseña incorrectos"}; // credenciales incorrectas / cuenta inexistente
+        return {error:(String(escrito||"").includes("@")?"Correo":"Usuario")+" o contraseña incorrectos"}; // credenciales incorrectas / cuenta inexistente
       }
       authData=r.data;
     }catch(e){ console.warn("[login] auth:",e?.message); return {error:AVISO_ENTRAR_SIN_RED}; }
@@ -1761,7 +1769,7 @@ const db = {
     const dbUser=Array.isArray(sess)&&sess.length>0?sess[0]:null;
     // desactivado o error → la sesión no queda viva (sólo la de aquí); un error de la base no dice que la cuenta no exista
     if(sErr){ try{await supabase.auth.signOut({scope:"local"})}catch(e){} return {error:AVISO_CUENTA_SIN_RED}; }
-    if(!dbUser){ try{await supabase.auth.signOut({scope:"local"})}catch(e){} return {error:AVISO_SIN_PERFIL}; }
+    if(!dbUser){ try{await supabase.auth.signOut({scope:"local"})}catch(e){} return {error:String(escrito||"").includes("@")?AVISO_SIN_LIGAR:AVISO_SIN_PERFIL}; }
     /* v10.77.6 — ALLOWLIST DE ROLES. public.users es la tabla de usuarios de LAS DOS apps: quien
        tiene cuenta para SygmaAlmacen (rol 'almacen') podia entrar a PrintFlow con la misma
        contrasena y ver precios y margenes de todas las ordenes, que no es asunto suyo. Aqui no
@@ -3203,15 +3211,19 @@ function Login({onLogin,aviso,onReintentar,onIntentar}) {
   const [password,setPassword] = useState("");
   const [error,setError] = useState("");
   const [loading,setLoading] = useState(false);
+  const entrandoRef = useRef(false);   // v10.84.191 — dos Enter seguidos son una entrada: `loading` llega hasta el siguiente pintado, y cada entrada de más deja otra sesión en Auth
   const submit = async () => {
-    if (!username || !password) return setError("Escribe usuario y contraseña");
+    if (entrandoRef.current) return;
+    if (!username.trim() || !password) return setError("Escribe tu usuario o correo y tu contraseña");
+    entrandoRef.current = true;
     onIntentar?.();
     setLoading(true); setError("");
     try {
-      const r = await db.login(username.toLowerCase().trim(), password);
+      const r = await db.login(username, password);
       if (r && !r.error) { onLogin(r.role, r.display_name, r.username); }
       else { setError(r?.error || "Usuario o contraseña incorrectos"); }
     } catch { setError(AVISO_ENTRAR_SIN_RED); }
+    entrandoRef.current = false;
     setLoading(false);
   };
   return (
@@ -3226,8 +3238,8 @@ function Login({onLogin,aviso,onReintentar,onIntentar}) {
           {aviso.tipo==="sin-red"&&onReintentar&&<div style={{marginTop:8}}><button onClick={onReintentar} disabled={!!aviso.comprobando} style={{...bs(C.sf,C.tx),border:"0.5px solid "+C.bdSt,fontSize:13,padding:"8px 14px",cursor:aviso.comprobando?"wait":"pointer"}}>{aviso.comprobando?"Comprobando…":"Reintentar"}</button></div>}
         </div>}
         <div style={{textAlign:"left",marginBottom:12}}>
-          <label style={lbl}>Usuario</label>
-          <input style={inp} value={username} onChange={e=>setUsername(e.target.value)} placeholder="Ej: gerardo, noemi, admin" onKeyDown={e=>e.key==="Enter"&&submit()}/>
+          <label style={lbl}>Usuario o correo</label>
+          <input style={inp} value={username} onChange={e=>setUsername(e.target.value)} placeholder="Ej: gerardo, o tu correo completo" autoComplete="username" autoCapitalize="none" autoCorrect="off" spellCheck={false} inputMode="email" onKeyDown={e=>e.key==="Enter"&&submit()}/>
         </div>
         <div style={{textAlign:"left",marginBottom:16}}>
           <label style={lbl}>Contraseña</label>
