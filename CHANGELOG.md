@@ -12,6 +12,28 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.190 — PrintFlow busca el perfil por la cuenta, no por el nombre (una sola cuenta, paso 2) — 7-nov-2026
+
+Paso 2 de 5 de «una sola cuenta `nombre@sygma.mx`» (Marcelo, 19-oct y 6-nov; el plan y lo medido, en `docs/una-sola-cuenta/LEEME.md`). Se le preguntó como 187 y 188: se recorrieron a 190 y 191 porque la 189 del ISO subió antes. **No le cambia nada a nadie**: es lo que deja hacer el cambio de cuentas del 29-nov.
+
+**Qué pasaba.** Al entrar y al abrir, la app pedía el perfil con `get_user_session(nombre)`, con el nombre que sacaba de `app_metadata.username` o de lo escrito.
+- Con `lupita@sygma.mx` buscaba «lupita», y su usuario de PrintFlow es «secretaria»: «Esta cuenta ya no está activa».
+- Una sesión con el nombre de otra persona en `app_metadata.username` abría con el rol de esa persona (ses-303). El uid de la sesión es lo único que no depende de cómo se llame nadie.
+
+**Qué se cambió.**
+- **La base** (`docs/migrations/v10.84.190_perfil_por_la_cuenta.sql`, con su vuelta atrás al lado): `public.get_my_session()`, nueva y sólo de lectura, contesta el renglón de `public.users` de la cuenta de la sesión; sin sesión, sin renglón o desactivado, nada. Sólo `authenticated` y `service_role`. Una cuenta con dos renglones ya la rechaza `users_user_id_uniq`. Mi borrador agregaba un índice gemelo y se lo dije así a Marcelo el 6-nov: conté los renglones y no miré los índices. Central lo vio al revisar y se quitó antes de aplicar. **Aplicada el 7-nov a las 02:15:37** por el conector, con el OK de Marcelo a la pregunta que nombraba `get_my_session` («di sí, súbelos»), versión 20261107081537. Por PostgREST, con la cuenta de pruebas: 200 y 1 renglón; sin sesión, 401.
+- **La app:** `db.login` y `restaurarSesion` piden el perfil con `get_my_session`. Los recorridos contra la base de verdad, también.
+- `get_user_session` se queda como está: la usa la versión de antes, que es la vuelta atrás. Se quita cuando pase el cambio de cuentas.
+- La tanda de la app real va en cuatro: `sesion-4`, desde ses-300, puerto 5473.
+
+**Cómo se probó.**
+- **Vuelta 1**, antes del arreglo: 4 de 12 fallaban (ses-300 a 303), igual contra la 186 y, ya rebasada, contra la 189. Las otras 8 son lo que no debe cambiar: lo que hace una sesión normal, el error de la base, lo desactivado.
+- **Vuelta 2**, por donde no se diseñó (ses-312 a 316: le cambian el rol y al recargar manda el nuevo, la app que sube antes que la base no saca a nadie, una respuesta sin nada, dos pestañas con otra cuenta): 5 de 5, sin fallas de la app.
+- **Sabotajes:** 7, todos caen: 2 de la app (pedir por nombre al entrar y al abrir) y 5 de la base en PGlite (sin revisar que esté activa, abierta a `anon`, sin permiso para `authenticated`, sin `users_user_id_uniq` en la base de prueba, el perfil del primero).
+- **Ensayo en producción con rollback:** 36 de 36, el 6-nov y otra vez el 7-nov a las 02:14, ya sin el índice. Las 10 cuentas contestan lo mismo con las dos funciones; las de `@sygma.mx` sin PrintFlow, nada y sin tronar; sin sesión, desactivada o `anon`, nada; el renglón ligado a otra cuenta contesta la nueva y ya no la vieja; dos renglones con la misma cuenta los rechaza la base. Revisado después: no quedó nada.
+
+**Qué NO se tocó.** Ninguna cuenta, ningún rol, ningún renglón. Las otras apps. Cómo se entra: eso es la 191.
+
 ## v10.84.189 — Toda orden nueva con fecha de entrega, «Cliente autorizó sin prueba» y los avisos en festivo (ISO 9001) — 6-nov-2026
 
 Para la auditoría interna de ISO 9001 del jueves 12-nov. El 187 y el 188 son de «Una sola cuenta», que sube después.
