@@ -159,7 +159,7 @@ async function rutear(ctx, s) {
       return route.fulfill({ status: 204, headers: cors, body: "" });
     }
     if (ruta.startsWith("/rest/v1/")) {
-      s.peticiones.push({ t: Date.now(), m, ruta, quien, viva, cuerpo, orderId: url.searchParams.get("order_id") });   // v10.84.172 — con su cuerpo: lo que se escribe en la bitácora y en los avisos
+      s.peticiones.push({ t: Date.now(), m, ruta, quien, viva, cuerpo, orderId: url.searchParams.get("order_id"), qs: url.search });   // v10.84.172 — con su cuerpo: lo que se escribe en la bitácora y en los avisos
       if (ruta === "/rest/v1/rpc/get_user_session") {
         s.perfiles++;
         if (s.alPedirPerfil) { const f = s.alPedirPerfil; s.alPedirPerfil = null; await f(req.frame().page()); }
@@ -2898,6 +2898,207 @@ await caso("ses-199-lo-entregado-a-karla-sin-marcas", async ({ p, s }) => {
   await aTodas(p, s, "karla");
   const n = await nivelesDelDetalle(p, "P-1003"), t = await leerTexto(p.getByRole("dialog").first());
   ok("ses-199-lo-entregado-a-karla-sin-marcas", n.length === 0 && !/lo normal/.test(t) && /70h/.test(t), `${n.join()} · «${(t.match(/Tiempo por etapa.{0,120}/) || [t.slice(0, 200)])[0]}»`);
+});
+
+// ── v10.84.189 — Marcelo, 6-nov (ISO 9001): con la app real, lo que se guarda y a nombre de quién. En Diseño, «Cliente autorizó sin prueba»; y la fecha de entrega estándar en las puertas que no pasan por la forma. Vuelta 1: escritas antes del código
+const EV187 = (pn, h, to_stage, by_user, action) => ({ order_id: "OP-" + pn, action, by_user, color: "#8e8e93", created_at: haceH(h), to_stage });
+const enDiseno = (pn, x = {}) => ({ orders: [ordenK(pn, { stage: "design", created_at: haceH(30), validated_by_production: true, validated_by_preprensa: true, ...x })], order_timeline: [EV187(pn, 30, "draft", "secretaria", "📋 Orden creada"), EV187(pn, 28, "design", "produccion", "📝 → 🎨 Ambos validaron → Diseño")] });
+const escritoEn = (s, tabla, m = "POST") => s.peticiones.filter(x => x.m === m && x.ruta === "/rest/v1/" + tabla);
+const abrirOrden = async (p, s, pn, quien = "noemi") => { await aTodas(p, s, quien); const f = fichaDe(p, pn); await f.focus(); await p.keyboard.press("Enter"); const d = p.getByRole("dialog").first(); await d.waitFor({ timeout: 8000 }); await p.waitForTimeout(400); return d; };
+const BOTON_AUT = /Cliente autorizó sin prueba/;
+const ventanaAut = p => p.getByRole("dialog", { name: /sin prueba de color/ });
+const autorizar = async (p, dlg) => { await dlg.getByRole("button", { name: BOTON_AUT }).click(); await ventanaAut(p).waitFor({ timeout: 6000 }); await p.waitForTimeout(700); };
+const LINEA_AUT = "✅ Cliente autorizó sin prueba de color";
+for (const [id, boton, destino, avisoA] of [["ses-200-noemi-autoriza-y-pasa-a-ctp", /Sí, pasar a CTP/, "ctp", "german"], ["ses-201-noemi-autoriza-y-pasa-sin-ctp-a-lista", /Sí, sin CTP: a Lista/, "ready", "produccion"]]) await caso(id, async ({ p, s }) => {
+  s.filas = enDiseno("P-1100"); s.ordenesSeMueven = true;
+  const dlg = await abrirOrden(p, s, "P-1100");
+  await autorizar(p, dlg);
+  const pide = await leerTexto(ventanaAut(p));
+  const t0 = Date.now();
+  await ventanaAut(p).getByRole("button", { name: boton }).click();
+  await esperarQue(() => escritoEn(s, "order_comments").length > 0, 6000);
+  await p.waitForTimeout(400);
+  const u = escritoEn(s, "orders", "PATCH")[0], tl = escritoEn(s, "order_timeline").map(x => x.cuerpo).find(x => String(x.action).startsWith(LINEA_AUT)), av = escritoEn(s, "notifications").map(x => x.cuerpo);
+  ok(id, !!u && u.cuerpo.stage === destino && !isNaN(Date.parse(u.cuerpo.proof_approved)) && Date.parse(u.cuerpo.proof_approved) >= t0 - 60000 && /stage=eq\.design/.test(u.qs) && !!tl && tl.by_user === "preprensa" && tl.to_stage === destino && av.some(a => a.target_role === avisoA) && /a tu nombre/i.test(pide),
+    `PATCH ${JSON.stringify(u?.cuerpo)} ${u?.qs} · bitácora ${JSON.stringify(tl)} · avisos ${av.map(a => a.target_role).join()} · «${pide.slice(0, 90)}»`);
+});
+await caso("ses-202-tambien-desde-la-ficha", async ({ p, s }) => {
+  s.filas = enDiseno("P-1101"); s.ordenesSeMueven = true;
+  await aTodas(p, s, "noemi");
+  await fichaDe(p, "P-1101").getByRole("button", { name: BOTON_AUT }).click();
+  await ventanaAut(p).waitFor({ timeout: 6000 }); await p.waitForTimeout(700);
+  await ventanaAut(p).getByRole("button", { name: /Sí, pasar a CTP/ }).click();
+  await esperarQue(() => escritoEn(s, "order_timeline").length > 0, 6000);
+  const u = escritoEn(s, "orders", "PATCH")[0];
+  ok("ses-202-tambien-desde-la-ficha", u?.cuerpo?.stage === "ctp" && !!u?.cuerpo?.proof_approved, JSON.stringify(u?.cuerpo));
+});
+await caso("ses-203-esc-y-todavia-no-no-escriben-nada", async ({ p, s }) => {
+  s.filas = enDiseno("P-1102"); s.ordenesSeMueven = true;
+  const dlg = await abrirOrden(p, s, "P-1102");
+  await autorizar(p, dlg);
+  await p.keyboard.press("Escape"); await p.waitForTimeout(400);
+  const tras1 = await ventanaAut(p).count(), sigue1 = await dlg.count();
+  await autorizar(p, dlg);
+  await ventanaAut(p).getByRole("button", { name: /Todavía no/ }).click(); await p.waitForTimeout(400);
+  const tras2 = await ventanaAut(p).count(), sigue2 = await dlg.getByRole("button", { name: BOTON_AUT }).count();
+  const n = s.peticiones.filter(x => x.m !== "GET" && x.m !== "HEAD" && /orders|order_timeline|order_comments/.test(x.ruta) && !/rpc/.test(x.ruta)).length;
+  ok("ses-203-esc-y-todavia-no-no-escriben-nada", tras1 === 0 && tras2 === 0 && sigue1 >= 1 && sigue2 === 1 && n === 0, `ventana ${tras1},${tras2} · detalle ${sigue1},${sigue2} · escrituras ${n}`);
+});
+for (const [id, boton] of [["ses-204a-doble-clic-en-pasar-a-ctp-una-sola-vez", /Sí, pasar a CTP/], ["ses-204b-doble-clic-en-sin-ctp-una-sola-vez", /Sí, sin CTP: a Lista/]]) await caso(id, async ({ p, s }) => {
+  s.filas = enDiseno("P-1103"); s.ordenesSeMueven = true;
+  const dlg = await abrirOrden(p, s, "P-1103");
+  await autorizar(p, dlg);
+  await ventanaAut(p).getByRole("button", { name: boton }).dblclick();
+  await p.waitForTimeout(1800);
+  const u = escritoEn(s, "orders", "PATCH").length, tl = escritoEn(s, "order_timeline").filter(x => String(x.cuerpo.action).startsWith(LINEA_AUT)).length;
+  ok(id, u === 1 && tl === 1, `${u} PATCH · ${tl} renglones`);
+});
+await caso("ses-205-otra-sesion-la-movio-no-se-anota-nada", async ({ p, s }) => {
+  s.filas = enDiseno("P-1104"); s.ordenesSeMueven = false;   // el UPDATE con su condición no encuentra la orden
+  const dlg = await abrirOrden(p, s, "P-1104");
+  await autorizar(p, dlg);
+  await ventanaAut(p).getByRole("button", { name: /Sí, pasar a CTP/ }).click();
+  await p.waitForTimeout(1500);
+  const tl = escritoEn(s, "order_timeline").length, c = escritoEn(s, "order_comments").length, t = await texto(p);
+  ok("ses-205-otra-sesion-la-movio-no-se-anota-nada", tl === 0 && c === 0 && /otra sesión/.test(t), `${tl} renglones · ${c} comentarios · «${(t.match(/.{40}otra sesión.{30}/) || [""])[0]}»`);
+});
+await caso("ses-206-la-base-no-guarda-no-se-anota-nada-y-lo-dice", async ({ p, s }) => {
+  s.filas = enDiseno("P-1105"); s.escrituraFalla = "orders";
+  const dlg = await abrirOrden(p, s, "P-1105");
+  await autorizar(p, dlg);
+  await ventanaAut(p).getByRole("button", { name: /Sí, pasar a CTP/ }).click();
+  await p.waitForTimeout(1800);
+  const tl = escritoEn(s, "order_timeline").length, t = await texto(p);
+  ok("ses-206-la-base-no-guarda-no-se-anota-nada-y-lo-dice", tl === 0 && /no pasó a «CTP»/.test(t), `${tl} renglones · «${(t.match(/.{30}no pasó.{50}/) || [t.slice(0, 80)])[0]}»`);
+});
+await caso("ses-207-sin-el-renglon-de-quien-no-queda-autorizada", async ({ p, s }) => {
+  s.filas = enDiseno("P-1106"); s.ordenesSeMueven = true; s.escrituraFalla = "order_timeline";
+  const dlg = await abrirOrden(p, s, "P-1106");
+  await autorizar(p, dlg);
+  await ventanaAut(p).getByRole("button", { name: /Sí, pasar a CTP/ }).click();
+  await esperarQue(() => escritoEn(s, "orders", "PATCH").length >= 2, 6000);
+  await p.waitForTimeout(500);
+  const u = escritoEn(s, "orders", "PATCH").map(x => x.cuerpo), t = await texto(p);
+  ok("ses-207-sin-el-renglon-de-quien-no-queda-autorizada", u.length === 2 && u[1].stage === "design" && u[1].proof_approved === null && /no se pudo registrar/i.test(t) && /Diseño/.test(t), `${JSON.stringify(u)} · «${(t.match(/.{30}registrar.{60}/) || [t.slice(0, 80)])[0]}»`);
+});
+for (const quien of ["gerardo", "german", "karla", "lupita"]) await caso(`ses-208-${quien}-no-lo-ve`, async ({ p, s }) => {
+  s.filas = enDiseno("P-1107");
+  const dlg = await abrirOrden(p, s, "P-1107", quien);
+  const n = await dlg.getByRole("button", { name: BOTON_AUT }).count();
+  ok(`ses-208-${quien}-no-lo-ve`, n === 0, `${n} botones`);
+});
+for (const [id, boton, destino, linea] of [["ses-209-directo-a-ctp-se-queda-como-estaba", "Directo a CTP", "ctp", "🎨 Diseño → 💿 CTP"], ["ses-210-sin-ctp-lista-se-queda-como-estaba", "Sin CTP, Lista", "ready", "🎨 Diseño → ✅ Lista para imprimir"]]) await caso(id, async ({ p, s }) => {
+  s.filas = enDiseno("P-1108"); s.ordenesSeMueven = true;
+  const dlg = await abrirOrden(p, s, "P-1108");
+  await dlg.getByRole("button", { name: boton }).click(); await p.waitForTimeout(700);
+  await p.getByRole("button", { name: /Sí, pasar/ }).click();
+  await esperarQue(() => escritoEn(s, "order_timeline").length > 0, 6000);
+  const u = escritoEn(s, "orders", "PATCH")[0], tl = escritoEn(s, "order_timeline")[0]?.cuerpo;
+  ok(id, u?.cuerpo?.stage === destino && !("proof_approved" in (u?.cuerpo || {})) && tl?.action === linea, `${JSON.stringify(u?.cuerpo)} · «${tl?.action}»`);
+});
+for (const [id, accion, by, dice, marca, otra] of [["ses-211-lo-guardado-sin-prueba-se-ve", LINEA_AUT + " · 🎨 Diseño → 💿 CTP", "preprensa", /Sin prueba de color.{0,40}Noemí|Noemí.{0,40}Sin prueba de color/, "Autorizó", "Prueba"], ["ses-212-lo-guardado-con-prueba-se-ve", "✅ Prueba aprobada", "secretaria", /Con prueba de color.{0,40}Lupita|Lupita.{0,40}Con prueba de color/, "Prueba", "Autorizó"]]) await caso(id, async ({ p, s }) => {
+  const pn = "P-1109", cuando = haceH(2);
+  s.filas = { orders: [ordenK(pn, { stage: "ctp", created_at: haceH(30), validated_by_production: true, validated_by_preprensa: true, proof_approved: cuando })], order_timeline: [EV187(pn, 30, "draft", "secretaria", "📋 Orden creada"), EV187(pn, 2, "ctp", by, accion)] };
+  await aTodas(p, s, "marcelo");
+  const ficha = await leerTexto(fichaDe(p, pn));
+  const f = fichaDe(p, pn); await f.focus(); await p.keyboard.press("Enter"); const d = p.getByRole("dialog").first(); await d.waitFor({ timeout: 8000 }); await p.waitForTimeout(500);
+  const t = await leerTexto(d);
+  ok(id, dice.test(t) && new RegExp("(^|\\s)" + marca + "(\\s|$)").test(ficha) && !new RegExp("(^|\\s)" + otra + "(\\s|$)").test(ficha), `detalle «${(t.match(/Cliente autorizó.{0,70}/) || [t.slice(0, 100)])[0]}» · ficha «${ficha.slice(0, 180)}»`);
+});
+await caso("ses-222-lo-terminado-no-afirma-hasta-leer-su-bitacora", async ({ p, s }) => {
+  const pn = "P-1118";   // en «delivered» la bitácora no viene en la carga (regla 12): la ficha no puede decir «Prueba» de lo que fue sin prueba
+  s.filas = { orders: [ordenK(pn, { stage: "delivered", delivered_at: haceH(5), created_at: haceH(90), invoice_folio: "F-118", validated_by_production: true, validated_by_preprensa: true, proof_approved: haceH(60) })], order_timeline: [EV187(pn, 90, "draft", "secretaria", "📋 Orden creada"), EV187(pn, 60, "ctp", "preprensa", LINEA_AUT + " · 🎨 Diseño → 💿 CTP")] };
+  await aTodas(p, s, "marcelo");
+  const ficha = await leerTexto(fichaDe(p, pn));
+  const f = fichaDe(p, pn); await f.focus(); await p.keyboard.press("Enter"); const d = p.getByRole("dialog").first(); await d.waitFor({ timeout: 8000 }); await p.waitForTimeout(1200);
+  const t = await leerTexto(d);
+  ok("ses-222-lo-terminado-no-afirma-hasta-leer-su-bitacora", /(^|\s)Autorizó(\s|$)/.test(ficha) && !/(^|\s)Prueba(\s|$)/.test(ficha) && /Sin prueba de color/.test(t) && /Noemí/.test(t), `ficha «${ficha.slice(0, 150)}» · detalle «${(t.match(/Cliente autorizó.{0,70}/) || [t.slice(0, 100)])[0]}»`);
+});
+await caso("ses-213-se-movio-con-la-ventana-abierta-no-registra", async ({ p, s }) => {
+  s.filas = enDiseno("P-1110"); s.ordenesSeMueven = true;
+  const dlg = await abrirOrden(p, s, "P-1110");
+  await autorizar(p, dlg);
+  s.filas = { ...s.filas, orders: s.filas.orders.map(o => ({ ...o, stage: "ctp" })) };
+  await p.waitForTimeout(22000);   // la recarga de cada 20 s
+  const t = await texto(p), siPuede = await p.getByRole("button", { name: /Sí, pasar a CTP/ }).count();
+  ok("ses-213-se-movio-con-la-ventana-abierta-no-registra", siPuede === 0 && /no se registró nada/i.test(t) && escritoEn(s, "orders", "PATCH").length === 0, `botón ${siPuede} · ${escritoEn(s, "orders", "PATCH").length} PATCH · «${(t.match(/.{60}registró.{20}/) || [""])[0]}»`);
+});
+// duplicar no pasa por la forma: la copia no hereda la fecha de hace meses
+const VIERNES_S = new Date("2026-11-06T10:00:00-06:00");
+for (const [id, cantidad, vieja, fecha] of [["ses-214-duplicar-lleva-la-estandar-no-la-vieja", 100, "2026-03-10", "2026-11-19"], ["ses-215-duplicar-una-sin-fecha-tambien", 100, null, "2026-11-19"], ["ses-216-duplicar-un-tiraje-grande", 20000, "2026-03-10", "2026-11-23"]]) await caso(id, async ({ p, s }) => {
+  s.filas = { orders: [ordenK("P-1111", { stage: "delivered", delivered_at: haceH(400), created_at: haceH(900), quantity: cantidad, due_date: vieja, invoice_folio: "F-11", validated_by_production: true, validated_by_preprensa: true })], order_timeline: [] };
+  s.rpcRespuestas.next_production_number = "P-1211";
+  await aTodas(p, s, "marcelo");
+  await p.clock.setFixedTime(VIERNES_S);
+  await fichaDe(p, "P-1111").getByRole("button", { name: "Duplicar" }).click();
+  await esperarQue(() => escritoEn(s, "orders").length > 0, 8000);
+  await p.waitForTimeout(600);
+  const c = escritoEn(s, "orders")[0]?.cuerpo, t = await texto(p), fila = Array.isArray(c) ? c[0] : c;
+  ok(id, fila?.due_date === fecha && !!fila?.delivery_calculated_at && /P-1211/.test(t), `${fila?.due_date} · ${fila?.delivery_calculated_at} · «${(t.match(/.{10}P-1211.{40}/) || [""])[0]}»`);
+});
+// la devolución: la RPC clona la fecha de la orden original; lo vencido o vacío recibe la estándar, por la app
+const pedirDevolucion = async (p, s, pns) => {
+  await abrirYEntrar(p, s, "marcelo"); await esperarMenu(p, /^Devoluciones/); await despertar(p);
+  await p.locator('button[title="Devoluciones"]').first().click(); await p.waitForTimeout(600);
+  for (const pn of pns) await p.getByText(pn, { exact: false }).first().click();
+  await p.getByPlaceholder(/Motivo de la devolución/).fill("Error de corte");
+  await p.clock.setFixedTime(VIERNES_S);
+  await p.getByRole("button", { name: /Registrar devolución/ }).click();
+};
+const entregadaConFolio = pn => ordenK(pn, { stage: "delivered", delivered_at: haceH(100), created_at: haceH(300), invoice_folio: "F-" + pn.slice(2), due_date: "2026-10-01", quantity: 20000, validated_by_production: true, validated_by_preprensa: true });
+const devuelta = (pn, due) => ordenK(pn, { stage: "design", source: "devolucion", return_covered_by_folio: "F-1", due_date: due, quantity: 20000, created_at: haceH(0), validated_by_production: false });
+await caso("ses-217-la-devolucion-no-hereda-la-fecha-vencida", async ({ p, s }) => {
+  s.filas = { orders: [entregadaConFolio("P-1112")], order_timeline: [] };
+  s.rpcRespuestas.create_return = [devuelta("P-1212", "2026-10-01")];
+  await pedirDevolucion(p, s, ["P-1112"]);
+  await esperarQue(() => escritoEn(s, "orders", "PATCH").length > 0, 8000);
+  await p.waitForTimeout(800);
+  const u = escritoEn(s, "orders", "PATCH")[0], v = await p.locator("#ff-entrega").inputValue().catch(() => "");
+  ok("ses-217-la-devolucion-no-hereda-la-fecha-vencida", u?.cuerpo?.due_date === "2026-11-23" && !!u?.cuerpo?.delivery_calculated_at && /id=eq\.OP-P-1212/.test(u?.qs || "") && v === "2026-11-23", `${JSON.stringify(u?.cuerpo)} ${u?.qs} · en la forma ${v}`);
+});
+await caso("ses-218-la-devolucion-con-fecha-por-delante-la-conserva", async ({ p, s }) => {
+  s.filas = { orders: [entregadaConFolio("P-1113")], order_timeline: [] };
+  s.rpcRespuestas.create_return = [devuelta("P-1213", "2026-12-15")];
+  await pedirDevolucion(p, s, ["P-1113"]);
+  await p.waitForTimeout(1800);
+  const v = await p.locator("#ff-entrega").inputValue().catch(() => "");
+  ok("ses-218-la-devolucion-con-fecha-por-delante-la-conserva", escritoEn(s, "orders", "PATCH").length === 0 && v === "2026-12-15", `${escritoEn(s, "orders", "PATCH").length} PATCH · ${v}`);
+});
+await caso("ses-219-la-devolucion-en-lote-cada-una-con-su-fecha", async ({ p, s }) => {
+  s.filas = { orders: [entregadaConFolio("P-1114"), entregadaConFolio("P-1115")], order_timeline: [] };
+  s.rpcRespuestas.create_return = [devuelta("P-1214", null), { ...devuelta("P-1215", "2026-10-01"), quantity: 100 }];
+  await pedirDevolucion(p, s, ["P-1114", "P-1115"]);
+  await esperarQue(() => escritoEn(s, "orders", "PATCH").length >= 2, 8000);
+  const u = escritoEn(s, "orders", "PATCH").map(x => [x.qs.match(/OP-P-\d+/)?.[0], x.cuerpo.due_date].join("="));
+  ok("ses-219-la-devolucion-en-lote-cada-una-con-su-fecha", u.length === 2 && u.includes("OP-P-1214=2026-11-23") && u.includes("OP-P-1215=2026-11-19"), u.join(" · "));
+});
+await caso("ses-220-si-la-fecha-no-se-guarda-la-devolucion-sigue-y-lo-dice", async ({ p, s }) => {
+  s.filas = { orders: [entregadaConFolio("P-1116")], order_timeline: [] };
+  s.rpcRespuestas.create_return = [devuelta("P-1216", null)];
+  s.escrituraFalla = "orders";
+  await pedirDevolucion(p, s, ["P-1116"]);
+  await p.waitForTimeout(1800);
+  const t = await texto(p);
+  ok("ses-220-si-la-fecha-no-se-guarda-la-devolucion-sigue-y-lo-dice", /P-1216/.test(t) && /no se le pudo poner (la|su) fecha/i.test(t), `«${(t.match(/.{40}fecha.{60}/) || [t.slice(0, 100)])[0]}»`);
+});
+// una orden nueva, de punta a punta: lo que llega a la base (la columna tiene que pasar por `saveOrder`)
+await caso("ses-221-la-orden-nueva-llega-a-la-base-con-su-fecha", async ({ p, s }) => {
+  s.filas = { orders: [], order_timeline: [] };
+  s.rpcRespuestas.next_production_number = "P-1217";
+  await abrirYEntrar(p, s, "lupita"); await esperarMenu(p, /^Nueva/); await despertar(p);
+  await p.locator('button[title="Nueva"]').first().click(); await p.waitForTimeout(600);
+  await p.clock.setFixedTime(VIERNES_S);
+  await p.getByPlaceholder("Cliente (escribe para buscar)").first().fill("CLIENTE DE PRUEBA"); await p.keyboard.press("Tab"); await p.waitForTimeout(400);
+  await p.getByPlaceholder("correo@ej.com").first().fill("x@correo.mx"); await p.getByPlaceholder("XAXX010101000").first().fill("XAXX010101000");
+  await p.getByPlaceholder("Escribe o busca un tipo...").first().fill("Etiquetas"); await p.keyboard.press("Tab");
+  await p.getByPlaceholder("Ejemplo · 1000").first().fill("20000"); await p.waitForTimeout(200);
+  const vend = p.locator("#ff-agent"); if (await vend.count()) await vend.selectOption({ label: "Manuel" }).catch(() => {});
+  await p.getByRole("button", { name: /Crear Orden/ }).click();
+  await p.waitForTimeout(800);
+  const crearCliente = p.getByRole("button", { name: /Crear cliente nuevo|Crear nuevo/ }); if (await crearCliente.count()) { await crearCliente.first().click(); await p.waitForTimeout(600); }
+  await esperarQue(() => escritoEn(s, "orders").length > 0, 8000);
+  const c = escritoEn(s, "orders")[0]?.cuerpo, fila = Array.isArray(c) ? c[0] : c;
+  ok("ses-221-la-orden-nueva-llega-a-la-base-con-su-fecha", fila?.due_date === "2026-11-23" && !!fila?.delivery_calculated_at, `${fila?.due_date} · ${fila?.delivery_calculated_at} · «${(await texto(p)).slice(0, 120)}»`);
 });
 
 await browser.close();

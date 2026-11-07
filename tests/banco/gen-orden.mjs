@@ -183,8 +183,10 @@ const categoriaDe = t => CATS.categoriaSugerida(t) ?? (String(t || "").trim() &&
 BASE.forEach(o => { if (!("categoria" in o)) o.categoria = categoriaDe(o.product_type); });
 const PURCHASE_ORDERS = [{ id: "OC-0950", client: "GOBIERNO DEL ESTADO", shared_invoice_folio: "F-200" }, { id: "OC-0900", client: "GOBIERNO DEL ESTADO", shared_invoice_folio: null }];
 const OC = { id: "OC-0900", client: "GOBIERNO DEL ESTADO", client_id: "c-gob", client_email: "compras@guanajuato.gob.mx", client_rfc: "GEG850101AB1", vendedor: "Manuel", delivery_date: "2026-10-30" };
+// v10.84.189 — ocproductos=N: la OC-0900 ya trae N órdenes; occanceladas=M: M de ellas canceladas (no cuentan para la fecha estándar)
+for (let i = 0, N = Number(Q.get("ocproductos") || 0), M = Number(Q.get("occanceladas") || 0); i < N; i++) BASE.push({ id: "OP-OC9" + i, production_number: "P-09" + (10 + i), client: OC.client, client_id: OC.client_id, client_company: OC.client, client_email: OC.client_email, product_type: "Folders", product: "Producto " + i, quantity: 100, source: "internal", agent: "Manuel", created_by: "lupita", price: 100, order_type: "interna", purchase_order_id: OC.id, created_at: "2026-10-09T10:00:00Z", stage: i < M ? "cancelled" : "design", ...(i < M ? { cancelled_at: "2026-10-10T10:00:00Z" } : {}) });
 const RESUMEN = ["id", "production_number", "order_type", "stage", "priority", "client", "client_id", "client_email", "client_phone", "client_rfc", "client_agent", "product_type", "product",
-  "quantity", "agent", "price", "maq_provider", "maq_cost", "maq_price", "due_date", "finishes", "distribution", "sin_empaque_sygma", "purchase_order_id", "plate_status", "image_url", "image_url_2", "file_url", "notes", "categoria"];
+  "quantity", "agent", "price", "maq_provider", "maq_cost", "maq_price", "due_date", "delivery_calculated_at", "finishes", "distribution", "sin_empaque_sygma", "purchase_order_id", "plate_status", "image_url", "image_url_2", "file_url", "notes", "categoria"];
 const resumen = o => Object.fromEntries(RESUMEN.filter(k => k in o).map(k => [k, o[k]]));
 function consulta(tabla) {
   const q = { tabla, filtros: [], accion: "select", valores: null };

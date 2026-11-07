@@ -116,6 +116,87 @@ a("2026-11-17 10:00:00");
 let basura = "";
 try { basura = [F.bizHoursAgo(null), F.bizDaysUntil(null), F.bizDaysUntil(""), F.bizDaysUntil("no es fecha"), F.bizDaysSince("no es fecha")].join(); } catch (e) { basura = "truena: " + e.message; }
 ok("hab-35-sin-dato-o-con-basura-no-truena", basura === "0,0,0,0,0", basura);
+
+
+// ── v10.84.189: la fecha de entrega estándar. Marcelo y Gerardo, 6-nov: «un standard… 8 días hábiles para un trabajo», y que se alargue por el tiraje y los productos.
+//    Lo que escogió Marcelo con lo medido: +2 si pasa de 10,000 piezas, +3 desde el 5.º producto de la OC, se suman; los acabados ya no suman 3. Las cifras, a mano con el calendario de 2026.
+let FE = null, feError = "";
+try { FE = await import(pathToFileURL(path.join(RAIZ, "src", "lib", "fechaEstandar.js")).href); } catch (e) { feError = String(e.message).split("\n")[0]; }
+const est = (desde, x = {}) => { if (!FE) return "(sin src/lib/fechaEstandar.js)"; return FE.fechaEstandar({ desde: new Date(H(desde)), ...x }).fecha; };
+const VIERNES = "2026-11-06 10:00:00";
+ok("hab-36-ocho-dias-sin-el-festivo", est(VIERNES, { piezas: 1000, productos: 1 }) === "2026-11-19", `del viernes 6-nov: 9, 10, 11, 12, 13, (16 festivo), 17, 18, 19; salió ${est(VIERNES, { piezas: 1000, productos: 1 })} ${feError}`);
+ok("hab-37-diez-mil-justas-no-alargan", est(VIERNES, { piezas: 10000, productos: 1 }) === "2026-11-19", `«pasa de 10,000»; salió ${est(VIERNES, { piezas: 10000, productos: 1 })}`);
+ok("hab-38-diez-mil-una-suma-dos", est(VIERNES, { piezas: 10001, productos: 1 }) === "2026-11-23", `10 días: 20 y lunes 23; salió ${est(VIERNES, { piezas: 10001, productos: 1 })}`);
+ok("hab-39-cuatro-productos-no-alargan", est(VIERNES, { piezas: 1000, productos: 4 }) === "2026-11-19", `salió ${est(VIERNES, { piezas: 1000, productos: 4 })}`);
+ok("hab-40-el-quinto-producto-suma-tres", est(VIERNES, { piezas: 1000, productos: 5 }) === "2026-11-24", `11 días; salió ${est(VIERNES, { piezas: 1000, productos: 5 })}`);
+ok("hab-41-tiraje-y-productos-se-suman", est(VIERNES, { piezas: 25000, productos: 7 }) === "2026-11-26", `13 días; salió ${est(VIERNES, { piezas: 25000, productos: 7 })}`);
+ok("hab-42-capturada-en-fin-de-semana", est("2026-11-07 11:00:00", { piezas: 1000 }) === "2026-11-19" && est("2026-11-08 11:00:00", { piezas: 1000 }) === "2026-11-19", `sábado ${est("2026-11-07 11:00:00", { piezas: 1000 })}, domingo ${est("2026-11-08 11:00:00", { piezas: 1000 })}`);
+ok("hab-43-cruza-navidad-y-ano-nuevo", est("2026-12-18 10:00:00", { piezas: 1000 }) === "2026-12-31" && est("2026-12-18 10:00:00", { piezas: 20000 }) === "2027-01-05", `8 días: ${est("2026-12-18 10:00:00", { piezas: 1000 })} (sin el 25); 10 días: ${est("2026-12-18 10:00:00", { piezas: 20000 })} (sin el 1-ene)`);
+ok("hab-44-no-cae-en-festivo", est("2026-11-04 10:00:00", { piezas: 1000 }) === "2026-11-17", `del miércoles 4: 5, 6, 9, 10, 11, 12, 13, (16), 17; salió ${est("2026-11-04 10:00:00", { piezas: 1000 })}`);
+ok("hab-45-de-noche-no-se-corre", est("2026-11-06 23:30:00", { piezas: 1000 }) === "2026-11-19" && est("2026-11-06 00:10:00", { piezas: 1000 }) === "2026-11-19", `23:30 ${est("2026-11-06 23:30:00", { piezas: 1000 })}; 00:10 ${est("2026-11-06 00:10:00", { piezas: 1000 })}`);
+{
+  const raros = [undefined, null, "", "abc", NaN, -5, 0, Infinity, "1,000,000", {}, []], malos = raros.filter(v => est(VIERNES, { piezas: v }) !== "2026-11-19" || est(VIERNES, { piezas: 1000, productos: v }) !== "2026-11-19");
+  ok("hab-46-basura-es-el-estandar", malos.length === 0, `piezas o productos raros que no dieron 8 días: ${JSON.stringify(malos)}`);
+}
+ok("hab-47-sin-datos-tambien", (() => { if (!FE) return false; a(VIERNES); return FE.fechaEstandar().fecha === "2026-11-19"; })(), FE ? FE.fechaEstandar().fecha : feError);
+a(VIERNES);
+ok("hab-48-la-web-conserva-su-regla", F.calcDeliveryDate(new Date(H(VIERNES)), "offset", "Barniz UV") === "2026-11-24" && F.calcDeliveryDate(new Date(H(VIERNES)), "digital", "") === "2026-11-12" && F.calcDeliveryDate(new Date(H(VIERNES)), "offset", "") === "2026-11-19", `offset con acabados ${F.calcDeliveryDate(new Date(H(VIERNES)), "offset", "Barniz UV")}, digital ${F.calcDeliveryDate(new Date(H(VIERNES)), "digital", "")}`);
+{
+  const q = x => FE ? FE.porQueEsaFecha(x) : "";
+  const t1 = q({ piezas: 1000, productos: 1 }), t2 = q({ piezas: 20000, productos: 1 }), t3 = q({ piezas: 1000, productos: 6 }), t4 = q({ piezas: 20000, productos: 6 });
+  ok("hab-49-dice-por-que", /^8 días hábiles$/.test(t1) && /10 días hábiles/.test(t2) && /más de 10,000 piezas/.test(t2) && !/productos/.test(t2) && /11 días hábiles/.test(t3) && /5 o más productos/.test(t3) && !/piezas/.test(t3) && /13 días hábiles/.test(t4) && /piezas/.test(t4) && /productos/.test(t4), JSON.stringify([t1, t2, t3, t4]));
+}
+
+// ── v10.84.189: los avisos en festivo, con la migración tal cual, en un Postgres de verdad (PGlite, el de Almacén). Marcelo, 6-nov: «que los avisos respeten los festivos también»
+{
+  const archivo = path.join(RAIZ, "docs", "migrations", "v10.84.189_avisos_respetan_festivos.sql");
+  const sql = fs.existsSync(archivo) ? fs.readFileSync(archivo, "utf8").replace(/\r\n/g, "\n") : "";
+  ok("hab-50-la-migracion-existe-en-un-bloque", /^begin;$/m.test(sql) && /^commit;$/m.test(sql) && /is_business_hours/.test(sql) && /es_festivo_de_ley/.test(sql), archivo);
+  const pgl = path.join(RAIZ, "..", "sygma-almacen", "node_modules", "@electric-sql", "pglite", "dist", "index.js");
+  if (!fs.existsSync(pgl)) ok("hab-51-sin-pglite", true, "no se corrió lo de la base: esta copia no tiene ../sygma-almacen con PGlite");
+  else if (sql) {
+    const { PGlite } = await import(pathToFileURL(pgl).href);
+    const db = new PGlite();
+    await db.exec("create role anon; create role authenticated; create role service_role; create table public.notifications(id serial primary key, target_role text, message text); grant select, insert on public.notifications to authenticated, service_role; grant usage, select on sequence public.notifications_id_seq to authenticated, service_role;");
+    // la función tal cual, con el reloj de la prueba en vez de NOW() (lo único que cambia); la de hoy también vive aquí: `cobranza` y `extensions` no existen en PGlite y no estorban
+    await db.exec("create table public.reloj_de_la_prueba(ahora timestamptz not null); insert into public.reloj_de_la_prueba values (now()); grant select on public.reloj_de_la_prueba to public; create function public.reloj() returns timestamptz language sql stable as 'select ahora from public.reloj_de_la_prueba';");
+    await db.exec(sql.replace(/NOW\(\) AT TIME ZONE/, "public.reloj() AT TIME ZONE"));
+    await db.exec(`create function public.skip_silent_window_notifications() returns trigger language plpgsql as $f$ begin if not public.is_business_hours() then return null; end if; return new; end; $f$;
+      create trigger trg_skip_silent_window before insert on public.notifications for each row execute function public.skip_silent_window_notifications();`);
+    const enHora = async (cuando) => { await db.query("update public.reloj_de_la_prueba set ahora = $1::timestamptz", [H(cuando)]); return (await db.query("select public.is_business_hours() v")).rows[0].v; };
+    // todos los días de 2024 a 2040: la lista de la base y la de la app, iguales
+    const { esFestivo } = await import(pathToFileURL(path.join(RAIZ, "src", "lib", "tiempoPorEtapa.js")).href);
+    const filas = (await db.query("select d::date::text f, public.es_festivo_de_ley(d::date) v from generate_series('2024-01-01'::date, '2040-12-31'::date, '1 day') d")).rows;
+    const distintos = filas.filter(r => { const [y, m, d] = r.f.split("-").map(Number); return esFestivo(new D0(y, m - 1, d, 12)) !== r.v; }).map(r => r.f);
+    ok("hab-51-la-base-y-la-app-tienen-la-misma-lista", filas.length > 6000 && distintos.length === 0, `${filas.length} días; distintos: ${distintos.slice(0, 8).join(", ")}`);
+    const festivos2026 = filas.filter(r => r.v && r.f.startsWith("2026-")).map(r => r.f.slice(5)).join(" ");
+    ok("hab-52-los-de-2026-a-mano", festivos2026 === "01-01 02-02 03-16 05-01 09-16 11-16 12-25", festivos2026);
+    ok("hab-53-el-1-de-octubre-de-cambio-de-gobierno", filas.find(r => r.f === "2030-10-01")?.v === true && filas.find(r => r.f === "2024-10-01")?.v === true && filas.find(r => r.f === "2026-10-01")?.v === false, "2024 y 2030 sí; 2026 no");
+    const casos = [["2026-11-16 10:00:00", false, "el lunes 16-nov, festivo, en horario"], ["2026-11-16 09:00:00", false, "abriendo"], ["2026-11-16 18:59:00", false, "cerrando"], ["2026-12-25 12:00:00", false, "viernes 25-dic"], ["2027-01-01 12:00:00", false, "viernes 1-ene"],
+      ["2026-11-17 10:00:00", true, "el martes siguiente"], ["2026-11-13 10:00:00", true, "el viernes anterior"], ["2026-11-17 09:00:00", true, "a las 9:00"], ["2026-11-17 18:59:00", true, "a las 18:59"], ["2026-11-17 08:59:00", false, "a las 8:59"], ["2026-11-17 19:00:00", false, "a las 19:00"],
+      ["2026-11-14 10:00:00", false, "sábado"], ["2026-11-15 10:00:00", false, "domingo"], ["2026-11-02 10:00:00", true, "2-nov: no es de ley"], ["2026-12-24 10:00:00", true, "24-dic: no es de ley"]];
+    const mal = []; for (const [c, e, q] of casos) { const v = await enHora(c); if (v !== e) mal.push(`${q} (${c}): ${v}`); }
+    ok("hab-54-is-business-hours", mal.length === 0, mal.join("; ") || `${casos.length} instantes`);
+    // el día se toma en México, no en UTC: la noche del domingo 15 (ya es 16 en UTC) y la del lunes 16 (ya es martes en UTC)
+    const noche = [await enHora("2026-11-16 18:30:00"), await enHora("2026-11-17 09:30:00")];
+    ok("hab-55-el-dia-es-el-de-mexico", noche[0] === false && noche[1] === true, JSON.stringify(noche));
+    await enHora("2026-11-16 10:00:00");
+    await db.query("insert into public.notifications(target_role, message) values ('admin','en festivo')");
+    const nF = (await db.query("select count(*)::int n from public.notifications")).rows[0].n;
+    await enHora("2026-11-17 10:00:00");
+    await db.query("insert into public.notifications(target_role, message) values ('admin','en martes')");
+    const nM = (await db.query("select count(*)::int n from public.notifications")).rows[0].n;
+    ok("hab-56-en-festivo-el-aviso-no-se-guarda-y-al-dia-siguiente-si", nF === 0 && nM === 1, `festivo ${nF}, martes ${nM}`);
+    // la regla 5 (toda función nueva, cerrada a anon) no puede tumbar el aviso: el disparador corre como quien inserta (la lección de la vista invoker y la función privada: 42501)
+    let comoApp = "";
+    try { await db.exec("set role authenticated"); await db.query("insert into public.notifications(target_role, message) values ('admin','como la app')"); await db.exec("reset role"); await db.exec("set role service_role"); await db.query("insert into public.notifications(target_role, message) values ('admin','como una función de borde')"); comoApp = "ok"; } catch (e) { comoApp = e.message; } finally { await db.exec("reset role"); }
+    const nA = (await db.query("select count(*)::int n from public.notifications")).rows[0].n;
+    ok("hab-57-la-app-y-las-funciones-de-borde-pueden-avisar", comoApp === "ok" && nA === 3, `${comoApp}; ${nA} avisos`);
+    let comoAnon = ""; try { await db.exec("set role anon"); await db.query("select public.es_festivo_de_ley('2026-11-16')"); comoAnon = "ABIERTA"; } catch (e) { comoAnon = /permission denied/.test(e.message) ? "cerrada" : e.message; } finally { await db.exec("reset role"); }
+    ok("hab-58-cerrada-a-anon", comoAnon === "cerrada", comoAnon);
+    await db.close();
+  }
+}
 
 for (const r of res) console.log(r);
 const fallan = res.filter(r => r.startsWith("FALLA")).length;
