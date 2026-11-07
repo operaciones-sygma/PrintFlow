@@ -570,7 +570,7 @@ await caso("ses-22-entrar-cuenta-desactivada", async ({ p, s }) => {
   const e = await entrar(p, s);
   await esperarQue(() => s.salidas.length > 0, 5000);
   const t = await texto(p);
-  ok("ses-22-entrar-cuenta-desactivada", e === "login" && /ya no está activa/i.test(t) && !/incorrect/i.test(t) && s.salidas.length >= 1 && soloLocales(s),
+  ok("ses-22-entrar-cuenta-desactivada", e === "login" && /ya no está activa|Ya no se entra con esta cuenta/i.test(t) && !/incorrect/i.test(t) && s.salidas.length >= 1 && soloLocales(s),
     `contraseña buena de una cuenta desactivada: dice que ya no está activa (no «contraseña incorrecta») y sale sólo de aquí (${s.salidas.join(" ") || "ninguna"}): «${t.slice(0, 140)}»`);
 });
 
@@ -3972,7 +3972,7 @@ await caso("ses-305-entrar-con-una-cuenta-desactivada", async ({ p, s }) => {
   const e0 = await abrir(p);
   const e = await entrar(p, s, "gerardo");
   const t = await texto(p);
-  ok("ses-305-entrar-con-una-cuenta-desactivada", e0 === "login" && e === "login" && /ya no está activa/.test(t) && soloLocales(s) && !(await sesionGuardada(p)), `${e}; «${t.slice(0, 120)}»`);
+  ok("ses-305-entrar-con-una-cuenta-desactivada", e0 === "login" && e === "login" && /ya no está activa|Ya no se entra con esta cuenta/.test(t) && soloLocales(s) && !(await sesionGuardada(p)), `${e}; «${t.slice(0, 120)}»`);
 });
 await caso("ses-306-abrir-con-una-cuenta-desactivada", async ({ p, s, ctx }) => {
   s.usuarios.gerardo.inactivo = true;
@@ -3980,7 +3980,7 @@ await caso("ses-306-abrir-con-una-cuenta-desactivada", async ({ p, s, ctx }) => 
   const e = await abrir(p);
   await esperarQue(() => s.salidas.length > 0, 5000);
   const t = await texto(p);
-  ok("ses-306-abrir-con-una-cuenta-desactivada", e === "login" && /ya no está activa/.test(t) && soloLocales(s), `${e}; salidas ${s.salidas.join(" ") || "ninguna"}`);
+  ok("ses-306-abrir-con-una-cuenta-desactivada", e === "login" && /ya no está activa|Ya no se entra con esta cuenta/.test(t) && soloLocales(s), `${e}; salidas ${s.salidas.join(" ") || "ninguna"}`);
 });
 await caso("ses-307-cambia-el-correo-y-conserva-la-cuenta", async ({ p, s }) => {
   // El 29-nov: Gerardo pasa a gerardo@sygma.mx con el mismo id. Quien ya estaba adentro no se entera: ni lo saca ni le cambia el perfil.
@@ -4052,7 +4052,7 @@ await caso("ses-315-la-base-contesta-sin-nada", async ({ p, s }) => {
   await abrir(p);
   const e = await entrar(p, s, "karla");
   const t = await texto(p);
-  ok("ses-315-la-base-contesta-sin-nada", e === "login" && /ya no está activa/.test(t) && soloLocales(s) && !(await sesionGuardada(p)), `${e}; «${t.slice(0, 120)}»`);
+  ok("ses-315-la-base-contesta-sin-nada", e === "login" && /ya no está activa|Ya no se entra con esta cuenta/.test(t) && soloLocales(s) && !(await sesionGuardada(p)), `${e}; «${t.slice(0, 120)}»`);
 });
 await caso("ses-316-dos-pestanas-otra-cuenta-la-segunda-no-toma-el-perfil-de-la-primera", async ({ p, s, nueva }) => {
   await abrirYEntrar(p, s, "karla");
@@ -4112,7 +4112,7 @@ await caso("ses-325-correo-bueno-sin-printflow", async ({ p, s }) => {
   const e = await entrar(p, s, "lucero@sygma.mx");
   await esperarQue(() => s.salidas.length > 0, 5000);
   const t = await texto(p);
-  ok("ses-325-correo-bueno-sin-printflow", e === "login" && /todavía no tiene PrintFlow/.test(t) && !/desactivaron|ya no está activa|incorrect/i.test(t) && soloLocales(s) && s.salidas.length >= 1 && !(await sesionGuardada(p)),
+  ok("ses-325-correo-bueno-sin-printflow", e === "login" && /no tiene PrintFlow/.test(t) && !/desactivaron|ya no está activa|incorrect/i.test(t) && soloLocales(s) && s.salidas.length >= 1 && !(await sesionGuardada(p)),
     `${e}; salidas ${s.salidas.join(" ") || "ninguna"}; «${t.slice(0, 160)}»`);
 });
 await caso("ses-326-correo-con-contrasena-mala", async ({ p, s }) => {
@@ -4175,7 +4175,7 @@ for (const [tam, viewport] of [["1366", { width: 1366, height: 768 }], ["1920", 
     const ph = await c.getAttribute("placeholder"), etiqueta = await texto(p);
     const atr = await c.evaluate(el => ({ ac: el.getAttribute("autocomplete"), cap: el.getAttribute("autocapitalize"), sp: el.getAttribute("spellcheck"), im: el.getAttribute("inputmode") }));
     const dentro = await c.evaluate(el => { const r = el.getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth; });
-    ok("ses-331-" + tam + "-la-pantalla-dice-que-se-puede-con-correo", /usuario o correo/i.test(etiqueta) && /correo/i.test(ph || "") && !/admin/i.test(ph || "") && atr.ac === "username" && atr.cap === "none" && atr.sp === "false" && dentro,
+    ok("ses-331-" + tam + "-la-pantalla-dice-que-se-puede-con-correo", /correo/i.test(etiqueta) && /correo|@sygma\.mx/i.test(ph || "") && !/admin/i.test(ph || "") && atr.ac === "username" && atr.cap === "none" && atr.sp === "false" && dentro,
       `letrero «${ph}»; atributos ${JSON.stringify(atr)}; dentro ${dentro}`);
   }, { viewport });
 }
@@ -4272,6 +4272,88 @@ await caso("ses-341-rol-de-otra-app-con-correo", async ({ p, s }) => {
   const t = await texto(p);
   ok("ses-341-rol-de-otra-app-con-correo", e === "login" && /no tiene acceso a PrintFlow/i.test(t) && soloLocales(s), `${e}; salidas ${s.salidas.join(" ") || "ninguna"}; «${t.slice(0, 120)}»`);
 });
+
+// ════════════════════════ v10.84.PASO5: lo que dice la pantalla de entrar desde el 29-nov (paso 5 de una sola cuenta; docs/una-sola-cuenta/paso5_pantallas.md) ════════════════════════
+// Ese domingo los usuarios de siempre (nombre@padillahnos.local) dejan de existir en Auth: la app no rechaza el nombre (la cuenta de pruebas lo sigue usando), pero lo que
+// se lee dice cómo se entra ahora, con el correo de esa persona: secretaria es Lupita y admin es Marcelo. Lo raro no inventa un correo.
+const COMO_SE_ENTRA = c => new RegExp("Ahora se entra con tu correo completo: " + c.replace(/[.@]/g, m => "\\" + m));
+const etiquetas = p => p.evaluate(() => [...document.querySelectorAll("label")].map(l => l.textContent.trim()));
+const cabeEnPantalla = p => p.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth);
+for (const [tam, viewport] of [["1366", { width: 1366, height: 768 }], ["390", { width: 390, height: 844 }]]) {
+  await caso("ses-350-" + tam + "-la-casilla-dice-correo", async ({ p }) => {
+    await abrir(p);
+    const l = await etiquetas(p), ph = await p.locator(LOGIN).first().getAttribute("placeholder");
+    ok("ses-350-" + tam + "-la-casilla-dice-correo", l.includes("Correo") && !l.some(x => /usuario/i.test(x)) && ph === "Ej: gerardo@sygma.mx" && await cabeEnPantalla(p), `${JSON.stringify(l)} · «${ph}»`);
+  }, { viewport });
+}
+await caso("ses-351-el-nombre-que-ya-no-existe-dice-como-se-entra", async ({ p, s }) => {
+  s.usuarios.gerardo.email = "gerardo@sygma.mx";   // el 29-nov: la misma cuenta, con su correo nuevo
+  await abrir(p);
+  const e = await entrar(p, s, "gerardo");
+  const t = await avisoDeEntrada(p);
+  ok("ses-351-el-nombre-que-ya-no-existe-dice-como-se-entra", e === "login" && /Usuario o contraseña incorrectos/.test(t) && COMO_SE_ENTRA("gerardo@sygma.mx").test(t), `${e}; «${t}»`);
+});
+await caso("ses-352-secretaria-y-admin-dicen-el-correo-de-quien-son", async ({ p, s }) => {
+  await abrir(p);
+  const e1 = await entrar(p, s, "secretaria"); const t1 = await avisoDeEntrada(p);
+  const e2 = await entrar(p, s, "Admin"); const t2 = await avisoDeEntrada(p);
+  ok("ses-352-secretaria-y-admin-dicen-el-correo-de-quien-son", e1 === "login" && COMO_SE_ENTRA("lupita@sygma.mx").test(t1) && e2 === "login" && COMO_SE_ENTRA("marcelo@sygma.mx").test(t2), `«${t1}» · «${t2}»`);
+});
+await caso("ses-353-con-acento-mayusculas-y-espacios", async ({ p, s }) => {
+  s.usuarios.noemi.email = "noemi@sygma.mx";
+  await abrir(p);
+  const e = await entrar(p, s, "  Noemí ");
+  const t = await avisoDeEntrada(p);
+  ok("ses-353-con-acento-mayusculas-y-espacios", e === "login" && COMO_SE_ENTRA("noemi@sygma.mx").test(t), `${e}; «${t}»`);
+});
+await caso("ses-354-la-cuenta-de-antes-ya-sin-renglon-al-entrar", async ({ p, s }) => {
+  // Karla ya ligada: su cuenta de antes sigue en Auth (hasta apagarla) y su contraseña está bien, pero el renglón ya es de karla@sygma.mx
+  ligarKarla(s);
+  await abrir(p);
+  const e = await entrar(p, s, "karla");
+  await esperarQue(() => s.salidas.length > 0, 5000);
+  const t = await avisoDeEntrada(p);
+  ok("ses-354-la-cuenta-de-antes-ya-sin-renglon-al-entrar", e === "login" && /Ya no se entra con esta cuenta/.test(t) && COMO_SE_ENTRA("karla@sygma.mx").test(t) && !/desactivaron|incorrect/i.test(t) && soloLocales(s) && !(await sesionGuardada(p)),
+    `${e}; salidas ${s.salidas.join(" ") || "ninguna"}; «${t}»`);
+});
+await caso("ses-355-la-cuenta-de-antes-abierta-dice-como-se-entra", async ({ p, s, ctx }) => {
+  ligarKarla(s);
+  await guardarSesionDe(ctx, s, "karla");
+  const e = await abrir(p);
+  await esperarQue(() => s.salidas.length > 0, 5000);
+  const t = await texto(p);
+  ok("ses-355-la-cuenta-de-antes-abierta-dice-como-se-entra", e === "login" && /Ya no se entra con esta cuenta/.test(t) && COMO_SE_ENTRA("karla@sygma.mx").test(t) && soloLocales(s), `${e}; salidas ${s.salidas.join(" ") || "ninguna"}; «${t.slice(0, 220)}»`);
+});
+await caso("ses-356-correo-bueno-sin-printflow-desde-el-29", async ({ p, s }) => {
+  s.usuarios.lucero = { uid: "00000000-0000-4000-8000-000000000021", pass: "buena", role: "tesoreria", display_name: "Lucero", email: "lucero@sygma.mx", sinPerfil: true };
+  await abrir(p);
+  const e = await entrar(p, s, "lucero@sygma.mx");
+  await esperarQue(() => s.salidas.length > 0, 5000);
+  const t = await avisoDeEntrada(p);
+  ok("ses-356-correo-bueno-sin-printflow-desde-el-29", e === "login" && /esa cuenta no tiene PrintFlow\. Si debería, pídele a Marcelo que te dé acceso\./.test(t) && !/todavía|usuario de siempre/i.test(t) && soloLocales(s), `${e}; «${t}»`);
+});
+await caso("ses-357-sin-pasar-y-con-la-contrasena-mala", async ({ p, s }) => {
+  // alguien que el 29-nov se quedó con su cuenta de antes (no entró con la nueva): con el nombre y la contraseña mala, las dos cosas
+  await abrir(p);
+  const e = await entrar(p, s, "karla", "mala");
+  const t = await avisoDeEntrada(p);
+  ok("ses-357-sin-pasar-y-con-la-contrasena-mala", e === "login" && /Usuario o contraseña incorrectos/.test(t) && COMO_SE_ENTRA("karla@sygma.mx").test(t) && s.salidas.length === 0, `${e}; «${t}»`);
+});
+for (const [i, raro] of [["a", "🦊"], ["b", "a"], ["c", "gerardo smith"], ["d", "<script>alert(1)</script>"], ["e", "نور"], ["f", "x".repeat(300)]]) {
+  await caso("ses-358-" + i + "-lo-raro-no-inventa-un-correo", async ({ p, s }) => {
+    await abrir(p);
+    const e = await entrar(p, s, raro);
+    const t = await avisoDeEntrada(p);
+    ok("ses-358-" + i + "-lo-raro-no-inventa-un-correo", e === "login" && /Ahora se entra con tu correo completo: nombre@sygma\.mx/.test(t) && !t.includes(raro.slice(0, 20) + "@sygma.mx") && await cabeEnPantalla(p), `${e}; «${t.slice(0, 160)}»`);
+  });
+}
+await caso("ses-359-a-390-el-aviso-cabe-con-un-correo-largo", async ({ p, s }) => {
+  await abrir(p);
+  const e = await entrar(p, s, "bartholomew.fitzgerald-montenegro");
+  const t = await avisoDeEntrada(p);
+  const aviso = await p.locator('[role="alert"]').first().evaluate(el => { const r = el.getBoundingClientRect(); return r.left >= 0 && r.right <= document.documentElement.clientWidth; }).catch(() => false);
+  ok("ses-359-a-390-el-aviso-cabe-con-un-correo-largo", e === "login" && COMO_SE_ENTRA("bartholomew.fitzgerald-montenegro@sygma.mx").test(t) && aviso && await cabeEnPantalla(p), `${e}; dentro ${aviso}; «${t}»`);
+}, { viewport: { width: 390, height: 844 } });
 
 await browser.close();
 await servidor.close();
