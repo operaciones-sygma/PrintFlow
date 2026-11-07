@@ -12,6 +12,29 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.191 — PrintFlow acepta también el correo completo, y sigue aceptando el nombre (una sola cuenta, paso 3) — 7-nov-2026
+
+Paso 3 de 5 de «una sola cuenta `nombre@sygma.mx`». **Quien entra como siempre, entra como siempre.** Los pasos 4 y 5 (cada quien a su `@sygma.mx` y apagar las cuentas viejas) están listos en `docs/una-sola-cuenta/`, sin aplicar, para el domingo 29-nov.
+
+**Qué pasaba.** La pantalla de entrar le pegaba `@padillahnos.local` a todo: a Auth le llegaba `lucero@sygma.mx@padillahnos.local`, y un correo completo siempre decía «Usuario o contraseña incorrectos» (ses-325). Y en cuanto un correo entrara, una cuenta sin renglón en PrintFlow habría leído que la desactivaron.
+
+**Qué se cambió** (`correoDeEntrada`, `db.login`, `Login`).
+- **Con `@`, lo escrito es el correo; sin ella, el usuario de siempre** (`nombre@padillahnos.local`, hasta el cambio de cuentas). Sin espacios, mayúsculas ni acentos: Noemí y Germán escriben su nombre como se escribe. La contraseña va tal cual.
+- **La casilla dice «Usuario o correo»**, con el letrero `Ej: gerardo, o tu correo completo`; el teclado del celular no corrige ni pone mayúscula.
+- **Quien entra con su correo y no tiene PrintFlow** (Lucero, Manuel, o Karla y Lupita antes del cambio) lee `Tu contraseña está bien, pero esa cuenta todavía no tiene PrintFlow…` (`AVISO_SIN_LIGAR`) y le dice qué hacer. Ya no lee «la desactivaron». Sale sólo de esa sesión (`scope:"local"`).
+- **Con correo el rechazo dice «Correo o contraseña incorrectos»**, y con nombre, como siempre.
+- **Dos Enter son una entrada** (`entrandoRef`: con Auth lento el segundo volvía a entrar).
+
+**Cómo se probó.**
+- **Vuelta 1**, antes del arreglo: 23 de 26 fallaban contra la 190 (ses-320 a 334).
+- **Vuelta 2**, por donde no se diseñó (ses-335 a 341: equivocarse y volver a intentar, Enter otra vez con Auth lento, demasiados intentos con correo, de una cuenta sin PrintFlow a la de siempre, un rol de otra app con correo): 7 de 7, sin fallas de la app.
+- **Sabotajes:** 14, todos caen, también repetidos ya encima de la 189. Las cuatro partes de `sesion`, 298 de 298.
+- `sesion-4`: 50 de 50, con la app real y la base simulada; la pantalla de entrar, a 1366, 1920 y 390. Los datos raros del catálogo de `break-ui` en la casilla (ses-328: correos largos, `@` de más, emoji, texto de derecha a izquierda): ninguno truena y todos caben.
+
+**Qué NO se tocó.** Ninguna cuenta ni contraseña. Las sesiones abiertas se quedan abiertas. Nadie tiene que hacer nada.
+
+**Para Marcelo.** Hasta el 29-nov, Karla, Genaro, Dulce y Lupita que escriban su `@sygma.mx` en PrintFlow van a leer que esa cuenta todavía no tiene PrintFlow: es lo correcto, y el aviso les dice que entren con su usuario de siempre.
+
 ## v10.84.190 — PrintFlow busca el perfil por la cuenta, no por el nombre (una sola cuenta, paso 2) — 7-nov-2026
 
 Paso 2 de 5 de «una sola cuenta `nombre@sygma.mx`» (Marcelo, 19-oct y 6-nov; el plan y lo medido, en `docs/una-sola-cuenta/LEEME.md`). Se le preguntó como 187 y 188: se recorrieron a 190 y 191 porque la 189 del ISO subió antes. **No le cambia nada a nadie**: es lo que deja hacer el cambio de cuentas del 29-nov.
