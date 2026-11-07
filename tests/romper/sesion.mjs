@@ -2909,6 +2909,8 @@ const BOTON_AUT = /Cliente autorizó sin prueba/;
 const ventanaAut = p => p.getByRole("dialog", { name: /sin prueba de color/ });
 const autorizar = async (p, dlg) => { await dlg.getByRole("button", { name: BOTON_AUT }).click(); await ventanaAut(p).waitFor({ timeout: 6000 }); await p.waitForTimeout(700); };
 const LINEA_AUT = "✅ Cliente autorizó sin prueba de color";
+// las etiquetas menores de la ficha van detrás de «+N» (v10.84.56): se abren para leerlas
+const fichaConEtiquetas = async (p, pn) => { const b = fichaDe(p, pn).getByRole("button", { name: /Mostrar \d+ etiqueta/ }); if (await b.count()) { await b.first().click(); await p.waitForTimeout(200); } return leerTexto(fichaDe(p, pn)); };
 for (const [id, boton, destino, avisoA] of [["ses-200-noemi-autoriza-y-pasa-a-ctp", /Sí, pasar a CTP/, "ctp", "german"], ["ses-201-noemi-autoriza-y-pasa-sin-ctp-a-lista", /Sí, sin CTP: a Lista/, "ready", "produccion"]]) await caso(id, async ({ p, s }) => {
   s.filas = enDiseno("P-1100"); s.ordenesSeMueven = true;
   const dlg = await abrirOrden(p, s, "P-1100");
@@ -2918,8 +2920,8 @@ for (const [id, boton, destino, avisoA] of [["ses-200-noemi-autoriza-y-pasa-a-ct
   await ventanaAut(p).getByRole("button", { name: boton }).click();
   await esperarQue(() => escritoEn(s, "order_comments").length > 0, 6000);
   await p.waitForTimeout(400);
-  const u = escritoEn(s, "orders", "PATCH")[0], tl = escritoEn(s, "order_timeline").map(x => x.cuerpo).find(x => String(x.action).startsWith(LINEA_AUT)), av = escritoEn(s, "notifications").map(x => x.cuerpo);
-  ok(id, !!u && u.cuerpo.stage === destino && !isNaN(Date.parse(u.cuerpo.proof_approved)) && Date.parse(u.cuerpo.proof_approved) >= t0 - 60000 && /stage=eq\.design/.test(u.qs) && !!tl && tl.by_user === "preprensa" && tl.to_stage === destino && av.some(a => a.target_role === avisoA) && /a tu nombre/i.test(pide),
+  const u = escritoEn(s, "orders", "PATCH")[0], tl = escritoEn(s, "order_timeline").map(x => x.cuerpo).find(x => String(x.action).startsWith(LINEA_AUT)), av = escritoEn(s, "notifications").map(x => x.cuerpo), com = escritoEn(s, "order_comments")[0]?.cuerpo;
+  ok(id, !!u && com?.text === LINEA_AUT && u.cuerpo.stage === destino && !isNaN(Date.parse(u.cuerpo.proof_approved)) && Date.parse(u.cuerpo.proof_approved) >= t0 - 60000 && /stage=eq\.design/.test(u.qs) && !!tl && tl.by_user === "preprensa" && tl.to_stage === destino && av.some(a => a.target_role === avisoA) && /a tu nombre/i.test(pide),
     `PATCH ${JSON.stringify(u?.cuerpo)} ${u?.qs} · bitácora ${JSON.stringify(tl)} · avisos ${av.map(a => a.target_role).join()} · «${pide.slice(0, 90)}»`);
 });
 await caso("ses-202-tambien-desde-la-ficha", async ({ p, s }) => {
@@ -3000,19 +3002,19 @@ for (const [id, accion, by, dice, marca, otra] of [["ses-211-lo-guardado-sin-pru
   const pn = "P-1109", cuando = haceH(2);
   s.filas = { orders: [ordenK(pn, { stage: "ctp", created_at: haceH(30), validated_by_production: true, validated_by_preprensa: true, proof_approved: cuando })], order_timeline: [EV187(pn, 30, "draft", "secretaria", "📋 Orden creada"), EV187(pn, 2, "ctp", by, accion)] };
   await aTodas(p, s, "marcelo");
-  const ficha = await leerTexto(fichaDe(p, pn));
+  const ficha = await fichaConEtiquetas(p, pn);
   const f = fichaDe(p, pn); await f.focus(); await p.keyboard.press("Enter"); const d = p.getByRole("dialog").first(); await d.waitFor({ timeout: 8000 }); await p.waitForTimeout(500);
   const t = await leerTexto(d);
-  ok(id, dice.test(t) && new RegExp("(^|\\s)" + marca + "(\\s|$)").test(ficha) && !new RegExp("(^|\\s)" + otra + "(\\s|$)").test(ficha), `detalle «${(t.match(/Cliente autorizó.{0,70}/) || [t.slice(0, 100)])[0]}» · ficha «${ficha.slice(0, 180)}»`);
+  ok(id, dice.test(t) && new RegExp("(^|\\s)" + marca + "(\\s|$)").test(ficha) && !new RegExp("(^|\\s)" + otra + "(\\s|$)").test(ficha), `detalle «${(t.match(/Cliente autorizó.{0,70}/i) || [t.slice(0, 100)])[0]}» · ficha «${ficha.slice(0, 180)}»`);
 });
 await caso("ses-222-lo-terminado-no-afirma-hasta-leer-su-bitacora", async ({ p, s }) => {
   const pn = "P-1118";   // en «delivered» la bitácora no viene en la carga (regla 12): la ficha no puede decir «Prueba» de lo que fue sin prueba
   s.filas = { orders: [ordenK(pn, { stage: "delivered", delivered_at: haceH(5), created_at: haceH(90), invoice_folio: "F-118", validated_by_production: true, validated_by_preprensa: true, proof_approved: haceH(60) })], order_timeline: [EV187(pn, 90, "draft", "secretaria", "📋 Orden creada"), EV187(pn, 60, "ctp", "preprensa", LINEA_AUT + " · 🎨 Diseño → 💿 CTP")] };
   await aTodas(p, s, "marcelo");
-  const ficha = await leerTexto(fichaDe(p, pn));
+  const ficha = await fichaConEtiquetas(p, pn);
   const f = fichaDe(p, pn); await f.focus(); await p.keyboard.press("Enter"); const d = p.getByRole("dialog").first(); await d.waitFor({ timeout: 8000 }); await p.waitForTimeout(1200);
   const t = await leerTexto(d);
-  ok("ses-222-lo-terminado-no-afirma-hasta-leer-su-bitacora", /(^|\s)Autorizó(\s|$)/.test(ficha) && !/(^|\s)Prueba(\s|$)/.test(ficha) && /Sin prueba de color/.test(t) && /Noemí/.test(t), `ficha «${ficha.slice(0, 150)}» · detalle «${(t.match(/Cliente autorizó.{0,70}/) || [t.slice(0, 100)])[0]}»`);
+  ok("ses-222-lo-terminado-no-afirma-hasta-leer-su-bitacora", /(^|\s)Autorizó(\s|$)/.test(ficha) && !/(^|\s)Prueba(\s|$)/.test(ficha) && /Sin prueba de color/.test(t) && /Noemí/.test(t), `ficha «${ficha.slice(0, 150)}» · detalle «${(t.match(/Cliente autorizó.{0,70}/i) || [t.slice(0, 100)])[0]}»`);
 });
 await caso("ses-213-se-movio-con-la-ventana-abierta-no-registra", async ({ p, s }) => {
   s.filas = enDiseno("P-1110"); s.ordenesSeMueven = true;
@@ -3026,7 +3028,7 @@ await caso("ses-213-se-movio-con-la-ventana-abierta-no-registra", async ({ p, s 
 // duplicar no pasa por la forma: la copia no hereda la fecha de hace meses
 const VIERNES_S = new Date("2026-11-06T10:00:00-06:00");
 for (const [id, cantidad, vieja, fecha] of [["ses-214-duplicar-lleva-la-estandar-no-la-vieja", 100, "2026-03-10", "2026-11-19"], ["ses-215-duplicar-una-sin-fecha-tambien", 100, null, "2026-11-19"], ["ses-216-duplicar-un-tiraje-grande", 20000, "2026-03-10", "2026-11-23"]]) await caso(id, async ({ p, s }) => {
-  s.filas = { orders: [ordenK("P-1111", { stage: "delivered", delivered_at: haceH(400), created_at: haceH(900), quantity: cantidad, due_date: vieja, invoice_folio: "F-11", validated_by_production: true, validated_by_preprensa: true })], order_timeline: [] };
+  s.filas = { orders: [ordenK("P-1111", { stage: "delivered", delivered_at: haceH(400), created_at: haceH(900), quantity: cantidad, due_date: vieja, invoice_folio: "F-11", agent: "Manuel", validated_by_production: true, validated_by_preprensa: true })], order_timeline: [] };
   s.rpcRespuestas.next_production_number = "P-1211";
   await aTodas(p, s, "marcelo");
   await p.clock.setFixedTime(VIERNES_S);
@@ -3040,6 +3042,7 @@ for (const [id, cantidad, vieja, fecha] of [["ses-214-duplicar-lleva-la-estandar
 const pedirDevolucion = async (p, s, pns) => {
   await abrirYEntrar(p, s, "marcelo"); await esperarMenu(p, /^Devoluciones/); await despertar(p);
   await p.locator('button[title="Devoluciones"]').first().click(); await p.waitForTimeout(600);
+  await p.getByRole("button", { name: /Cargar archivo para registrar devoluciones/ }).click(); await p.getByPlaceholder(/Motivo de la devolución/).waitFor({ timeout: 8000 }); await p.waitForTimeout(400);
   for (const pn of pns) await p.getByText(pn, { exact: false }).first().click();
   await p.getByPlaceholder(/Motivo de la devolución/).fill("Error de corte");
   await p.clock.setFixedTime(VIERNES_S);
@@ -3084,7 +3087,7 @@ await caso("ses-220-si-la-fecha-no-se-guarda-la-devolucion-sigue-y-lo-dice", asy
 // una orden nueva, de punta a punta: lo que llega a la base (la columna tiene que pasar por `saveOrder`)
 await caso("ses-221-la-orden-nueva-llega-a-la-base-con-su-fecha", async ({ p, s }) => {
   s.filas = { orders: [], order_timeline: [] };
-  s.rpcRespuestas.next_production_number = "P-1217";
+  s.rpcRespuestas.next_production_number = "P-1217"; s.rpcRespuestas.create_client_from_printflow = "c-nuevo";
   await abrirYEntrar(p, s, "lupita"); await esperarMenu(p, /^Nueva/); await despertar(p);
   await p.locator('button[title="Nueva"]').first().click(); await p.waitForTimeout(600);
   await p.clock.setFixedTime(VIERNES_S);
@@ -3095,10 +3098,80 @@ await caso("ses-221-la-orden-nueva-llega-a-la-base-con-su-fecha", async ({ p, s 
   const vend = p.locator("#ff-agent"); if (await vend.count()) await vend.selectOption({ label: "Manuel" }).catch(() => {});
   await p.getByRole("button", { name: /Crear Orden/ }).click();
   await p.waitForTimeout(800);
-  const crearCliente = p.getByRole("button", { name: /Crear cliente nuevo|Crear nuevo/ }); if (await crearCliente.count()) { await crearCliente.first().click(); await p.waitForTimeout(600); }
+  const crearCliente = p.getByRole("button", { name: /crear cliente nuevo/i }); if (await crearCliente.count()) { await crearCliente.first().click(); await p.waitForTimeout(600); }
   await esperarQue(() => escritoEn(s, "orders").length > 0, 8000);
   const c = escritoEn(s, "orders")[0]?.cuerpo, fila = Array.isArray(c) ? c[0] : c;
   ok("ses-221-la-orden-nueva-llega-a-la-base-con-su-fecha", fila?.due_date === "2026-11-23" && !!fila?.delivery_calculated_at, `${fila?.due_date} · ${fila?.delivery_calculated_at} · «${(await texto(p)).slice(0, 120)}»`);
+});
+
+// ── v10.84.189, vuelta 2: por donde no se diseñó ──
+await caso("ses-223-ctrl-enter-no-autoriza-solo", async ({ p, s }) => {
+  s.filas = enDiseno("P-1120"); s.ordenesSeMueven = true;
+  const dlg = await abrirOrden(p, s, "P-1120");
+  await p.keyboard.press("Control+Enter"); await p.waitForTimeout(800);
+  const t = await texto(p), v = await ventanaAut(p).count(), n = escritoEn(s, "orders", "PATCH").length;
+  ok("ses-223-ctrl-enter-no-autoriza-solo", v === 0 && n === 0 && /¿Pasar P-1120 a «Prueba/.test(t), `ventana ${v} · ${n} PATCH · «${(t.match(/¿Pasar.{0,50}/) || [""])[0]}»`);
+});
+await caso("ses-224-con-el-teclado", async ({ p, s }) => {
+  s.filas = enDiseno("P-1121"); s.ordenesSeMueven = true;
+  const dlg = await abrirOrden(p, s, "P-1121");
+  await autorizar(p, dlg);
+  const nombre = () => p.evaluate(() => (document.activeElement?.textContent || "").trim());
+  const a = await nombre(); await p.keyboard.press("Tab"); const b = await nombre(); await p.keyboard.press("Tab"); const c = await nombre(); await p.keyboard.press("Tab"); const d = await nombre();
+  await p.keyboard.press("Enter"); await p.waitForTimeout(500);   // otra vez en «Todavía no»
+  const n = escritoEn(s, "orders", "PATCH").length, v = await ventanaAut(p).count();
+  ok("ses-224-con-el-teclado", a === "Todavía no" && /pasar a CTP/.test(b) && /sin CTP/.test(c) && d === "Todavía no" && n === 0 && v === 0, `${a} → ${b} → ${c} → ${d} · ${n} PATCH · ventana ${v}`);
+});
+await caso("ses-225-al-autorizar-el-detalle-ya-lo-dice", async ({ p, s }) => {
+  s.filas = enDiseno("P-1122"); s.ordenesSeMueven = true;
+  const dlg = await abrirOrden(p, s, "P-1122");
+  await autorizar(p, dlg);
+  await ventanaAut(p).getByRole("button", { name: /Sí, pasar a CTP/ }).click();
+  await esperarQue(() => escritoEn(s, "order_comments").length > 0, 6000); await p.waitForTimeout(500);
+  const t = await leerTexto(dlg), boton = await dlg.getByRole("button", { name: BOTON_AUT }).count(), todo = await texto(p);
+  ok("ses-225-al-autorizar-el-detalle-ya-lo-dice", /Sin prueba de color/.test(t) && /Noemí/.test(t) && boton === 0 && /Quedó la autorización del cliente/.test(todo), `«${(t.match(/Cliente autorizó.{0,70}/) || [t.slice(0, 100)])[0]}» · botón ${boton}`);
+});
+await caso("ses-226-cambiar-la-fecha-le-quita-lo-de-estandar", async ({ p, s }) => {
+  s.filas = { orders: [ordenK("P-1123", { stage: "ctp", created_at: haceH(90), due_date: "2026-11-06", delivery_calculated_at: haceH(90), validated_by_production: true, validated_by_preprensa: true })], order_timeline: [] };
+  await abrirYEntrar(p, s, "marcelo"); await esperarMenu(p, /^Entregas/); await despertar(p);
+  await p.clock.setFixedTime(new Date("2026-11-06T10:00:00-06:00"));
+  await p.locator('button[title="Entregas"]').first().click(); await p.waitForTimeout(900);
+  await p.getByRole("button", { name: /LIC\. ORLANDO CASAS|P-1123/ }).first().click();
+  const v = p.getByRole("dialog", { name: /Cambiar la fecha de entrega/ }); await v.waitFor({ timeout: 6000 });
+  await v.locator('input[type="date"]').fill("2026-11-20"); await v.getByPlaceholder(/el cliente pidió moverla/).fill("El cliente pidió moverla");
+  await v.getByRole("button").last().click();
+  await esperarQue(() => escritoEn(s, "orders", "PATCH").length > 0, 6000);
+  const u = escritoEn(s, "orders", "PATCH")[0]?.cuerpo;
+  ok("ses-226-cambiar-la-fecha-le-quita-lo-de-estandar", u?.due_date === "2026-11-20" && u?.delivery_calculated_at === null, JSON.stringify(u));
+});
+for (const [id, vp] of [["ses-227a-a-1366", { width: 1366, height: 768 }], ["ses-227b-a-1920", { width: 1920, height: 1080 }]]) await caso(id + "-los-botones-de-la-ficha-se-ven-enteros", async ({ p, s }) => {
+  s.filas = enDiseno("P-1124");
+  await aTodas(p, s, "noemi");
+  const f = fichaDe(p, "P-1124"); await f.scrollIntoViewIfNeeded();
+  const r = await f.evaluate(c => { const cr = c.getBoundingClientRect(); return [...c.querySelectorAll("button")].filter(b => /Prueba de Color|Cliente autorizó|Directo a CTP|Sin CTP/.test(b.textContent)).map(b => { const x = b.getBoundingClientRect(), e = document.elementFromPoint(x.left + x.width / 2, x.top + x.height / 2); return { t: b.textContent.trim().slice(0, 14), dentro: x.left >= cr.left - 1 && x.right <= cr.right + 1, seVe: !!e && (e === b || b.contains(e)) }; }); });
+  ok(id + "-los-botones-de-la-ficha-se-ven-enteros", r.length === 4 && r.every(x => x.dentro && x.seVe), JSON.stringify(r));
+}, { viewport: vp });
+await caso("ses-228-datos-raros-en-la-ventana-y-en-el-aviso", async ({ p, s }) => {
+  const raro = "María-José Ñúñez 🎉 Benachrichtigungseinstellungen عربي <script>alert(1)</script>";
+  s.filas = enDiseno("P-1125", { client: raro, client_company: raro, product_type: "IMG_20250914_183022_HDR_portrait_edited_edited.HEIC" }); s.ordenesSeMueven = true;
+  const dlg = await abrirOrden(p, s, "P-1125");
+  await autorizar(p, dlg);
+  const caja = await ventanaAut(p).boundingBox();
+  await ventanaAut(p).getByRole("button", { name: /Sí, pasar a CTP/ }).click();
+  await esperarQue(() => escritoEn(s, "order_comments").length > 0, 6000); await p.waitForTimeout(500);
+  const r = await p.evaluate(() => ({ ancho: document.documentElement.scrollWidth, ventana: innerWidth, script: [...document.querySelectorAll("script")].some(x => /alert\(1\)/.test(x.textContent)) }));
+  ok("ses-228-datos-raros-en-la-ventana-y-en-el-aviso", !!caja && caja.x >= 0 && caja.x + caja.width <= 1366 && r.ancho <= r.ventana && !r.script, JSON.stringify({ caja, ...r }));
+});
+await caso("ses-229-la-web-sigue-calculando-al-validar", async ({ p, s }) => {
+  // la puerta que no puede pedirla: el cliente no elige fecha; la pone la validación de Pre-prensa, con la regla de la web
+  s.filas = { orders: [ordenK("P-1126", { stage: "draft", source: "web", web_print_method: "offset", finishes: "Barniz Mate", due_date: null, validated_by_production: true, validated_by_preprensa: false, created_at: haceH(30) })], order_timeline: [] };
+  s.validar = { hechas: new Set() };
+  const dlg = await abrirOrden(p, s, "P-1126");
+  await p.clock.setFixedTime(new Date("2026-11-06T10:00:00-06:00"));
+  await dlg.getByRole("button", { name: /Validar Pre-prensa/ }).click();
+  await esperarQue(() => escritoEn(s, "orders", "PATCH").length > 0, 6000);
+  const u = escritoEn(s, "orders", "PATCH")[0]?.cuerpo;
+  ok("ses-229-la-web-sigue-calculando-al-validar", u?.due_date === "2026-11-24" && !!u?.delivery_calculated_at, JSON.stringify(u));
 });
 
 await browser.close();

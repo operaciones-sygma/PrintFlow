@@ -1615,10 +1615,10 @@ for (const [id, rol] of [["det-252-noemi", "preprensa"], ["det-253-direccion", "
   const i = n => nombres.findIndex(x => x.startsWith(n)), aut = i("Cliente autorizó sin prueba");
   ok(id + "-ve-el-boton-en-diseno", i("Prueba de Color") >= 0 && aut > i("Prueba de Color") && i("Directo a CTP") > aut && i("Sin CTP, Lista") > i("Directo a CTP"), nombres.filter(x => /Prueba|autorizó|CTP/.test(x)).join(" | "));
 });
-await caso("det-254-los-demas-no-y-en-otra-etapa-tampoco", "flujos=1", async p => {
-  const t = k => p.locator(`[data-k="${k}"]`).innerText().catch(() => "(no está)");
-  const si = await Promise.all(["design|preprensa", "design|admin"].map(t)), no = await Promise.all(["design|produccion", "design|german", "design|karla", "design|secretaria", "design|vendedor", "ctp|preprensa", "ctp|admin", "proof_client|preprensa", "draft|preprensa", "ready|admin"].map(t));
-  ok("det-254-los-demas-no-y-en-otra-etapa-tampoco", si.every(x => BOTON_AUT.test(x)) && !no.some(x => BOTON_AUT.test(x)), `sí: ${si.map(x => BOTON_AUT.test(x)).join()} · no: ${no.map(x => BOTON_AUT.test(x)).join()}`);
+for (const [rol, etapa] of [["produccion", "design"], ["german", "design"], ["karla", "design"], ["secretaria", "design"], ["vendedor", "design"], ["preprensa", "ctp"], ["admin", "ctp"], ["preprensa", "proof_client"], ["preprensa", "draft"], ["admin", "ready"]]) await caso(`det-254-${rol}-en-${etapa}-no-lo-tiene`, "caso=alertas&rol=" + rol, async p => {
+  await p.evaluate(e => window.__cambiar({ stage: e, current_machine: null }), etapa); await espera(p, 400);
+  const n = await dlg(p).getByRole("button", { name: BOTON_AUT }).count();
+  ok(`det-254-${rol}-en-${etapa}-no-lo-tiene`, n === 0, `${n} botones`);
 });
 await caso("det-255-el-boton-pregunta-en-app-y-el-detalle-se-queda", "caso=alertas&rol=preprensa", async p => {
   await aDiseno(p); await espera(p, 400);
@@ -1629,35 +1629,52 @@ await caso("det-255-el-boton-pregunta-en-app-y-el-detalle-se-queda", "caso=alert
 await caso("det-256-el-detalle-dice-quien-y-cuando", "caso=alertas&rol=karla", async p => {
   await p.evaluate(x => window.__cambiar({ stage: "ctp", current_machine: null, proof_approved: x.date, timeline: [x] }), LINEA_AUT); await espera(p, 400);
   const t = (await dlg(p).innerText()).replace(/\s+/g, " ");
-  ok("det-256-el-detalle-dice-quien-y-cuando", /Cliente autorizó/.test(t) && /Sin prueba de color/.test(t) && /Noemí/.test(t) && /06 nov|6 nov|6-nov/i.test(t), (t.match(/Cliente autorizó.{0,70}/) || [t.slice(0, 120)])[0]);
+  ok("det-256-el-detalle-dice-quien-y-cuando", /Cliente autorizó\s+Sin prueba de color · 06-nov[^·]* · Noemí/i.test(t), (t.match(/Cliente autorizó.{0,70}/i) || [t.slice(0, 120)])[0]);
 });
 await caso("det-257-la-aprobada-con-prueba-dice-con-prueba", "caso=alertas&rol=karla", async p => {
   await p.evaluate(() => window.__cambiar({ stage: "ctp", current_machine: null, proof_approved: "2026-11-06T16:00:00Z", timeline: [{ action: "✅ Prueba aprobada", date: "2026-11-06T16:00:00Z", by: "secretaria", to: "ctp" }] })); await espera(p, 400);
   const t = (await dlg(p).innerText()).replace(/\s+/g, " ");
-  ok("det-257-la-aprobada-con-prueba-dice-con-prueba", /Con prueba de color/.test(t) && /Lupita/.test(t) && !/Sin prueba de color/.test(t), (t.match(/Cliente autorizó.{0,70}/) || [t.slice(0, 120)])[0]);
+  ok("det-257-la-aprobada-con-prueba-dice-con-prueba", /Con prueba de color/.test(t) && /Lupita/.test(t) && !/Sin prueba de color/.test(t), (t.match(/Cliente autorizó.{0,70}/i) || [t.slice(0, 120)])[0]);
 });
 await caso("det-258-regresada-a-diseno-ya-no-esta-autorizada", "caso=alertas&rol=karla", async p => {
   await p.evaluate(x => window.__cambiar({ stage: "design", current_machine: null, proof_approved: null, timeline: [x] }), LINEA_AUT); await espera(p, 400);
   const t = (await dlg(p).innerText()).replace(/\s+/g, " ");
-  ok("det-258-regresada-a-diseno-ya-no-esta-autorizada", !/Cliente autorizó|Sin prueba de color/.test(t), (t.match(/Cliente autorizó.{0,70}/) || ["(sin el renglón)"])[0]);
+  ok("det-258-regresada-a-diseno-ya-no-esta-autorizada", !/Cliente autorizó|Sin prueba de color/i.test(t), (t.match(/Cliente autorizó.{0,70}/i) || ["(sin el renglón)"])[0]);
 });
 await caso("det-259-una-vieja-sin-bitacora-no-inventa-a-nadie", "caso=alertas&rol=karla", async p => {
   await p.evaluate(() => window.__cambiar({ stage: "ctp", current_machine: null, proof_approved: "2026-05-06T16:00:00Z", timeline: [] })); await espera(p, 400);
-  const t = (await dlg(p).innerText()).replace(/\s+/g, " "), r = (t.match(/Cliente autorizó.{0,50}/) || [""])[0];
-  ok("det-259-una-vieja-sin-bitacora-no-inventa-a-nadie", /Cliente autorizó/.test(r) && !/prueba de color/.test(r) && !/Noemí|Lupita|undefined|null/.test(r), r);
+  const t = (await dlg(p).innerText()).replace(/\s+/g, " "), r = (t.match(/Cliente autorizó.{0,50}/i) || [""])[0];
+  ok("det-259-una-vieja-sin-bitacora-no-inventa-a-nadie", /Cliente autorizó/i.test(r) && !/prueba de color/.test(r) && !/Noemí|Lupita|undefined|null/.test(r), r);
 });
 await caso("det-260-lo-ultimo-manda-si-hubo-de-las-dos", "caso=alertas&rol=karla", async p => {
   await p.evaluate(x => window.__cambiar({ stage: "ctp", current_machine: null, proof_approved: "2026-11-09T16:00:00Z", timeline: [x, { action: "✅ Prueba aprobada", date: "2026-11-09T16:00:00Z", by: "secretaria", to: "ctp" }] }), LINEA_AUT); await espera(p, 400);
   const t = (await dlg(p).innerText()).replace(/\s+/g, " ");
-  ok("det-260-lo-ultimo-manda-si-hubo-de-las-dos", /Con prueba de color/.test(t) && !/Sin prueba de color/.test(t), (t.match(/Cliente autorizó.{0,70}/) || [""])[0]);
+  ok("det-260-lo-ultimo-manda-si-hubo-de-las-dos", /Con prueba de color/.test(t) && !/Sin prueba de color/.test(t), (t.match(/Cliente autorizó.{0,70}/i) || [""])[0]);
 });
 await caso("det-261-la-entrega-dice-si-es-la-estandar", "caso=factura&rol=karla", async p => {
   await p.evaluate(() => window.__cambiar({ due_date: "2026-11-19", delivery_calculated_at: "2026-11-06T16:00:00Z" })); await espera(p, 400);
   const a = (await dlg(p).innerText()).replace(/\s+/g, " ");
   await p.evaluate(() => window.__cambiar({ delivery_calculated_at: null })); await espera(p, 400);
   const b = (await dlg(p).innerText()).replace(/\s+/g, " ");
-  ok("det-261-la-entrega-dice-si-es-la-estandar", /19 nov[^·]{0,12}· estándar/i.test(a) && !/· estándar/.test(b), `${(a.match(/Entrega.{0,30}/) || [""])[0]} | ${(b.match(/Entrega.{0,30}/) || [""])[0]}`);
+  ok("det-261-la-entrega-dice-si-es-la-estandar", /ENTREGA\s+19-nov · estándar/.test(a) && !/· estándar/.test(b), `${(a.match(/ENTREGA\s.{0,30}/) || [a.slice(0, 200)])[0]} | ${(b.match(/ENTREGA\s.{0,30}/) || [""])[0]}`);
 });
+
+// ── v10.84.189, vuelta 2 ──
+await caso("det-262-lo-principal-sigue-siendo-prueba-de-color", "caso=alertas&rol=preprensa", async p => {
+  await aDiseno(p); await espera(p, 400);
+  const principal = await dlg(p).locator('button[style*="--principal"]').evaluateAll(l => l.map(b => (b.textContent || "").trim()));
+  ok("det-262-lo-principal-sigue-siendo-prueba-de-color", principal.length === 1 && /^Prueba de Color/.test(principal[0]), principal.join(" | "));
+});
+await caso("det-263-en-pausa-se-porta-como-los-otros-dos", "caso=alertas&rol=preprensa", async p => {
+  await p.evaluate(() => window.__cambiar({ stage: "design", current_machine: null, snooze_reason: "El cliente enviará corrección", snooze_stage: "design", snoozed_by: "preprensa", snooze_kind: "awaiting_client" })); await espera(p, 400);
+  const a = await dlg(p).getByRole("button", { name: BOTON_AUT }).count(), b = await dlg(p).getByRole("button", { name: "Directo a CTP" }).count();
+  ok("det-263-en-pausa-se-porta-como-los-otros-dos", a === b, `autorizó ${a} · Directo a CTP ${b}`);
+});
+for (const [id, vp] of [["det-264a-a-1366", { width: 1366, height: 768 }], ["det-264b-a-1920", { width: 1920, height: 1080 }], ["det-264c-a-360", { width: 360, height: 740 }]]) await caso(id + "-los-cuatro-botones-caben", "caso=alertas&rol=preprensa", async p => {
+  await aDiseno(p); await espera(p, 500);
+  const r = await dlg(p).evaluate(d => { const c = d.getBoundingClientRect(); return [...d.querySelectorAll("button")].filter(b => /Prueba de Color|Cliente autorizó|Directo a CTP|Sin CTP/.test(b.textContent)).map(b => { const x = b.getBoundingClientRect(); return { t: b.textContent.trim().slice(0, 16), dentro: x.left >= c.left - 1 && x.right <= c.right + 1, alto: Math.round(x.height), corte: b.scrollWidth > b.clientWidth + 1 }; }); });
+  ok(id + "-los-cuatro-botones-caben", r.length === 4 && r.every(x => x.dentro && !x.corte), JSON.stringify(r));
+}, vp);
 
 await browser.close();
 for (const r of res) console.log(r);

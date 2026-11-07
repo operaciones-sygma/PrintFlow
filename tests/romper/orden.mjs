@@ -2353,6 +2353,8 @@ const ordenesNuevas = p => p.evaluate(f => window.__estado().base.filter(o => !f
 const notaDeEntrega = async p => { const n = p.locator("#ff-entrega-nota"); return (await n.count()) ? (await n.innerText()).replace(/\s+/g, " ") : ""; };
 const etiquetaEntrega = p => p.locator('label[for="ff-entrega"]').innerText();
 const CALCULADA = "2026-11-06T16:00:00.000Z";
+// guardar sin cambiar nada no guarda (ord-08), y sin categoría frena antes que la fecha
+const listaParaGuardar = async p => { await p.locator("textarea").first().fill("Recetas Dr. Eduardo Fuentes · otra descripción"); await espera(p, 100); if ((await categoria(p)) === "") await elegirCategoria(p, "otro"); };
 
 await caso("ord-341 la orden nueva ya trae su fecha: 8 días hábiles, con su porqué y marcada como obligatoria", "", async p => {
   await p.clock.setFixedTime(VIERNES_187);
@@ -2428,38 +2430,42 @@ for (const [id, q, cifra, fecha] of [["ord-350a el 4.º producto de la OC no ala
   const v = await entregaDe(p), n = await notaDeEntrega(p);
   ok(id, v === fecha && new RegExp(cifra + " días hábiles").test(n) && (cifra < 11 || /5 o más productos/.test(n)), `${v} «${n}»`);
 });
-await caso("ord-351 lo que ya existe no se traba: una orden sin fecha se guarda sin fecha", "modo=editar", async p => {
+await caso("ord-351 lo que ya existe no se traba: una orden sin fecha se guarda sin fecha", "modo=editar&rol=admin", async p => {
   await p.clock.setFixedTime(VIERNES_187);
   await espera(p, 200);
   const v = await entregaDe(p), e = await etiquetaEntrega(p), n = await notaDeEntrega(p);
+  await listaParaGuardar(p);
   await guardar(p); await espera(p, 1200);
   const u = await lineas(p, "update "), o = await p.evaluate(() => window.__estado().base.find(x => x.id === "OP-ED"));
   ok("ord-351 lo que ya existe no se traba: una orden sin fecha se guarda sin fecha", v === "" && !/\*/.test(e) && n === "" && u.length === 1 && !o.due_date && !/"delivery_calculated_at":"/.test(u[0]), `campo «${v}» · etiqueta «${e}» · nota «${n}» · ${u.length} update · fecha ${o.due_date} · ${(u[0] || "").slice(0, 120)}`);
 });
-await caso("ord-352 «Editar Specs» de una orden sin fecha también se guarda", "modo=specs", async p => {
+await caso("ord-352 «Editar Specs» de una orden sin fecha también se guarda", "modo=specs&rol=preprensa", async p => {
   await espera(p, 200);
+  await p.locator("textarea").first().fill("Recetas Dr. Eduardo Fuentes · specs revisadas"); await espera(p, 100);
   await guardar(p); await espera(p, 1200);
   const u = await lineas(p, "update ");
   ok("ord-352 «Editar Specs» de una orden sin fecha también se guarda", u.length === 1, `${u.length} update`);
 });
-await caso("ord-353 la que ya tenía fecha no se queda sin ella al editar", "modo=editar", async p => {
+await caso("ord-353 la que ya tenía fecha no se queda sin ella al editar", "modo=editar&rol=admin", async p => {
   await p.evaluate(() => window.__cambiar({ due_date: "2026-11-20" })); await editar(p, "OP-ED");
   const antes = await entregaDe(p);
+  await listaParaGuardar(p);
   await p.locator("#ff-entrega").fill(""); await espera(p, 100);
   await guardar(p); await espera(p, 800);
-  const u = await lineas(p, "update "), t = await forma(p).innerText();
+  const u = await lineas(p, "update "), t = await forma(p).innerText().catch(() => "(ya no está la forma)");
   ok("ord-353 la que ya tenía fecha no se queda sin ella al editar", antes === "2026-11-20" && u.length === 0 && /Falta la fecha de entrega/.test(t), `antes ${antes} · ${u.length} update`);
 });
-await caso("ord-354 cambiar la fecha estándar al editar le quita lo de calculada", "modo=editar", async p => {
+await caso("ord-354 cambiar la fecha estándar al editar le quita lo de calculada", "modo=editar&rol=admin", async p => {
   await p.evaluate(c => window.__cambiar({ due_date: "2026-11-19", delivery_calculated_at: c }), CALCULADA); await editar(p, "OP-ED");
+  await listaParaGuardar(p);
   await p.locator("#ff-entrega").fill("2026-11-12"); await espera(p, 100);
   await guardar(p); await espera(p, 1200);
   const o = await p.evaluate(() => window.__estado().base.find(x => x.id === "OP-ED"));
   ok("ord-354 cambiar la fecha estándar al editar le quita lo de calculada", o.due_date === "2026-11-12" && !o.delivery_calculated_at, `${o.due_date} · ${o.delivery_calculated_at}`);
 });
-await caso("ord-355 editar otra cosa no le quita lo de calculada", "modo=editar", async p => {
+await caso("ord-355 editar otra cosa no le quita lo de calculada", "modo=editar&rol=admin", async p => {
   await p.evaluate(c => window.__cambiar({ due_date: "2026-11-19", delivery_calculated_at: c }), CALCULADA); await editar(p, "OP-ED");
-  await p.locator("textarea").first().fill("Recetas con otra descripción"); await espera(p, 100);
+  await listaParaGuardar(p);
   await guardar(p); await espera(p, 1200);
   const o = await p.evaluate(() => window.__estado().base.find(x => x.id === "OP-ED"));
   ok("ord-355 editar otra cosa no le quita lo de calculada", o.due_date === "2026-11-19" && o.delivery_calculated_at === CALCULADA, `${o.due_date} · ${o.delivery_calculated_at}`);
@@ -2503,6 +2509,98 @@ for (const [id, vp] of [["ord-361a a 1366", { width: 1366, height: 768 }], ["ord
   const r = await p.evaluate(() => { const n = document.querySelector("#ff-entrega-nota"), i = document.querySelector("#ff-entrega"); if (!n) return null; const a = n.getBoundingClientRect(), b = i.getBoundingClientRect(); return { nota: a.right, campo: b.right, alto: a.height, renglones: Math.round(a.height / parseFloat(getComputedStyle(n).lineHeight || 16)), ancho: document.documentElement.scrollWidth, ventana: innerWidth }; });
   ok(`${id}: la nota más larga cabe en su columna y no empuja la página`, !!r && r.nota <= r.campo + 1 && r.ancho <= r.ventana, JSON.stringify(r));
 }, vp);
+
+// ── v10.84.189, vuelta 2: por donde no se diseñó ──
+await caso("ord-362 la cantidad con comas cuenta igual", "", async p => {
+  await p.clock.setFixedTime(VIERNES_187);
+  await llenar(p, "Ejemplo · 1000", "25,000"); await espera(p, 100);
+  const v = await entregaDe(p), n = await notaDeEntrega(p);
+  ok("ord-362 la cantidad con comas cuenta igual", v === "2026-11-23" && /10 días hábiles/.test(n), `${v} «${n}»`);
+});
+await caso("ord-363 una cantidad que no es número no tumba la fecha", "", async p => {
+  await p.clock.setFixedTime(VIERNES_187);
+  const vistas = [];
+  for (const q of ["abc", "-5", "1.5", "0", "99999999999999999999"]) { await llenar(p, "Ejemplo · 1000", q); await espera(p, 80); vistas.push(q + "=" + await entregaDe(p)); }
+  const buenas = vistas.slice(0, 4).every(x => x.endsWith("=2026-11-19")) && vistas[4].endsWith("=2026-11-23");
+  ok("ord-363 una cantidad que no es número no tumba la fecha", buenas, vistas.join(" · "));
+});
+await caso("ord-364 tocar la fecha sí cuenta como captura: Cancelar pregunta", "", async p => {
+  await p.locator("#ff-entrega").fill("2026-12-20"); await espera(p, 100);
+  await p.getByRole("button", { name: "Cancelar" }).click(); await espera(p, 400);
+  const hay = await hayPregunta(p), e = await estado(p);
+  ok("ord-364 tocar la fecha sí cuenta como captura: Cancelar pregunta", hay && e.vista === "form", `pregunta ${hay} · vista ${e.vista}`);
+});
+await caso("ord-365 si la base rechaza, al reintentar sigue siendo la estándar", "folio=falla1", async p => {
+  await p.clock.setFixedTime(VIERNES_187);
+  await capturar(p); await crear(p); await espera(p, 1200);
+  const v1 = await entregaDe(p), n1 = (await ordenesNuevas(p)).length;
+  await crear(p); await espera(p, 1500);
+  const o = (await ordenesNuevas(p))[0];
+  ok("ord-365 si la base rechaza, al reintentar sigue siendo la estándar", v1 === "2026-11-19" && n1 === 0 && o?.due_date === "2026-11-19" && !!o?.delivery_calculated_at, `${v1} · ${n1} · ${o?.due_date} · ${o?.delivery_calculated_at}`);
+});
+await caso("ord-366 la OC con fecha por delante no se alarga por el 5.º producto", "modo=oc&ocproductos=4", async p => {
+  await p.clock.setFixedTime(new Date("2026-10-20T10:00:00-06:00"));
+  await llenar(p, "Ejemplo · 1000", "500"); await espera(p, 100);
+  const v = await entregaDe(p), n = await notaDeEntrega(p);
+  ok("ord-366 la OC con fecha por delante no se alarga por el 5.º producto", v === "2026-10-30" && n === "", `${v} «${n}»`);
+});
+await caso("ord-367 «Sugerir fecha» en esa OC pone la estándar, con sus productos", "modo=oc&ocproductos=4", async p => {
+  await p.clock.setFixedTime(new Date("2026-10-20T10:00:00-06:00"));
+  await llenar(p, "Ejemplo · 1000", "500"); await espera(p, 100);
+  await p.getByRole("button", { name: "Sugerir fecha" }).click(); await espera(p, 100);
+  const v = await entregaDe(p), n = await notaDeEntrega(p);
+  ok("ord-367 «Sugerir fecha» en esa OC pone la estándar, con sus productos", v === "2026-11-04" && /11 días hábiles/.test(n), `${v} «${n}»`);
+});
+for (const [id, q] of [["ord-368 la orden con folio anticipado y sin fecha se guarda", "modo=candado&rol=admin"], ["ord-369 la maquila vieja sin fecha se guarda", "modo=maquila&rol=admin"]]) await caso(id, q, async p => {
+  await espera(p, 200);
+  const v = await entregaDe(p);
+  await listaParaGuardar(p);
+  await guardar(p); await espera(p, 1200);
+  const u = await lineas(p, "update "), t = await forma(p).innerText().catch(() => "");
+  ok(id, v === "" && u.length === 1 && !/Falta la fecha/.test(t), `campo «${v}» · ${u.length} update`);
+});
+for (const rol of ["vendedor", "admin", "karla"]) await caso(`ord-370 ${rol}: la orden nueva nace con su fecha`, "rol=" + rol, async p => {
+  await p.clock.setFixedTime(VIERNES_187);
+  await llenar(p, "Ejemplo · 1000", "300"); await espera(p, 100);
+  const v = await entregaDe(p), e = await etiquetaEntrega(p);
+  ok(`ord-370 ${rol}: la orden nueva nace con su fecha`, v === "2026-11-19" && /\*/.test(e), `${v} «${e}»`);
+});
+await caso("ord-371 la nota se lee: 4.5:1 o más", "", async p => {
+  const r = await contraste(p, `document.getElementById("ff-entrega-nota")`);
+  ok("ord-371 la nota se lee: 4.5:1 o más", r !== null && r >= 4.5, `contraste ${r}`);
+});
+await caso("ord-361c a 360: la nota más larga cabe en su columna y no empuja la página", "modo=oc&ocproductos=6", async p => {
+  await p.clock.setFixedTime(VIERNES_187);
+  await llenar(p, "Ejemplo · 1000", "20000"); await espera(p, 150);
+  const r = await p.evaluate(() => { const n = document.querySelector("#ff-entrega-nota"), i = document.querySelector("#ff-entrega"); if (!n) return null; const a = n.getBoundingClientRect(), b = i.getBoundingClientRect(); return { nota: a.right, campo: b.right, ventana: innerWidth, ancho: document.documentElement.scrollWidth }; });
+  ok("ord-361c a 360: la nota más larga cabe en su columna y no empuja la página", !!r && r.nota <= r.campo + 1 && r.nota <= r.ventana, JSON.stringify(r));
+}, { width: 360, height: 740 });
+await caso("ord-372 una fecha de dedazo de las de antes no traba la orden que ya la trae", "modo=editar&rol=admin", async p => {
+  await p.evaluate(() => window.__cambiar({ due_date: "0026-06-01" })); await editar(p, "OP-ED");
+  await listaParaGuardar(p);
+  await guardar(p); await espera(p, 1200);
+  const u = await lineas(p, "update "), t = await forma(p).innerText().catch(() => "");
+  ok("ord-372 una fecha de dedazo de las de antes no traba la orden que ya la trae", u.length === 1 && !/revisa el año/.test(t), `${u.length} update`);
+});
+await caso("ord-373 escribir una de dedazo en una orden que ya existe no pasa", "modo=editar&rol=admin", async p => {
+  await listaParaGuardar(p);
+  await p.locator("#ff-entrega").fill("0026-11-19"); await espera(p, 100);
+  await guardar(p); await espera(p, 700);
+  const u = await lineas(p, "update "), t = await forma(p).innerText();
+  ok("ord-373 escribir una de dedazo en una orden que ya existe no pasa", u.length === 0 && /revisa el año/i.test(t), `${u.length} update`);
+});
+await caso("ord-374 una orden vieja sin fecha sí puede recibirla, y no queda como estándar", "modo=editar&rol=admin", async p => {
+  await listaParaGuardar(p);
+  await p.locator("#ff-entrega").fill("2026-12-20"); await espera(p, 100);
+  await guardar(p); await espera(p, 1200);
+  const o = await p.evaluate(() => window.__estado().base.find(x => x.id === "OP-ED"));
+  ok("ord-374 una orden vieja sin fecha sí puede recibirla, y no queda como estándar", o.due_date === "2026-12-20" && !o.delivery_calculated_at, `${o.due_date} · ${o.delivery_calculated_at}`);
+});
+await caso("ord-375 sin fecha, el pie y el botón lo dicen", "", async p => {
+  await capturar(p); await p.locator("#ff-entrega").fill(""); await espera(p, 150);
+  const b = await p.getByRole("button", { name: /Crear Orden/ }).getAttribute("title"), t = await forma(p).innerText();
+  ok("ord-375 sin fecha, el pie y el botón lo dicen", /Fecha de entrega/.test(b || "") && /1 campo por completar/.test(t), `«${b}»`);
+});
 
 await browser.close();
 const fallas = res.filter(r => r.startsWith("FALLA")).length;
