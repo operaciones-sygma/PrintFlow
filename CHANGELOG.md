@@ -12,6 +12,76 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.189 — Toda orden nueva con fecha de entrega, «Cliente autorizó sin prueba» y los avisos en festivo (ISO 9001) — 6-nov-2026
+
+Para la auditoría interna de ISO 9001 del jueves 12-nov. El 187 y el 188 son de «Una sola cuenta», que sube después.
+
+**Qué pasaba.**
+- **La fecha de entrega.** Del 23-oct al 5-nov sólo 13 de 87 órdenes la traían. La forma decía «(recomendado)» y las de OC «(opcional)», y el equipo sólo se la pone al cliente que de verdad urge: «a quienes no se les pone, no hay como tal fecha de entrega».
+- **La autorización del cliente.** «Cliente Aprobó» sólo sale después de «Prueba de Color» y «Enviar Prueba al Cliente», y en 30 días ninguna orden pasó por ahí: de las 111 que salieron de Diseño, 63 fueron por «Sin CTP, Lista» y 48 por «Directo a CTP». De lo que el cliente autorizó no quedaba quién lo registró ni cuándo.
+- **Los avisos.** `public.is_business_hours` no conocía los festivos: el lunes 16-nov habrían salido como en un día normal, con la planta cerrada.
+
+**Lo que pidió Marcelo** (6-nov). «Un standard… 8 días hábiles para un trabajo», y Gerardo, que se alargue por el tiraje y por los productos de la orden. Con lo medido escogió: **8 días hábiles, +2 si pasa de 10,000 piezas, +3 desde el 5.º producto de la OC, y se suman; los 3 días por acabados ya no suman.** Y un botón en Diseño que guarde quién y cuándo y pase a CTP, y que también sirva para lo que va «Sin CTP, Lista». «Directo a CTP» se queda para las reimpresiones sin cambios. Y «sí, que los avisos respeten los festivos».
+
+**Lo medido** (sólo lectura).
+- Las 87: 49 internas (13 con fecha), 34 ventas de inventario (0) y 4 maquilas (0). Sin las de inventario, que nacen entregadas, son 13 de 53.
+- 690 órdenes internas entregadas desde junio, en días hábiles sin festivos hasta quedar LISTAS (la misma vara de «a tiempo»). Se habría pasado, de la fecha estándar:
+
+| regla | se pasa | arriba de 10,000 piezas | OC de 5 o más productos | promesa promedio |
+|---|---|---|---|---|
+| 8 días fijos | 13.8% | 20.9% | 41.3% | 8.0 días |
+| 8 + 3 si lleva acabados (la de «Sugerir fecha» hasta hoy) | 10.7% | 16.0% | 35.9% | 9.5 días |
+| **8, +2 por tiraje, +3 por productos** | **9.1%** | 11.7% | 17.4% | **8.9 días** |
+
+- Los acabados no atrasan: con acabados pasa de 8 días el 8%; sin acabados, el 19%.
+- La simulación cuenta los productos que la OC terminó teniendo; al capturar se cuentan los que lleva, así que en la práctica el 9.1% saldrá algo mayor.
+
+**Qué se cambió** (la pantalla; de la base, sólo los avisos).
+- 🔑 `src/lib/fechaEstandar.js`: la cuenta, probada con Node. La regla de los pedidos web (`calcDeliveryDate`: digital 4, offset 8, acabados +3) no cambia.
+- 🔑 **La forma** (orden interna, maquila y «Agregar producto» a una OC): la fecha sale escrita con la estándar y su porqué, se recalcula con la cantidad mientras nadie la toque, y es obligatoria: borrada, o con un año de dedazo, no deja crear. No vive en lo capturado hasta que alguien la toca, así que abrir y cancelar no pregunta. Si la OC trae una fecha que no ha pasado, se usa ésa.
+- 🔑 **`delivery_calculated_at`** (la columna de los pedidos web) dice que la fecha es la estándar: el detalle enseña «19-nov · estándar». Si alguien la cambia, se limpia. Sin columna nueva: la fecha que el cliente pidió se sigue distinguiendo de la que salió sola.
+- **Lo que ya existe no se traba.** Una orden vieja sin fecha se guarda sin fecha; una que tenía fecha no se puede quedar sin ella al editar; una con fecha de dedazo de antes no estorba, pero no entra otra nueva.
+- **Duplicar y devolución no pasan por la forma**: la copia lleva la estándar en vez de la fecha vieja, y lo dice el aviso. `create_return` clona la fecha de la original: si ya pasó o está vacía, la app le pone la estándar después (sin cambiar la RPC); si esa escritura falla, la devolución ya existe y el aviso lo dice.
+- 🔑 **«Cliente autorizó sin prueba»** en Diseño, para Pre-prensa y Dirección. Pregunta: «Sí, pasar a CTP» o «Sí, sin CTP: a Lista». Va por `doAdv`, como «Directo a CTP» y «Sin CTP, Lista» (la fila, la pausa, los avisos a Germán o a Gerardo y la condición de la etapa). Guarda lo mismo que «Cliente Aprobó»: `proof_approved`, en el MISMO UPDATE que la etapa, y su renglón en la bitácora con `by_user` y `by_uid` (lo sella la base). Sin ese renglón no queda autorizada: la orden regresa a Diseño y se dice.
+- **Se ve:** el detalle dice «Cliente autorizó: Sin prueba de color · 06-nov, 10:00 a.m. · Noemí» y la ficha «Autorizó» en vez de «Prueba». Lo terminado no trae su bitácora hasta abrirlo (regla 12): sin el renglón no se afirma de cuál fue.
+- «Directo a CTP» y «Sin CTP, Lista» no cambian; su `title` dice que son para reimpresiones sin cambios y que no registran autorización.
+- Las ventanas de OC ya no dicen «(opcional)»: «Si el cliente ya la pidió. Sin fecha, cada producto lleva la estándar.» Su fecha sigue sin ser obligatoria: una OC no es una orden.
+- **La base** (`docs/migrations/v10.84.189_avisos_respetan_festivos.sql`; aplicada el 6-nov a las 18:26:26 con el «sí» de Marcelo a la pregunta que nombraba la función): `public.es_festivo_de_ley(date)`, cerrada a anon, y `public.is_business_hours()` con el festivo. En `schema_migrations` se llama `v10_84_187_avisos_respetan_festivos`, porque se aplicó antes de saber que el 187 ya estaba tomado. El cambio va en esa función y no en el disparador: «Corregir precio» la usa para decir que el aviso no va a llegar, y con el disparador solo diría que sí llega.
+
+**Las puertas de alta.**
+
+| puerta | fecha |
+|---|---|
+| Forma: interna, maquila y producto de OC | la estándar, o la de la OC si no ha pasado; obligatoria |
+| Duplicar | la estándar, sola |
+| Devolución | la estándar si la clonada ya pasó o está vacía |
+| **Venta de inventario** (`bulk_sell_from_stock`) | **no se pide**: la orden nace entregada en el mismo instante. Ponerle la del mismo día inflaría el «a tiempo» con ~70 ventas al mes |
+| **Pedido web** (`create_web_order`) | **no se puede pedir**: el cliente no elige; la calcula la validación de Pre-prensa, con su regla |
+| `sell_from_stock` (venta suelta) | ya no se usa: la pantalla no la abre desde la v10.55 |
+
+**Cómo se probó.**
+- **Vuelta 1**, escrita antes del código, contra el de hoy: 89 pruebas, caían 64. 11 no llegaban a lo que querían medir, por supuestos míos (guardar sin cambios no guarda, Duplicar se niega sin vendedor, Devoluciones abre con «Cargar archivo»…): se corrigieron y se repitieron contra el código de hoy.
+- **Vuelta 2**, por donde no se diseñó: cantidades raras, la base que rechaza y se reintenta, la OC con fecha por delante, otros roles, 360 px, contraste, Ctrl+Enter, teclado, datos raros del catálogo de `break-ui`, cambiar la fecha en Entregas, la web al validar. **Sin fallas de la app.**
+- Todas juntas contra el código de hoy: **caen 78 de 126**; las otras 48 son controles de lo que no debe cambiar y las de la migración, y a ésas las prueban los sabotajes.
+- **Sabotajes:** 61, todos cayeron por su causa. A la primera 5 no: a uno lo tapaba otro de su corrida, a otro lo frenaban otras tres capas del doble clic, y 2 destaparon una prueba que no podía caer (el detalle no pinta botones a quien no le toca: `det-254-flujos`, con los botones de todos los roles y etapas). El último destapó una prueba que no miraba el rótulo (`det-257`).
+- **La base:** la migración tal cual en un Postgres de verdad (PGlite, `hab-50` a `hab-58`): la lista contra `esFestivo` día por día de 2024 a 2040, 15 instantes, el día en México y no en UTC, y el disparador. Ensayada en producción con rollback como `authenticated`. Después de aplicarla: invariantes 94 de 94.
+- La tanda de la app real pasó del tope de 12 minutos: va en tres (`sesion-3`, desde ses-200).
+
+**Qué NO se tocó.** Las órdenes que ya existen: no se les puso fecha, ni se reescribió ninguna. La venta de inventario. La regla de los pedidos web. «Directo a CTP» y «Sin CTP, Lista». La RPC `create_return`. El vencimiento de las facturas: sale de los días de crédito, no de esta fecha (medido en `sync_invoice_from_orders`, `sync_invoice_from_oc` y `sync_post_invoice_edit`). Los avisos propios de CobranzaFlow (`cobranza.notifications`).
+
+**Lo que va a notar la planta.**
+- Primero, que toda orden nueva trae fecha. Las primeras estándar vencen a partir del 19-nov.
+- **Va a haber más «vencidas»:** hoy las órdenes sin fecha nunca vencen. Con el estándar, ~9% se pasaría: unas 14 al mes.
+- **Menos «estancada»:** lo que está en Lista con más de 5 días hábiles por delante, y lo terminado en Salidas antes de su fecha, ya no sale como estancado. Ya era así para lo que traía fecha.
+- «A tiempo» ahora cuenta casi todo, no sólo lo que traía fecha: la cifra va a cambiar sin que la planta haya cambiado.
+
+**Para Marcelo.**
+- **En festivo el aviso se descarta, igual que en domingo:** no se guarda para el día siguiente.
+- «Directo a CTP» y «Sin CTP, Lista» siguen moviendo la orden sin registrar autorización: que quede registro depende de que Noemí use el botón nuevo. Conviene medirlo después de la primera semana.
+- Lo que el cliente autorizó con Lupita lo registra Noemí: el botón es de Pre-prensa y Dirección, y queda a nombre de quien lo aprieta.
+- Una orden de placa existente salta de Validar a Lista sin pasar por Diseño (9 en 30 días): ahí no hay botón.
+- `is_business_hours` sigue abierta a anon y `es_festivo_de_ley` no: una llamada anónima directa recibiría 42501. Hubo 0 en 48 horas.
+
 ## v10.84.186 — Festivos en estancada y en las entregas; el rojo, sólo Dirección y no en lo entregado a tiempo — 5-nov-2026
 
 **Qué pasaba.** El panel «Tiempo por etapa» ya no contaba los festivos, pero el resto de la app sí: una orden parada el viernes 13-nov amanecía el martes 17 con «44h sin avance» cuando sólo llevaba 20, y «Sugerir fecha» podía proponer el 1 de enero. Además, 24 de las 291 órdenes entregadas a tiempo traían rojo en su panel, y cualquiera que abriera el detalle veía quién se pasó.
