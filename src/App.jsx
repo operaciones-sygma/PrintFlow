@@ -3,6 +3,7 @@ import { corregirPrecioEnLaBase, capturarPrecioEnLaBase, revisarPrecioFoliado, c
 import { tiempoPorEtapa, tiempoPorPersona, duracion, duracionFina, loNormalDe, esFestivo, HORARIO_EN_PALABRAS, HORAS_DE_UN_DIA } from "./lib/tiempoPorEtapa.js"; // v10.84.175 — «Tiempo por etapa», probado con Node contra las bitácoras de producción
 import { cancelarUnaDelLote } from "./lib/cancelarEnLote.js"; // v10.84.113 — «Cancelaciones» cancela cada orden completa, probado con Node
 import { cuadrarPartes } from "./lib/cuadrarPartes.js"; // v10.84.3 — aritmetica del reparto, probada con Node
+import { fechaEstandar, porQueEsaFecha, diaLocal as diaDeHoy } from "./lib/fechaEstandar.js"; // v10.84.189 — la fecha de entrega estándar (8 días hábiles, +2 por tiraje, +3 por productos), probada con Node
 import { proponerPiezas, descripcionDeOrden } from "./lib/proponerPiezas.js"; // v10.84.102 — casar los conceptos de un CFDI con las órdenes del plan, probado con Node
 import { CATEGORIAS, categoriaSugerida, nombreDeCategoria, esVentaDeInventario } from "./lib/categorias.js"; // v10.84.91 — la categoría del trabajo (las reglas, una vez: la forma sugiere y la base genera su SQL de ellas)
 import { Broadcast as BroadcastIcon, Blueprint as BlueprintIcon, SquaresFour as SquaresFourIcon, ListChecks as ListChecksIcon, Plus as PlusIcon, ShoppingCart as ShoppingCartIcon, Globe as GlobeIcon, Factory as FactoryIcon, CalendarDots as CalendarDotsIcon, ListBullets as ListBulletsIcon, Archive as ArchiveIcon, ChartBar as ChartBarIcon, CurrencyDollar as CurrencyDollarIcon, Heartbeat as HeartbeatIcon, FileText as FileTextIcon, FolderOpen as FolderOpenIcon, Flask as FlaskIcon, CaretLeft as CaretLeftIcon, CaretRight as CaretRightIcon, Package as PackageIcon, Wallet as WalletIcon, DownloadSimple as DownloadSimpleIcon, DotsSixVertical as DotsSixVerticalIcon, DotsThree as DotsThreeIcon, Receipt as ReceiptIcon, Lock as LockIcon, Gear as GearIcon, Printer as PrinterIcon, Wrench as WrenchIcon, Truck as TruckIcon, Warning as WarningIcon, Trophy as TrophyIcon, CaretUp as CaretUpIcon, CaretDown as CaretDownIcon, Clock as ClockIcon, Megaphone as MegaphoneIcon, Eye as EyeIcon, NotePencil as NotePencilIcon, BellSlash as BellSlashIcon, Fire as FireIcon, User as UserIcon, CheckCircle as CheckCircleIcon, Circle as CircleIcon, Check as CheckIcon, BellRinging as BellRingingIcon, WarningOctagon as WarningOctagonIcon, Users as UsersIcon, Hourglass as HourglassIcon, WarningCircle as WarningCircleIcon, Broom as BroomIcon, Link as LinkIcon, X as XIcon, ChatCircle as ChatCircleIcon, Palette as PaletteIcon, ClipboardText as ClipboardTextIcon, Disc as DiscIcon, Envelope as EnvelopeIcon, WhatsappLogo as WhatsappLogoIcon, Camera as CameraIcon, BookOpen as BookOpenIcon, UserPlus as UserPlusIcon, Lightbulb as LightbulbIcon, ArrowsClockwise as ArrowsClockwiseIcon, FloppyDisk as FloppyDiskIcon, Ruler as RulerIcon, Lightning as LightningIcon, CircleHalf as CircleHalfIcon, Files as FilesIcon, Diamond as DiamondIcon, Paperclip as PaperclipIcon, Tag as TagIcon, FastForward as FastForwardIcon, Export as ExportIcon, HandPointing as HandPointingIcon, ArrowUUpLeft as ArrowUUpLeftIcon, CopySimple as CopySimpleIcon, FlowArrow as FlowArrowIcon, ArrowsLeftRight as ArrowsLeftRightIcon, Trash as TrashIcon, ClockCounterClockwise as ClockCounterClockwiseIcon, Play as PlayIcon, Ticket as TicketIcon, TrendUp as TrendUpIcon, Drop as DropIcon, PuzzlePiece as PuzzlePieceIcon, Folder as FolderIcon, Sparkle as SparkleIcon, Tray as TrayIcon, MagnifyingGlass as MagnifyingGlassIcon, MagicWand as MagicWandIcon, Scissors as ScissorsIcon, Books as BooksIcon, ArrowsSplit as ArrowsSplitIcon, ArrowRight as ArrowRightIcon, ListNumbers as ListNumbersIcon, XCircle as XCircleIcon, Phone as PhoneIcon, Bank as BankIcon, CreditCard as CreditCardIcon, Money as MoneyIcon, Sun as SunIcon, Alarm as AlarmIcon, Mouse as MouseIcon, Target as TargetIcon, PushPin as PushPinIcon, HandWaving as HandWavingIcon, Divide as DivideIcon, UploadSimple as UploadSimpleIcon, Medal as MedalIcon, Command as CommandIcon, SignOut as SignOutIcon, Info as InfoIcon } from "@phosphor-icons/react";
@@ -1463,6 +1464,8 @@ const ACTION_ROLES = {
   approveCartComplete: { allowed:["admin","secretaria"], ownerBound:[] },
   // ─── Phase 3 (v10.12.0.4) — handlers descubiertos durante Phase 2 ───
   approve_proof:    { allowed:["admin","secretaria","vendedor","preprensa","produccion"], ownerBound:["vendedor"] },
+  // v10.84.189 — quien ve los botones de Diseño (StageFlowButtons): Pre-prensa y Dirección
+  autorizar_sin_prueba: { allowed:["admin","preprensa"], ownerBound:[] },
   web_request_file: { allowed:["admin","secretaria","preprensa"], ownerBound:[] },
   edit_specs:       { allowed:["admin","preprensa","produccion"], ownerBound:[] },
   // ─── Cuadra: producción a stock + venta desde stock (v10.42.0) ───
@@ -1572,6 +1575,7 @@ function actionDeniedToast(action, order, user, userLogin) {
     approveCartComplete: "aprobar el carrito de",
     // Phase 3 (v10.12.0.4)
     approve_proof: "aprobar la prueba de",
+    autorizar_sin_prueba: "marcar la autorización de",
     web_request_file: "solicitar archivo del pedido web",
     edit_specs: "editar specs técnicas de"
   };
@@ -3602,6 +3606,12 @@ const seFoliaConAsignar=o=>!!o&&ETAPAS_LISTA.includes(o.stage)&&!!o.production_n
 const etiquetaYaPidio=(o,role)=>role==="karla"&&seFoliaConAsignar(o)?"Ya pidió factura · Asignar folio":"Ya pidió factura · Reactivar";
 // la última vez que quedó lista (llegó a Salidas o regresó de maquila) hasta `hasta` (ms), de su bitácora; null si no hay registro
 const listaEn=(o,hasta)=>{let m=null;for(const e of (o&&o.timeline)||[]){if(!e||!ETAPAS_LISTA.includes(e.to))continue;const x=Date.parse(e.date);if(!isNaN(x)&&(hasta==null||x<=hasta)&&(m===null||x>m))m=x}return m};
+// v10.84.189 — Marcelo, 6-nov (ISO 9001, auditoría interna del 12-nov): «Cliente Aprobó» sólo salía después de «Prueba de Color» y «Enviar Prueba al Cliente», y en 30 días ninguna orden pasó por
+//   ahí: de lo que se autorizó, no quedaba quién ni cuándo. «Cliente autorizó sin prueba» guarda lo mismo que «Cliente Aprobó»: `proof_approved` (cuándo; regresar a Diseño lo borra) y su renglón en la
+//   bitácora (quién: `by_user`, y `by_uid` lo sella la base con la sesión). Sin columna nueva: de cuál de las dos fue lo dice el renglón, y manda el último. `como` es "sin", "con" o null: lo terminado no
+//   trae su bitácora hasta abrir su detalle (regla 12), y sin el renglón no se afirma de cuál fue.
+const TEXTO_SIN_PRUEBA="✅ Cliente autorizó sin prueba de color";
+const autorizacionDelCliente=o=>{if(!o?.proof_approved)return null;const l=[...(o.timeline||[])].reverse().find(e=>{const a=String(e?.action||"");return a.startsWith(TEXTO_SIN_PRUEBA)||a.startsWith("✅ Prueba aprobada")});return {como:!l?null:String(l.action).startsWith(TEXTO_SIN_PRUEBA)?"sin":"con",quien:l?.by||null,cuando:o.proof_approved}};
 // el fin del día de su entrega (las 23:59:59), en ms
 const finDeLaEntrega=o=>new Date(String(o.due_date).slice(0,10)+"T23:59:59").getTime();
 // lista a tiempo: está lista (en Salidas o recibida de maquila) y quedó lista a más tardar el día de su entrega
@@ -5026,7 +5036,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction,oc=null,re
   //   —con Esc, «Cancelar» o al terminar— se regresa a la orden, que se actualiza sola (App la busca viva en `orders`), con
   //   el foco donde estaba. Lo que lleva a otra pantalla (editar, duplicar, imprimir) o se hace de una vez (avanzar,
   //   validar, recordar, quitar la espera) sí cierra, como antes.
-  const ENCIMA=["corregir_precio","facturar_siguiente_parte","jalar_a_salidas","deliver_with_invoice","deliver_covered","deliver_only","split_invoice","pre_invoice","apply_historic_folio","refacturar","deshacer_saldo","deshacer_cancelacion","cancel_with_nc","cancel_order","revert","snooze","waste","send_maquila","delete"];
+  const ENCIMA=["autorizar_sin_prueba","corregir_precio","facturar_siguiente_parte","jalar_a_salidas","deliver_with_invoice","deliver_covered","deliver_only","split_invoice","pre_invoice","apply_historic_folio","refacturar","deshacer_saldo","deshacer_cancelacion","cancel_with_nc","cancel_order","revert","snooze","waste","send_maquila","delete"];
   const volverA=useRef(null),revisarRef=useRef(null);
   const despachar=(id,action,arg)=>{
     escudoDeClics();   // v10.84.54 — el segundo clic de un doble clic no llega a nada
@@ -5251,7 +5261,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction,oc=null,re
       {(()=>{
         const bAlias=o.client_id?<ClientAliasManager clientId={o.client_id} role={role} userLogin={userLogin}/>:null;
         const bProducto=<><Seccion>Producto</Seccion>
-          {o.product_type&&<Row l="Descripción" v={o.product}/>}<Row l="Categoría" v={esVentaDeInventario(o.product_type)?"Venta de inventario":(nombreDeCategoria(o.categoria)||"Sin clasificar")}/><Row l="Creada" v={o.created_at?fDT(o.created_at)+(o.created_by?" por "+(o.created_by==="secretaria"?"Lupita":o.created_by):""):null}/><Row l="Entrega" v={o.due_date?fD(o.due_date)+(o.delivery_calculated_at?" · calculada":""):null}/>
+          {o.product_type&&<Row l="Descripción" v={o.product}/>}<Row l="Categoría" v={esVentaDeInventario(o.product_type)?"Venta de inventario":(nombreDeCategoria(o.categoria)||"Sin clasificar")}/><Row l="Creada" v={o.created_at?fDT(o.created_at)+(o.created_by?" por "+(o.created_by==="secretaria"?"Lupita":o.created_by):""):null}/><Row l="Entrega" v={o.due_date?fD(o.due_date)+(o.delivery_calculated_at?" · estándar":""):null}/>{/* v10.84.189 — quien la vea sabe si alguien la pidió así o salió sola; y quién autorizó y cuándo, sin abrir el historial */}{(()=>{const aut=autorizacionDelCliente(o);return aut?<Row l="Cliente autorizó" v={(aut.como==="sin"?"Sin prueba de color · ":aut.como==="con"?"Con prueba de color · ":"")+fDT(aut.cuando)+(aut.quien?" · "+(AUTHOR_NAME[aut.quien]||aut.quien):"")}/>:null})()}
           {o.agent&&<Row l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><UserIcon size={11} weight="bold"/>Vendedor</span>} v={o.agent}/>}
           {role==="admin"&&<Row l="ID interno" v={<span style={{fontFamily:"'Geist Mono',monospace",fontSize:12,color:C.t2}}>{o.id}</span>}/>}</>;
         const bEspecs=!isMaq&&(o.paper_type||o.ink_front||o.width_cm||o.standard_size||o.finishes)?<><Seccion>Especificaciones</Seccion><Row l="Papel" v={o.paper_type}/><Row l="Gramaje" v={o.paper_grammage?o.paper_grammage+" grs":null}/><Row l="Medidas" v={o.standard_size?ssLabel(o.standard_size):(medidaCm(o)||null)}/><Row l="Tintas Frente" v={o.ink_front}/><Row l="Tintas Vuelta" v={o.ink_back}/>{Array.isArray(o.pantone_front)&&o.pantone_front.length>0&&<Row l="Pantones Frente" v={<PantoneChips codes={o.pantone_front} role={role}/>}/>}{Array.isArray(o.pantone_back)&&o.pantone_back.length>0&&<Row l="Pantones Vuelta" v={<PantoneChips codes={o.pantone_back} role={role}/>}/>}<Row l="Acabados" v={o.finishes}/></>:null;
@@ -14233,6 +14243,19 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     const ro=typeof ResizeObserver!=="undefined"?new ResizeObserver(medir):null;ro?.observe(pie);
     return()=>{ro?.disconnect();caja.style.scrollPaddingBottom=antes};
   },[]);
+  const hoyISO=(()=>{const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")})();
+  // v10.84.189 — Marcelo y Gerardo, 6-nov: la orden nace con su fecha, la estándar (src/lib/fechaEstandar.js), y sólo se cambia si al cliente le urge. Mientras nadie la toque NO vive en `f` (no cuenta como
+  //   captura: abrir y cancelar no pregunta) y se recalcula con la cantidad; tocada, manda lo escrito. Obligatoria sólo al dar de alta (también «Agregar producto a OC»); de lo que ya existe sólo se cuida
+  //   que no pierda la que ya tenía ni entre una de dedazo: una orden vieja sin fecha se guarda sin fecha. La fecha de la OC se respeta si no ha pasado.
+  const [fechaTocada,setFechaTocada]=useState(false);
+  const altaConFecha=!editando&&!specsOnly;
+  const ocDeLaForma=editOrder?.purchase_order_id||null;
+  const productosEnLaOC=ocDeLaForma?orders.filter(o=>o.purchase_order_id===ocDeLaForma&&!o.cancelled_at&&!/cancelled/.test(String(o.stage||""))).length:0;
+  const datosDeLaFecha={piezas:f.quantity,productos:editando?productosEnLaOC:productosEnLaOC+1};
+  const conEstandar=altaConFecha&&!fechaTocada&&(!f.due_date||(deLaOC&&f.due_date<hoyISO));
+  const entrega=conEstandar?fechaEstandar(datosDeLaFecha).fecha:(f.due_date||"");
+  const fechaSeLee=v=>/^\d{4}-\d{2}-\d{2}$/.test(v)&&duePlausible(Date.parse(v));
+  const faltaLaFecha=altaConFecha?!fechaSeLee(entrega):(editando&&!specsOnly&&(f.due_date||"")!==(editOrder?.due_date||"")&&!fechaSeLee(f.due_date||""));
   // Compute missing required fields
   const missing=useMemo(()=>{
     const m=[];
@@ -14246,6 +14269,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     // v10.72.6 / v10.74.1 (scan wmzhfqm6j D) — cantidad obligatoria al CREAR, incl. "Agregar producto a OC"
     // (editOrder._fromOC = alta que corre INSERT), que antes brincaba esta validación.
     if((!editOrder||editOrder?._fromOC)&&!specsOnly&&!(Number(f.quantity)>0))m.push("Cantidad");
+    if(faltaLaFecha)m.push("Fecha de entrega");   // v10.84.189
     // v10.74.0/.1 (scan wmzhfqm6j D+E) — Agente/Vendedor OBLIGATORIO (feed de comisiones; sin agente no hay a
     // quién comisionar). Aplica: (1) al CREAR — alta normal o "Agregar producto a OC" (_fromOC), y (2) al EDITAR
     // una orden interna que YA tenía agente (no permitir borrarlo con "Otro..." sin texto). "Otro" sin texto NO cuenta.
@@ -14257,7 +14281,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     // v10.84.78 — un número tecleado que no es válido frena (se ve tal cual, con su porqué)
     numMalos.forEach(k=>m.push(NUMEROS[k].etq+" (revisa el número)"));
     return m;
-  },[f.client,f.client_id,f.product_type,f.categoria,f.order_type,f.maq_provider,f.client_email,f.client_phone,f.client_rfc,f.quantity,f.agent,canP,hideC,specsOnly,editOrder,numMalos.join("|")]);
+  },[f.client,f.client_id,f.product_type,f.categoria,f.order_type,f.maq_provider,f.client_email,f.client_phone,f.client_rfc,f.quantity,f.agent,canP,hideC,specsOnly,editOrder,numMalos.join("|"),faltaLaFecha]);
   const canSubmit=missing.length===0&&!imgUploading; // v10.34.4 fix #2 — bloquear submit mientras imagen sube
   // v10.84.80 — el borde del faltante en su tinta (al 38 % daba 1.7:1) y `falta(etq)` para nombrarlo en su campo (aria-invalid + «Falta…»)
   const errBorder=k=>tried&&!k?"1.5px solid "+C.dnInk:"none";
@@ -14309,7 +14333,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
   // coincidente como sugerencia y la pisaba después).
   const agentTouchedRef=useRef(false);
   // v10.28.2 — dep por id (no referencia) para no resetear cambios en progreso si editOrder cambia referencia (e.g. realtime). _fromOC marca el caso de "Agregar producto" que sí requiere re-init aunque no haya id.
-  useEffect(()=>{agentTouchedRef.current=false;/* v10.74.2/.3 — al reabrir/re-inicializar el form arranca de cero: lo que traiga el campo no es una elección manual de esta captura */
+  useEffect(()=>{agentTouchedRef.current=false;setFechaTocada(false);/* v10.74.2/.3 — al reabrir/re-inicializar el form arranca de cero: lo que traiga el campo no es una elección manual de esta captura */
     if(editOrder){const nueva={...empty,...Object.fromEntries(Object.entries(editOrder).map(([k,v])=>[k,v===null&&typeof empty[k]==="string"?"":v]))};if(!editaUnaOrden&&!nueva.categoria&&!specsOnly&&!hideC)nueva.categoria=categoriaSugerida(nueva.product_type)||"";/* v10.84.91 — la nueva (de una OC) con su sugerida desde el arranque */setF(nueva);inicialRef.current=nueva;setTextos({});setMasAbierto(!!(Array.isArray(editOrder.distribution)||editOrder.sin_empaque_sygma||editOrder.file_url));/* v10.84.78 — la foto de «lo capturado» */const fins=(editOrder.finishes||"").split(",").map(s=>s.trim()).filter(Boolean);const customFins=fins.filter(x=>!FINISHES.includes(finBase(x))&&x!=="Otro");setShowOtroFinish(customFins.length>0);setCustomFinish(customFins.join(", "));setBlocksRaw(finGetDetail(editOrder.finishes,"Blocks"));setFolioRaw(finGetDetail(editOrder.finishes,"Folio"));/* v10.59.6 — re-sync customFinish junto a showOtroFinish (evita acabado stale/cruzado entre órdenes); v10.71.6 — y los buffers crudos de Blocks/Folio *//* v10.84.82 — ya no hay modo «Avanzado» que prender para una orden de puro texto: la descripción crece sola; cada orden empieza con las especificaciones abiertas */setEspAbierta(true);setPrecioNoCopiado(null)}},[editOrder?.id,editOrder?._fromOC]);
   // v10.64.0 — corte híbrido: ya no se pre-llena el folio en el form. Lo asigna el RPC atómico
   // al guardar (serie 100% consecutiva). El form solo muestra "Asignado automáticamente".
@@ -14342,7 +14366,6 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     }, 400);
     return () => pnValidateTimerRef.current && clearTimeout(pnValidateTimerRef.current);
   }, [f.production_number, canEditProductionNumber, nextPN, editOrder?.id]);
-  const hoyISO=(()=>{const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")})();
   const isMaq=f.order_type==="maquila";const margin=isMaq&&f.maq_cost&&f.maq_price?pct(parseFloat(f.maq_cost),parseFloat(f.maq_price)):null;
   // v10.72.36 — markup sobre costo, para aclarar la confusion "23% vs 30%": margin=ganancia/precio (sobre venta), maqMarkup=ganancia/costo (sobre costo). Mismo $ de ganancia, distinta base.
   const maqMarkup=isMaq&&Number(f.maq_cost)>0&&Number(f.maq_price)>0?Math.round(((Number(f.maq_price)-Number(f.maq_cost))/Number(f.maq_cost))*100):null;
@@ -14350,7 +14373,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
   // v10.84.80 — ir a un faltante (el primero al intentar crear, o el que se apriete en el resumen del pie): el foco y la vista en su campo
   const irAFaltante=(etq,reintento)=>{
     const root=formRef.current;if(!root)return;
-    const MAP={"Razón social":"ff-client","Tipo de Producto":"ff-tipo","Proveedor (Maquila)":"ff-maq","Contacto (correo o WhatsApp)":"ff-contacto","RFC (razón social nueva)":"ff-rfc","Cantidad":"ff-cantidad","Nuestro vendedor":"ff-agent","Categoría":"ff-categoria"};
+    const MAP={"Razón social":"ff-client","Tipo de Producto":"ff-tipo","Proveedor (Maquila)":"ff-maq","Contacto (correo o WhatsApp)":"ff-contacto","RFC (razón social nueva)":"ff-rfc","Cantidad":"ff-cantidad","Fecha de entrega":"ff-entrega","Nuestro vendedor":"ff-agent","Categoría":"ff-categoria"};
     const num=Object.values(NUMEROS).find(n=>etq===n.etq+" (revisa el número)");   // v10.84.78
     const id=etq?(MAP[etq]||num?.id):null;
     const el=id?root.querySelector("#"+id):null;
@@ -14420,6 +14443,8 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     enviandoRef.current=true;
     try{
       const clean={...f};delete clean._specsOnly;
+      // v10.84.189 — se guarda la que se ve, y queda dicho que nadie la pidió: «· estándar» del detalle (`delivery_calculated_at`, la columna de los pedidos web)
+      if(altaConFecha){if(conEstandar){clean.due_date=entrega;clean.delivery_calculated_at=new Date().toISOString()}else clean.delivery_calculated_at=null}
       if(clean.agent==="otro")clean.agent=null;
       // v10.59.0 — el "Nombre" ES la razón social; client_company la espeja (impresión/compat).
       // El "Agente" (contacto del cliente) viaja en clean.client_agent. El vendedor SYGMA
@@ -14468,7 +14493,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
         // v10.84.80 — vacía y como al abrir (también la foto de «lo capturado» y lo subido en esta captura, que ya es de la orden creada)
         // v10.84.81 — una maquila deja la forma en maquila (una serie de maquilas regresaba a «Interna» cada vez)
         const vacia={...empty,production_number:"",...(f.order_type==="maquila"?{order_type:"maquila"}:{})};setF(vacia);inicialRef.current=vacia;setTextos({});setEspAbierta(true);setPrecioNoCopiado(null);agentTouchedRef.current=false;setRfcDelCliente("");setSugeridoDe(null);setImgError("");
-        setMasAbierto(false);setShowOtroFinish(false);setCustomFinish("");setBlocksRaw("");setFolioRaw("");setImgQuitadas({});setArchivoQuitado(null);setAvisoCliente(null);imgUploadsRef.current=new Set();
+        setMasAbierto(false);setShowOtroFinish(false);setCustomFinish("");setBlocksRaw("");setFolioRaw("");setImgQuitadas({});setArchivoQuitado(null);setAvisoCliente(null);imgUploadsRef.current=new Set();setFechaTocada(false);
         if(hecho&&hecho.pn){creadaEnRef.current=Date.now();setCreada(hecho)}
       } // v10.34.4 fix #7 — limpiar; el placeholder del useMemo nextPN (con detección de hueco) lo rellena correctamente
       setTried(false);
@@ -14687,7 +14712,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
         {!categoriaTocada&&f.categoria&&<div id="ff-categoria-nota" style={{marginTop:5,fontSize:F.body,color:C.t2,lineHeight:1.4}}>La sugiere el nombre del trabajo; si no es, cámbiala.</div>}
         {falta("Categoría")&&<div id="ff-categoria-falta" style={{marginTop:5,fontSize:F.body,fontWeight:600,color:C.dnInk,lineHeight:1.4}}>Falta la categoría</div>}
       </div>}
-    </FC>{!specsOnly&&<><FC label="Cantidad" req br para="ff-cantidad" falta={falta("Cantidad")?"Falta la cantidad":null}><input id="ff-cantidad" aria-invalid={falta("Cantidad")||undefined} style={{...inp,border:errBorder(!!editOrder||Number(f.quantity)>0),...(candadoCantidad?{background:C.sf,color:C.t2,cursor:"not-allowed"}:{})}} inputMode="numeric" value={valorNum("quantity")} onChange={e=>!candadoCantidad&&teclear("quantity",e.target.value)} aria-describedby={[numMalos.includes("quantity")?"err-quantity":null,falta("Cantidad")?"ff-cantidad-falta":null].filter(Boolean).join(" ")||undefined} readOnly={candadoCantidad} disabled={candadoCantidad} placeholder="Ejemplo · 1000"/>{errNum("quantity")}{candadoCantidad&&<div style={{marginTop:5,display:"flex",alignItems:"flex-start",gap:5,fontSize:F.body,color:C.t2,lineHeight:1.4}}><LockIcon size={11} weight="bold" style={{flexShrink:0,marginTop:1}}/><span>Ya cargó {Number(editOrder.quantity||0).toLocaleString("es-MX")} pzas al inventario: la cantidad se ajusta en Inventario.</span></div>}</FC><FC label={<span style={{display:"inline-flex",alignItems:"center",gap:5}}><CalendarDotsIcon size={12} weight="bold"/>Entrega</span>} rec para="ff-entrega"><input id="ff-entrega" style={inp} type="date" value={f.due_date} onChange={e=>s("due_date",e.target.value)}/>{f.due_date&&f.due_date<hoyISO&&<div style={{marginTop:5,display:"flex",alignItems:"flex-start",gap:5,fontSize:F.body,fontWeight:600,color:C.wnTx,lineHeight:1.4}}><WarningIcon size={11} weight="fill" style={{flexShrink:0,marginTop:1}}/><span>Esa fecha ya pasó ({new Date(f.due_date+"T12:00:00").toLocaleDateString("es-MX",{day:"numeric",month:"short",year:"numeric"})}).</span></div>}<button type="button" onClick={()=>{const sugg=calcDeliveryDate(new Date(),null,f.finishes);s("due_date",sugg)}} style={{marginTop:4,padding:"4px 8px",borderRadius:6,border:"none",background:C.acL,color:C.ac,cursor:"pointer",fontSize:F.body,fontWeight:600,fontFamily:"'Geist',sans-serif"}} title="Sugiere fecha basada en reglas: Offset 8d + acabados 3d (días hábiles)"><ClockIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Sugerir fecha</button></FC></>}</div>
+    </FC>{!specsOnly&&<><FC label="Cantidad" req br para="ff-cantidad" falta={falta("Cantidad")?"Falta la cantidad":null}><input id="ff-cantidad" aria-invalid={falta("Cantidad")||undefined} style={{...inp,border:errBorder(!!editOrder||Number(f.quantity)>0),...(candadoCantidad?{background:C.sf,color:C.t2,cursor:"not-allowed"}:{})}} inputMode="numeric" value={valorNum("quantity")} onChange={e=>!candadoCantidad&&teclear("quantity",e.target.value)} aria-describedby={[numMalos.includes("quantity")?"err-quantity":null,falta("Cantidad")?"ff-cantidad-falta":null].filter(Boolean).join(" ")||undefined} readOnly={candadoCantidad} disabled={candadoCantidad} placeholder="Ejemplo · 1000"/>{errNum("quantity")}{candadoCantidad&&<div style={{marginTop:5,display:"flex",alignItems:"flex-start",gap:5,fontSize:F.body,color:C.t2,lineHeight:1.4}}><LockIcon size={11} weight="bold" style={{flexShrink:0,marginTop:1}}/><span>Ya cargó {Number(editOrder.quantity||0).toLocaleString("es-MX")} pzas al inventario: la cantidad se ajusta en Inventario.</span></div>}</FC><FC label={<span style={{display:"inline-flex",alignItems:"center",gap:5}}><CalendarDotsIcon size={12} weight="bold"/>Entrega</span>} req={altaConFecha} rec={!altaConFecha&&!f.due_date} para="ff-entrega" falta={falta("Fecha de entrega")?(f.due_date?"Esa fecha no se puede: revisa el año.":"Falta la fecha de entrega: si no urge, «Sugerir fecha» pone la estándar."):null}><input id="ff-entrega" aria-invalid={falta("Fecha de entrega")||undefined} aria-describedby={[conEstandar?"ff-entrega-nota":null,falta("Fecha de entrega")?"ff-entrega-falta":null].filter(Boolean).join(" ")||undefined} style={{...inp,border:errBorder(!falta("Fecha de entrega"))}} type="date" value={entrega} onChange={e=>{setFechaTocada(true);s("due_date",e.target.value)}}/>{entrega&&entrega<hoyISO&&<div style={{marginTop:5,display:"flex",alignItems:"flex-start",gap:5,fontSize:F.body,fontWeight:600,color:C.wnTx,lineHeight:1.4}}><WarningIcon size={11} weight="fill" style={{flexShrink:0,marginTop:1}}/><span>Esa fecha ya pasó ({new Date(entrega+"T12:00:00").toLocaleDateString("es-MX",{day:"numeric",month:"short",year:"numeric"})}).</span></div>}{conEstandar?<div id="ff-entrega-nota" style={{marginTop:5,fontSize:F.body,color:C.t2,lineHeight:1.4,overflowWrap:"anywhere"}}>Estándar: {porQueEsaFecha(datosDeLaFecha)}. Si al cliente le urge, cámbiala.</div>:<button type="button" onClick={()=>{if(altaConFecha){setFechaTocada(false);s("due_date","")}else s("due_date",fechaEstandar(datosDeLaFecha).fecha)}} style={{marginTop:4,padding:"4px 8px",borderRadius:6,border:"none",background:C.acL,color:C.ac,cursor:"pointer",fontSize:F.body,fontWeight:600,fontFamily:"'Geist',sans-serif"}} title="La fecha estándar: 8 días hábiles, +2 si pasa de 10,000 piezas, +3 desde el 5.º producto de la OC"><ClockIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Sugerir fecha</button>}</FC></>}</div>
   </>;
   const bDescripcion=<>
     {/* v10.84.82 — UNA descripción para todo (era la chica de «Sencillo» o la grande de «Avanzado»): crece con lo escrito (de 3 renglones a
@@ -15218,8 +15243,10 @@ function MoveOrderModal({order, purchaseOrders, orders, onMove, onCreateAndMove,
           </select>
         </div>
         <div>
-          <label style={lbl}>Fecha de entrega (opcional)</label>
+          {/* v10.84.189 — la OC no es la orden: lo obligatorio es la fecha de cada orden, y la de la OC es la que lleva si el cliente ya la pidió */}
+          <label style={lbl}>Fecha de entrega</label>
           <input type="date" style={inp} value={newOC.delivery_date} onChange={e=>setNewOC(p=>({...p,delivery_date:e.target.value}))}/>
+          <div style={{marginTop:4,fontSize:11,color:C.t2,lineHeight:1.4}}>Si el cliente ya la pidió. Sin fecha, cada producto lleva la estándar.</div>
         </div>
         <div>
           <label style={lbl}>Notas (opcional)</label>
@@ -16063,7 +16090,7 @@ function StageFlowButtons({o,role,onAction:onActionSinEscudo,variante}){
   const T=c=>tintaAA(c);   // el color de un texto de estado («Ya validaste», «Prod · Pre-p»), en su tinta (v10.84.125: también en la ficha; daba 2.6:1)
   return <>
       {o.stage==="draft"&&(role==="produccion"||role==="preprensa"||role==="admin")&&<>{!det&&(role==="preprensa"||role==="admin")&&<button onClick={()=>onAction(o.id,"edit_specs")} style={E(C.dsn)}><NotePencilIcon size={14} weight="bold"/>Specs y archivo</button>}{!det&&(role==="produccion"||role==="admin")&&<button onClick={()=>onAction(o.id,"edit")} style={E(C.ios)}><ClipboardTextIcon size={14} weight="bold"/>Revisar y Editar</button>}{role==="produccion"&&!o.validated_by_production&&<button onClick={()=>onAction(o.id,"validate_prod")} style={B(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Validar Producción</button>}{role==="produccion"&&o.validated_by_production&&<span style={{fontSize:10,color:T(C.ok),fontWeight:600,padding:"8px 0"}}><CheckCircleIcon size={12} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>Ya validaste</span>}{role==="preprensa"&&!o.validated_by_preprensa&&<button onClick={()=>onAction(o.id,"validate_pre")} style={B(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Validar Pre-prensa</button>}{role==="preprensa"&&o.validated_by_preprensa&&<span style={{fontSize:10,color:T(C.ok),fontWeight:600,padding:"8px 0"}}><CheckCircleIcon size={12} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>Ya validaste</span>}{role==="admin"&&<button onClick={()=>onAction(o.id,"advance","design")} style={B(C.dsn)}><PaletteIcon size={14} weight="bold"/>Enviar a Diseño</button>}<div style={{display:"flex",gap:4,fontSize:10,color:C.t2,alignItems:"center",padding:"4px 0"}}><span style={{color:T(o.validated_by_production?C.ok:C.wn)}}>{o.validated_by_production?<CheckCircleIcon size={10} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>:<HourglassIcon size={10} style={{verticalAlign:"-1px",marginRight:2}}/>}Prod</span><span style={{color:T(o.validated_by_preprensa?C.ok:C.wn)}}>{o.validated_by_preprensa?<CheckCircleIcon size={10} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>:<HourglassIcon size={10} style={{verticalAlign:"-1px",marginRight:2}}/>}Pre-p</span></div></>}
-      {o.stage==="design"&&(role==="preprensa"||role==="admin")&&<><button onClick={()=>onAction(o.id,"advance","proof_printing")} style={B(C.prf)}><PrinterIcon size={14} weight="bold"/>Prueba de Color{recProof(o)?" (Rec.)":""}</button><button onClick={()=>onAction(o.id,"advance","ctp")} style={B(C.ctp)}><DiscIcon size={14} weight="bold"/>Directo a CTP</button><button onClick={()=>onAction(o.id,"advance","ready")} style={B(C.ok)}><FastForwardIcon size={14} weight="bold"/>Sin CTP, Lista</button></>}
+      {o.stage==="design"&&(role==="preprensa"||role==="admin")&&<><button onClick={()=>onAction(o.id,"advance","proof_printing")} style={B(C.prf)}><PrinterIcon size={14} weight="bold"/>Prueba de Color{recProof(o)?" (Rec.)":""}</button>{/* v10.84.189 — pregunta a dónde pasa (a CTP o sin CTP a Lista). «Directo a CTP» y «Sin CTP, Lista» se quedan para las reimpresiones sin cambios */}<button onClick={()=>onAction(o.id,"autorizar_sin_prueba")} style={B(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Cliente autorizó sin prueba</button><button onClick={()=>onAction(o.id,"advance","ctp")} style={B(C.ctp)}><DiscIcon size={14} weight="bold"/>Directo a CTP</button><button onClick={()=>onAction(o.id,"advance","ready")} style={B(C.ok)}><FastForwardIcon size={14} weight="bold"/>Sin CTP, Lista</button></>}
       {o.stage==="proof_printing"&&(role==="german"||role==="admin")&&<button onClick={()=>onAction(o.id,"advance","proof_client")} style={B("#f59e0b")}><ExportIcon size={14} weight="bold"/>Enviar Prueba al Cliente</button>}
       {o.stage==="proof_client"&&(role==="preprensa"||isSec(role)||role==="admin")&&<><button onClick={()=>onAction(o.id,"approve_proof")} style={B(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Cliente Aprobó</button><button onClick={()=>onAction(o.id,"advance","design")} style={B(C.dn)}><XIcon size={14} weight="bold"/>Pide Cambios</button></>}
       {/* v10.84.94 — Germán (y admin) sin arrastrar: la que espera va «A CTP», la activa de CTP «A Procesadora», la activa de la Procesadora
@@ -16281,7 +16308,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsp
   if(o.stock_role==="sale") bT2.push(<Badge key="stocks" tone="context" title="Venta desde stock — sale del inventario para entregar al cliente" icon={<ShoppingCartIcon size={11} weight="bold"/>}>desde Stock</Badge>);
   // T3 — metadata (recede; colapsa tras "+N")
   if(o.source==="web") bT3.push(<Badge key="web" tone="context" title={o.web_order_ref?"Ref: "+o.web_order_ref:"Pedido recibido desde sygma.mx"} icon={<GlobeIcon size={11} weight="bold"/>}>Web</Badge>);
-  if(o.proof_approved) bT3.push(<Badge key="proof" tone="context" icon={<CheckIcon size={10} weight="bold"/>}>Prueba</Badge>);
+  if(o.proof_approved){const aut=autorizacionDelCliente(o);bT3.push(<Badge key="proof" tone="context" title={aut?.como==="sin"?"El cliente autorizó sin prueba de color":undefined} icon={<CheckIcon size={10} weight="bold"/>}>{aut?.como==="con"?"Prueba":"Autorizó"}</Badge>);}   // v10.84.189 — «Prueba» sólo si hubo prueba
   if(o.file_url) bT3.push(<Badge key="file" tone="context" title="Tiene archivo adjunto" icon={<PaperclipIcon size={11} weight="bold"/>}>archivo</Badge>);
   if(o.plate_status==="existing"&&!compact) bT3.push(<Badge key="plate" tone="context" title="Reutiliza placa existente — saltó CTP" icon={<ArrowsClockwiseIcon size={10} weight="bold"/>}>Placa</Badge>);
   if(o.plate_status==="new_ctp"&&!compact) bT3.push(<Badge key="ctp" tone="context" title="Requiere nueva placa CTP" icon={<PlusIcon size={10} weight="bold"/>}>CTP</Badge>);
@@ -21195,8 +21222,10 @@ function CreateOCModal({onCreate, onClose, showToast}){
           {avisoVendedor&&<div id="oc-nuevo-vendedor-ayuda" style={{fontSize:11,color:C.t2,marginTop:4,lineHeight:1.4,overflowWrap:"anywhere"}}>{avisoVendedor}</div>}
         </div>
         <div>
-          <label style={{fontSize:11,fontWeight:600,color:C.t2,display:"block",marginBottom:4}}>Fecha de entrega (opcional)</label>
+          {/* v10.84.189 — la OC no es la orden: lo obligatorio es la fecha de cada orden, y la de la OC es la que lleva si el cliente ya la pidió */}
+          <label style={{fontSize:11,fontWeight:600,color:C.t2,display:"block",marginBottom:4}}>Fecha de entrega</label>
           <input type="date" value={f.delivery_date} onChange={e=>s("delivery_date",e.target.value)} style={inp}/>
+          <div style={{marginTop:4,fontSize:11,color:C.t2,lineHeight:1.4}}>Si el cliente ya la pidió. Sin fecha, cada producto lleva la estándar.</div>
         </div>
         <div>
           <label style={{fontSize:11,fontWeight:600,color:C.t2,display:"block",marginBottom:4}}>Notas (opcional)</label>
@@ -21478,6 +21507,7 @@ export default function PrintFlow() {
   const [paletteOpen,setPaletteOpen]=useState(false); // v10.72.40 — command palette (Ctrl/⌘+K)
   useEffect(()=>{const onKey=e=>{if((e.ctrlKey||e.metaKey)&&(e.key==="k"||e.key==="K")){e.preventDefault();setPaletteOpen(o=>!o);}};window.addEventListener("keydown",onKey);return ()=>window.removeEventListener("keydown",onKey);},[]);
   const [devolverModal,setDevolverModal]=useState(null);
+  const [autorizarId,setAutorizarId]=useState(null);   // v10.84.189 — «Cliente autorizó sin prueba»: se monta sobre la orden viva (regla 14)
   const [cancelModal,setCancelModal]=useState(null);
   const [moveModal,setMoveModal]=useState(null); // ↔️ v10.11.0 Sub-fase A — Modal mover orden entre OCs
   const [folioOCModal,setFolioOCModal]=useState(null); // 📄 v10.11.0 Sub-fase B — Modal asignar folio a OC: {oc, ocOrders, preAssigned}
@@ -22860,6 +22890,7 @@ export default function PrintFlow() {
     // v10.34.2 fix #8 — mutual exclusion: si standard_size definido, ignorar cm (toggle preserva ambos, save prioriza activo)
     if(safeUpdate.standard_size){safeUpdate.width_cm=null;safeUpdate.height_cm=null;}
     if("due_date" in safeUpdate&&safeUpdate.due_date==="")safeUpdate.due_date=null;
+    if("due_date" in safeUpdate&&originalOrder?.delivery_calculated_at&&(safeUpdate.due_date||null)!==(originalOrder.due_date||null))safeUpdate.delivery_calculated_at=null;   // v10.84.189 — alguien la cambió: ya no es la estándar
     // 🆕 v10.9.0 — Si se edita una orden que ya tiene folio fiscal, marcar para auditoría
     const orderBefore=orders.find(x=>x.id===f.id);
     // v10.34.4 fix #3 — abortar si la orden fue cancelada o rechazada en otra sesión (realtime trajo el cambio)
@@ -22998,7 +23029,10 @@ export default function PrintFlow() {
     const o=orders.find(x=>x.id===id);
     const wasInQueue=o?.machine_queue_position!=null&&o?.current_machine&&o?.current_machine!=="vm_manual";
     const willClearMachine=ns!=="packaging";  // si va a Empaque, current_machine pasa a "vm_manual"; resto limpia
-    setOrders(p=>p.map(o=>{if(o.id!==id)return o;const u={...o,stage:ns,timeline:addTL(o,(SM[o.stage]?.l||"")+" → "+(SM[ns]?.l||""),{to:ns})};if(o.current_machine&&willClearMachine){u.machine_log=closeML(o);u.current_machine=null;u.machine_queue_position=null}if(ns==="packaging"){if(o.current_machine){u.machine_log=closeML(o)}const l=[...(u.machine_log||o.machine_log||[])];l.push({machine:"vm_manual",started:new Date().toISOString()});u.machine_log=l;u.current_machine="vm_manual";u.machine_queue_position=null}if(ns.includes("delivered")){u.deliveredAt=new Date().toISOString();u.delivered_at=u.deliveredAt}if(!ns.includes("delivered")&&o.stage.includes("delivered")){u.deliveredAt=null;u.delivered_at=null}if(ns==="draft"){u.validated_by_production=false;u.validated_by_preprensa=false}if(ns==="design"){u.proof_approved=null}return u}));
+    // v10.84.189 — opts.autorizoSinPrueba: la autorización y el cambio de etapa van en el MISMO UPDATE (con la misma condición de la etapa), y sin su renglón de quién no se queda (abajo)
+    const autorizadaEn=opts.autorizoSinPrueba?new Date().toISOString():null;
+    const prefijoAut=opts.autorizoSinPrueba?TEXTO_SIN_PRUEBA+" · ":"";
+    setOrders(p=>p.map(o=>{if(o.id!==id)return o;const u={...o,stage:ns,timeline:addTL(o,prefijoAut+(SM[o.stage]?.l||"")+" → "+(SM[ns]?.l||""),{to:ns})};if(autorizadaEn){u.proof_approved=autorizadaEn;u.comments=[...(o.comments||[]),{text:TEXTO_SIN_PRUEBA,by:"sistema",date:autorizadaEn}]}if(o.current_machine&&willClearMachine){u.machine_log=closeML(o);u.current_machine=null;u.machine_queue_position=null}if(ns==="packaging"){if(o.current_machine){u.machine_log=closeML(o)}const l=[...(u.machine_log||o.machine_log||[])];l.push({machine:"vm_manual",started:new Date().toISOString()});u.machine_log=l;u.current_machine="vm_manual";u.machine_queue_position=null}if(ns.includes("delivered")){u.deliveredAt=new Date().toISOString();u.delivered_at=u.deliveredAt}if(!ns.includes("delivered")&&o.stage.includes("delivered")){u.deliveredAt=null;u.delivered_at=null}if(ns==="draft"){u.validated_by_production=false;u.validated_by_preprensa=false}if(ns==="design"){u.proof_approved=null}return u}));
     try{
     // v10.26.0 — Si estaba en cola de máquina real, sacarla via RPC (puede promover siguiente)
     let queueResult=null;
@@ -23020,6 +23054,7 @@ export default function PrintFlow() {
     // (P-3548: en salidas con validated_by_preprensa=false desde mayo).
     if(o?.stage==="draft"&&ns!=="draft"){upd.validated_by_production=true;upd.validated_by_preprensa=true}
     if(ns==="design")upd.proof_approved=null;
+    if(autorizadaEn)upd.proof_approved=autorizadaEn;
     // UPDATE ORDER FIRST
     // v10.58.43 #14: guard de stage — si otro usuario/tab ya avanzó la orden, el
     // UPDATE no matchea ninguna fila y abortamos (antes: doble avance silencioso,
@@ -23040,7 +23075,13 @@ export default function PrintFlow() {
       setOrders(p=>p.map(x=>x.id===queueResult.new_active_id?{...x,machine_queue_position:0,...(machineDown(queueResult.old_machine)?{}:{machine_log:[...(x.machine_log||[]),{machine:queueResult.old_machine,started:new Date().toISOString()}]})}:x));
     }
     // Timeline and notifications (o captured above before setOrders)
-    await db.addTimeline(id,(SM[o?.stage]?.l||"")+" → "+(SM[ns]?.l||"")+(opts.jalada?(ns==="maq_received"?" · la recibió "+(AUTHOR_NAME[user]||user)+": ya llegó del proveedor":" · la pasó "+(AUTHOR_NAME[user]||user)+": ya estaba lista"):""),user,SM[ns]?.c,ns);
+    try{await db.addTimeline(id,prefijoAut+(SM[o?.stage]?.l||"")+" → "+(SM[ns]?.l||"")+(opts.jalada?(ns==="maq_received"?" · la recibió "+(AUTHOR_NAME[user]||user)+": ya llegó del proveedor":" · la pasó "+(AUTHOR_NAME[user]||user)+": ya estaba lista"):""),user,SM[ns]?.c,ns)}
+    catch(tlErr){
+      if(!autorizadaEn)throw tlErr;
+      // v10.84.189 — lo único que dice quién autorizó es ese renglón: sin él la autorización no se queda, y la orden regresa a Diseño. Si tampoco se puede regresar (se fue la red), se dice cómo quedó
+      const {error:atrasErr}=await supabase.from("orders").update({stage:o?.stage,proof_approved:null}).eq("id",id).eq("stage",ns);
+      throw Object.assign(new Error(tlErr?.message),{_sinQuien:atrasErr?nombreDeOrden(o)+" pasó a «"+(SM[ns]?.lt||ns)+"», pero no se pudo registrar quién autorizó: avísale a Dirección.":nombreDeOrden(o)+": no se pudo registrar quién autorizó y se regresó a Diseño. Vuelve a intentar."});
+    }
     // v10.58.43 #23: notifs en try propio — el avance YA está commiteado; si una notif
     // falla por red, NO mostrar "No se pudo avanzar" (inducía reintentos/confusión).
     try{
@@ -23061,12 +23102,13 @@ export default function PrintFlow() {
     if(ns==="maq_received"){if(user!=="admin")await db.addNotification("admin",id,"new_order","📥 Maquila recibida del proveedor"+(opts.jalada?" (la recibió "+(AUTHOR_NAME[user]||user)+")":"")+" — "+(o?.client||"")+" · "+(o?.product_type||""),null,user);if(user!=="karla")await db.addNotification("karla",id,"new_order","📄 Maquila lista para asignar folio — "+(o?.client||"")+" · "+(o?.product_type||"")+" · "+(o?.production_number||""),null,user);
       if(opts.jalada){const r=orderResponsible(o),dest=r&&responsibleNotifyTarget(o,r.role),antes=dondeVa(o);if(dest&&dest!==user)await db.addNotification(dest,id,"new_order","📥 "+(AUTHOR_NAME[user]||user)+" recibió "+nombreDeOrden(o)+" de maquila (estaba "+(o?.stage==="maq_created"?"sin marcar como enviada":antes.lugar.charAt(0).toLowerCase()+antes.lugar.slice(1))+(antes.detalle?", "+antes.detalle:"")+"): ya llegó del proveedor — "+(o?.client||"")+" · "+(o?.product_type||""),null,user)}}
     }catch(nErr){console.warn("[doAdv] notif warn (avance OK):",nErr?.message)}
-    if(!opts.silencioso)showToast(nombreDeOrden(o)+" pasó a «"+(SM[ns]?.lt||"la siguiente etapa")+"»"+(o?.client?" · "+o.client:""));   // v10.84.60 — con la orden
+    if(autorizadaEn){try{await db.addComment(id,TEXTO_SIN_PRUEBA,"sistema")}catch(cErr){console.warn("[doAdv] el comentario de la autorización falló (ya quedó en la bitácora):",cErr?.message)}}
+    if(!opts.silencioso)showToast((autorizadaEn?"Quedó la autorización del cliente · ":"")+nombreDeOrden(o)+" pasó a «"+(SM[ns]?.lt||"la siguiente etapa")+"»"+(o?.client?" · "+o.client:""));   // v10.84.60 — con la orden
     return {ok:true};
     }catch(e){console.error("[doAdv] Error al avanzar:",e);
       // v10.84.59 — la orden se regresa a donde estaba en el momento (se veía movida mientras salía el aviso, hasta la recarga)
       if(o)setOrders(p=>p.map(x=>x.id===id?o:x));
-      if(!opts.silencioso)showToast(e?._stale?"⚠️ "+nombreDeOrden(o)+" cambió de etapa en otra sesión: no se movió.":"❌ "+nombreDeOrden(o)+" no pasó a «"+(SM[ns]?.lt||ns)+"»: "+errorEnPalabras(e)+". El tablero se vuelve a leer de la base.","error");reload();return {ok:false,error:e}}finally{setActionLoading(null)}
+      if(!opts.silencioso)showToast(e?._stale?"⚠️ "+nombreDeOrden(o)+" cambió de etapa en otra sesión: no se movió.":e?._sinQuien?"❌ "+e._sinQuien:"❌ "+nombreDeOrden(o)+" no pasó a «"+(SM[ns]?.lt||ns)+"»: "+errorEnPalabras(e)+". El tablero se vuelve a leer de la base.","error");reload();return {ok:false,error:e}}finally{setActionLoading(null)}
   },[user,orders,showToast,reload]);
   const doAdvRef=useRef(doAdv);doAdvRef.current=doAdv;   // v10.84.67 — jalarASalidas pasa varias seguidas: cada una con el doAdv de lo último que llegó
 
@@ -23295,6 +23337,15 @@ export default function PrintFlow() {
     }catch(e){console.error("[approveProof] Error:",e);showToast("❌ No se pudo aprobar prueba: "+(e?.message||"error desconocido"),"error");reload()}finally{setActionLoading(null)}
   },[user,orders,showToast,reload]);
 
+  // v10.84.189 — «Cliente autorizó sin prueba»: por doAdv, como «Directo a CTP» y «Sin CTP, Lista» (la fila, la pausa, los avisos a Germán o a Gerardo y la condición de la etapa). La ventana se pudo quedar vieja: lo que vale es dónde está la orden ahora
+  const autorizarSinPrueba=useCallback(async(id,destino)=>{
+    const o=orders.find(x=>x.id===id);
+    if(!o)return;
+    if(!canExecuteAction("autorizar_sin_prueba",o,user,userLogin)){showToast(actionDeniedToast("autorizar_sin_prueba",o,user,userLogin),"error");return}
+    if(o.stage!=="design"){showToast("⚠️ "+nombreDeOrden(o)+" ya no está en Diseño: no se registró nada.","error");return}
+    return doAdv(id,destino,{autorizoSinPrueba:true});
+  },[user,userLogin,orders,showToast,doAdv]);
+
   // v10.73.82 (scan w1sw90ei4) — `undo` entra como PARÁMETRO. Antes, assignNow (en Kanban) pintaba su propio toast
   //   con el botón "Deshacer" de forma SÍNCRONA, y 0.5-2s después el toast terminal de aquí abajo lo PISABA (showToast
   //   es un slot único y el <Toast> no tenía key) → el botón desaparecía antes de que nadie pudiera apretarlo. Y en su
@@ -23484,8 +23535,10 @@ export default function PrintFlow() {
     // v10.20.0 — RPC atómico (evita race condition tipo P-3503 duplicado)
     const {data:dupFolio,error:folioErr}=await supabase.rpc("next_production_number");
     if(folioErr||!dupFolio){showToast("❌ No se pudo asignar folio: "+(folioErr?.message||"sin respuesta"),"error");return}
+    // v10.84.189 — la copia es un trabajo nuevo: lleva la fecha estándar, no la de la orden vieja (ya pasada, o vacía). Duplicar no pasa por la forma: el aviso la dice
+    const entregaDup=fechaEstandar({piezas:orig.quantity,productos:1}).fecha;
     // v10.73.25 — reset de snooze_* (#6): un duplicado NUNCA hereda el estado "En espera" de la fuente
-    const dup={...orig,id:gid(),stage:orig.order_type==="maquila"?"maq_created":"draft",created_at:new Date().toISOString(),created_by:userLogin||user,validated_by_production:false,validated_by_preprensa:false,production_number:dupFolio,machine_log:[],waste_log:[],comments:[],notes_log:[],current_machine:null,proof_approved:null,deliveredAt:null,delivered_at:null,maquila_provider:null,maquila_phone:null,maquila_email:null,file_url:null,file_name:null,agent:dupAgent,source:orig.source||"internal",cart_folio:null,web_folio:null,web_order_ref:null,mp_payment_id:null,invoice_type:null,invoice_folio:null,invoiced_at:null,invoiced_by:null,has_post_invoice_edits:false,stock_role:null,client_product_id:null,stock_loaded:false,sin_empaque_sygma:false,snooze_reason:null,snoozed_by:null,snooze_stage:null,snooze_until:null,snooze_kind:null,payment_status:null,payment_method:null,payment_amount:null,bank_reference:null,purchase_order_id:null,invoice_pre_assigned:false,invoice_reason:null,machine_queue_position:null,timeline:[{action:"📋 Duplicada de "+origLabel,date:new Date().toISOString(),by:user,color:C.fac}]};
+    const dup={...orig,id:gid(),stage:orig.order_type==="maquila"?"maq_created":"draft",created_at:new Date().toISOString(),created_by:userLogin||user,validated_by_production:false,validated_by_preprensa:false,production_number:dupFolio,machine_log:[],waste_log:[],comments:[],notes_log:[],current_machine:null,proof_approved:null,deliveredAt:null,delivered_at:null,maquila_provider:null,maquila_phone:null,maquila_email:null,file_url:null,file_name:null,agent:dupAgent,source:orig.source||"internal",cart_folio:null,web_folio:null,web_order_ref:null,mp_payment_id:null,invoice_type:null,invoice_folio:null,invoiced_at:null,invoiced_by:null,has_post_invoice_edits:false,stock_role:null,client_product_id:null,stock_loaded:false,sin_empaque_sygma:false,snooze_reason:null,snoozed_by:null,snooze_stage:null,snooze_until:null,snooze_kind:null,payment_status:null,payment_method:null,payment_amount:null,bank_reference:null,purchase_order_id:null,invoice_pre_assigned:false,invoice_reason:null,machine_queue_position:null,due_date:entregaDup,delivery_calculated_at:new Date().toISOString(),timeline:[{action:"📋 Duplicada de "+origLabel,date:new Date().toISOString(),by:user,color:C.fac}]};
     setOrders(p=>[dup,...p]);
     // v10.73.23/25 — duplicar los archivos de imagen (incl. arte legacy `image`, #5) para que la copia NO comparta
     // Storage con la original (quitar/cambiar la imagen en una ya no rompe la otra). Si la copia falla, cae a la ref.
@@ -23498,7 +23551,7 @@ export default function PrintFlow() {
     if(dup.image_url||dup.image_url_2)setOrders(p=>p.map(o=>o.id===dup.id?{...o,image_url:dup.image_url,image_url_2:dup.image_url_2}:o));
     await db.saveOrder(dup);
     await db.addTimeline(dup.id,"📋 Duplicada de "+origLabel,user,C.fac);
-    showToast("📋 Orden duplicada como "+dupFolio);
+    showToast("📋 Orden duplicada como "+dupFolio+" · entrega estándar "+fD(entregaDup));
     }catch(e){console.error("[duplicate] Error:",e);showToast("❌ No se pudo duplicar: "+(e?.message||"error desconocido"),"error");reload()}
     finally{duplicateLock.current=false;setActionLoading(null)}
   },[orders,user,userLogin,showToast,reload]);
@@ -23759,9 +23812,9 @@ export default function PrintFlow() {
     if(o&&!canExecuteAction("changeDate",o,user,userLogin)){showToast(actionDeniedToast("changeDate",o,user,userLogin),"error");return}
     if(o?.due_date===newDate)return; // skip if same date
     const msg="📅 Fecha cambiada a "+fD(newDate)+(reason?" — "+reason:"");
-    setOrders(p=>p.map(x=>x.id===oid?{...x,due_date:newDate,timeline:[...(x.timeline||[]),{action:msg,date:new Date().toISOString(),by:user||"sistema",color:C.wn}]}:x));
+    setOrders(p=>p.map(x=>x.id===oid?{...x,due_date:newDate,delivery_calculated_at:null,timeline:[...(x.timeline||[]),{action:msg,date:new Date().toISOString(),by:user||"sistema",color:C.wn}]}:x));
     try{
-    const {error:cdErr}=await supabase.from("orders").update({due_date:newDate}).eq("id",oid);
+    const {error:cdErr}=await supabase.from("orders").update({due_date:newDate,delivery_calculated_at:null}).eq("id",oid);   // v10.84.189 — alguien la cambió: ya no es la estándar
     if(cdErr)throw new Error(cdErr.message);
     await db.addTimeline(oid,msg,user,C.wn);
     // v10.19.0 — Notificación detallada de cambio de fecha al trío Lupita+Noemí+Gerardo (+ creador)
@@ -23879,9 +23932,17 @@ export default function PrintFlow() {
     if(!ids?.length||!reason||reason.trim().length<3){showToast("❌ Selecciona órdenes y escribe un motivo (mín. 3 caracteres)","error");return null;}
     try{
       const nuevas=await db.createReturn(ids, reason.trim(), userLogin||user);
+      // v10.84.189 — create_return clona la fecha de la orden original (ya pasada, o vacía): la vencida o vacía recibe la estándar; la que sigue por delante se queda. Sin cambio de base. Si no se guarda, la devolución ya existe: se dice
+      const hoyDev=diaDeHoy(new Date()),sinFecha=[];
+      for(const n of (nuevas||[])){
+        if(n.due_date&&String(n.due_date).slice(0,10)>=hoyDev)continue;
+        const fechaDev=fechaEstandar({piezas:n.quantity,productos:1}).fecha,calcDev=new Date().toISOString();
+        const {error:feErr}=await supabase.from("orders").update({due_date:fechaDev,delivery_calculated_at:calcDev}).eq("id",n.id);
+        if(feErr){console.warn("[doCreateReturn] la fecha no se guardó:",feErr.message);sinFecha.push(n.production_number||n.id)}else{n.due_date=fechaDev;n.delivery_calculated_at=calcDev}
+      }
       await reload();
       const pns=(nuevas||[]).map(n=>n.production_number).filter(Boolean).join(", ");
-      showToast("✅ Devolución registrada · nueva"+((nuevas||[]).length!==1?"s":"")+": "+(pns||"—"));
+      showToast("✅ Devolución registrada · nueva"+((nuevas||[]).length!==1?"s":"")+": "+(pns||"—")+(sinFecha.length?" · no se le pudo poner su fecha a "+sinFecha.join(", ")+": ponla al abrirla":""),sinFecha.length?"warning":"success");
       // Solo auto-abrir cuando es UNA: en lote, quedan en la lista (cada una requiere re-adjuntar archivo de producción).
       if((nuevas||[]).length===1){ setEditO(nuevas[0]); setView("form"); }
       return nuevas||[]; // éxito (truthy) → la vista limpia la selección
@@ -24189,6 +24250,7 @@ export default function PrintFlow() {
       setRefacturarModal(o);
     }
     if(action==="approve_proof")approveProof(id);
+    if(action==="autorizar_sin_prueba"){const oa=orders.find(x=>x.id===id);if(!oa)return;if(!canExecuteAction("autorizar_sin_prueba",oa,user,userLogin)){showToast(actionDeniedToast("autorizar_sin_prueba",oa,user,userLogin),"error");return}escudoDeClics();setAutorizarId(id)}   // v10.84.189
     if(action==="send_maquila"){
       // 🔒 v10.12.0.3 Phase 2 — Hardstop: admin/sec/vendedor (vendedor solo propias)
       const sm=orders.find(x=>x.id===id);
@@ -24955,6 +25017,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         Promise.resolve().then(()=>setInvoiceModal(merged));
       }} onClose={()=>{setInventoryOpen(false);reload()}}/>}
       {coronaOpen&&<CoronaModal user={user} userLogin={userLogin} showToast={showToast} onClose={()=>setCoronaOpen(false)} pnDeOrden={id=>(orders.find(x=>x.id===id)||{}).production_number||null} onAbrirOrden={id=>{setCoronaOpen(false);handleAction(id,"detail")}}/>}
+      {autorizarId&&(()=>{const oa=orders.find(x=>x.id===autorizarId);if(!oa)return null;const num=oa.production_number||"la orden";const cerrar=()=>setAutorizarId(null);
+        if(oa.stage!=="design")return <ConfirmModal key={oa.id+oa.stage} zIndex={1100} title={num+" ya no está en Diseño"} message={"Mientras decidías pasó a «"+(SM[oa.stage]?.lt||oa.stage)+"» desde otra sesión: no se registró nada."} cancelLabel="Entendido" onClose={cerrar}/>;
+        return <ConfirmModal key={oa.id} zIndex={1100} title={"¿El cliente autorizó "+num+" sin prueba de color?"} message="Queda a tu nombre, con la fecha y la hora de ahora. ¿A dónde pasa?" cancelLabel="Todavía no" confirmLabel="Sí, pasar a CTP" confirmColor={tintaAA(C.ok,5)} onConfirm={()=>{escudoDeClics();cerrar();return autorizarSinPrueba(oa.id,"ctp")}} extra={{label:"Sí, sin CTP: a Lista",onClick:()=>{cerrar();autorizarSinPrueba(oa.id,"ready")}}} onClose={cerrar}/>})()}
       {devolverModal&&<DevolverModal onConfirm={async(reason)=>{try{const o=orders.find(x=>x.id===devolverModal);await doAdv(devolverModal,"design");await db.addComment(devolverModal,"↩️ Devuelto a Diseño: "+reason,user);await db.notify("preprensa",devolverModal,"order_edit","↩️ Orden devuelta a Diseño — "+(o?.client||"")+" · "+(o?.product_type||"")+": "+reason,null,user);if(user==="admin")await db.addNotification("produccion",devolverModal,"order_edit","↩️ Orden devuelta a Diseño — "+(o?.client||"")+" · "+(o?.product_type||"")+": "+reason,null,user);setDevolverModal(null)}catch(e){console.error("[DevolverModal] Error:",e);showToast("❌ No se pudo devolver: "+(e?.message||"error desconocido"),"error");reload()}}} onClose={()=>setDevolverModal(null)}/>}
       {/* v10.38.0 — Modal regresar orden a CTP (legacy, conservado por compat — sin botón en UI) */}
       {returnToCtpModal&&<ReturnToCtpModal order={returnToCtpModal} onConfirm={async(reason)=>{await returnToCtp(returnToCtpModal.id,reason);setReturnToCtpModal(null)}} onClose={()=>setReturnToCtpModal(null)}/>}
