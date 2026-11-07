@@ -32,6 +32,10 @@ Sin probar: un teléfono de verdad, y el candado completo de cada app, que corre
 
 **Ese domingo, en cada una:**
 1. `git -C <copia> fetch` y `git rebase origin/main cuenta-29nov`. En Almacén, antes, mirar con su conversación qué trae en `Login.jsx`, `supabase.js`, `tests/romper/recorridos.mjs` y `tests/LEEME.md`.
+   - Su `main` se movió la misma noche: al 7-nov ~09:10 iba en `a8857e3`, siete pasadas encima de `28eb219`, la base de la rama.
+   - Una pasada cambió `recorridos.mjs`: `abrirReq` ahora espera `tbody tr`.
+   - `git merge-tree --write-tree origin/main cuenta-29nov` dijo que se mezcla sin choques: los cambios caen en otros renglones de `recorridos.mjs` y de `tests/LEEME.md`.
+   - Si para el 29-nov choca, se conservan los dos lados y se vuelven a correr `login`, `sesion` y `recorridos`.
 2. En PrintFlow, `v10.84.PASO5` por el número de versión de ese día, en `src/App.jsx`, `tests/romper/sesion.mjs` y `tests/LEEME.md`, con un solo reemplazo (`git grep -n PASO5`).
 3. Su tanda, en la copia aparte y directo, sin `scripts/probar.mjs`, para no anotar nada en la bitácora de inestables de la copia principal:
    - PrintFlow: `SESION_PARTE=4 node tests/romper/sesion.mjs`;
