@@ -11,7 +11,7 @@
 // diciendo por qué; la que se cierra MIENTRAS se entra no deja la app abierta como anónima; y la prueba nunca da la entrada por
 // hecha con un tiempo fijo: espera la señal (la app abierta, o la pantalla de entrar sin «Verificando…»).
 // Uso: node tests/romper/sesion.mjs [dir-capturas]   (lo corre scripts/probar.mjs)   ·   SOLO=<regex> corre sólo esos casos
-//   SESION_PARTE=1 hasta ses-119, 2 desde ses-120 (v10.84.173: ya no cabía en los 12 minutos de una tanda; cada parte compila aparte y en su puerto); sin SESION_PARTE, todos
+//   SESION_PARTE=1 hasta ses-119, 2 desde ses-120, 3 desde ses-200 (v10.84.173 y v10.84.189: ya no cabía en los 12 minutos de una tanda; cada parte compila aparte y en su puerto); sin SESION_PARTE, todos
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -20,7 +20,7 @@ import { chromium } from "playwright";
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const OUT = process.argv[2] || path.join(RAIZ, "tests", "salida", "sesion");
 const PARTE = process.env.SESION_PARTE || "";
-const DIST = path.join(RAIZ, "tests", "salida", "sesion-dist" + (PARTE === "2" ? "-2" : ""));
+const DIST = path.join(RAIZ, "tests", "salida", "sesion-dist" + (PARTE === "2" || PARTE === "3" ? "-" + PARTE : ""));
 fs.mkdirSync(OUT, { recursive: true });
 const SIMULADA = "https://simulada.supabase.co";
 const ANON = "llave-anon-simulada";
@@ -47,7 +47,7 @@ try {
 }
 // (16-oct, la auditoría del candado: era el 5190, el del banco de «plan»; de a 6 tandas corrieron juntas y «plan» no pudo servir su banco. Ahora un
 //   puerto fuera de los de los bancos, 5183-5199; can-g10 lo vigila)
-const servidor = await preview({ root: RAIZ, logLevel: "error", build: { outDir: DIST }, preview: { host: "127.0.0.1", ...(PARTE === "2" ? { port: 5471 } : { port: 5470 }), strictPort: false } });
+const servidor = await preview({ root: RAIZ, logLevel: "error", build: { outDir: DIST }, preview: { host: "127.0.0.1", ...(PARTE === "3" ? { port: 5472 } : PARTE === "2" ? { port: 5471 } : { port: 5470 }), strictPort: false } });
 const BASE = String(servidor.resolvedUrls?.local?.[0] || "http://127.0.0.1:5470/").replace(/\/$/, "");
 const ORIGEN = new URL(BASE).origin;
 
@@ -279,7 +279,8 @@ const cualesAnonimas = (s, t0) => s.peticiones.filter(x => x.t >= t0 && x.quien 
   .map(x => x.m + " " + x.ruta.replace("/rest/v1/", "") + " +" + (x.t - t0) + "ms").join(", ");
 
 async function caso(nombre, fn, { viewport = { width: 1366, height: 768 } } = {}) {
-  if (PARTE && (Number((/^ses-(\d+)/.exec(nombre) || [])[1]) >= 120 ? "2" : "1") !== PARTE) return;
+  const numeroDelCaso = Number((/^ses-(\d+)/.exec(nombre) || [])[1]);
+  if (PARTE && (numeroDelCaso >= 200 ? "3" : numeroDelCaso >= 120 ? "2" : "1") !== PARTE) return;
   if (process.env.SOLO && !new RegExp(process.env.SOLO).test(nombre)) return;
   const s = simulada();
   const ctx = await browser.newContext({ viewport });
