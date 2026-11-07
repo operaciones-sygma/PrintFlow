@@ -1,6 +1,6 @@
 # Los textos del paso 5
 
-Sin mandar. Cada uno, cuando el `LEEME.md` lo diga; los de la gente, por WhatsApp desde el teléfono de Marcelo. Ninguno lleva contraseñas: la de quien cambia se entrega en persona.
+Sin mandar. Cada uno, cuando el `LEEME.md` lo diga; los de la gente, por WhatsApp desde el teléfono de Marcelo. Ninguno lleva contraseñas: la de quien cambia se entrega en persona. Ninguno manda a otra dirección de PrintFlow: la planta entra por `print-flow-eosin.vercel.app` y ahí sigue (`LEEME.md`, punto 8).
 
 ## Del 26 al 28-nov: la prueba de antes (Karla, Genaro, Dulce, Lupita)
 

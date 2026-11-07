@@ -7,8 +7,8 @@ ser nombre@sygma.mx»*. 6-nov: los pasos 1 a 3, ya, sin que nadie pierda acceso;
 | Paso | Qué | Estado |
 |---|---|---|
 | 1 | «Salir» de Contabilidad y del Cotizador, sólo de esa app | ver el CHANGELOG de cada una |
-| 2 | PrintFlow busca el perfil por la cuenta (`get_my_session`, v10.84.190) | ver el CHANGELOG |
-| 3 | PrintFlow acepta también el correo completo, y sigue aceptando el nombre (v10.84.191) | ver el CHANGELOG |
+| 2 | PrintFlow busca el perfil por la cuenta (`get_my_session`, v10.84.190) | **en producción**, 7-nov ~02:35 |
+| 3 | PrintFlow acepta también el correo completo, y sigue aceptando el nombre (v10.84.191) | **en producción**, 7-nov ~02:56 |
 | 4 | Cada quien a su `@sygma.mx`; apagar las cuentas viejas | **listo para el 29-nov; sin aplicar** |
 | 5 | Central y avisarle a la gente | **listo para el 29-nov; sin hacer** |
 
@@ -34,13 +34,14 @@ ser nombre@sygma.mx»*. 6-nov: los pasos 1 a 3, ya, sin que nadie pierda acceso;
 5. **`lupita@sygma.mx` no tiene renglón en `auth.identities`** (las demás sí) y sí entra: entró el 2-oct y su sesión se usó el 6-nov. Se comprueba el 26-28 nov, como todas.
 6. **Lo que mandó cada quien.** `cobranza.preguntas.creada_por` y `respondida_por` y `almacen.requisiciones.solicitante_uid` van por uid: `ligar` los pasa y lo anota para poder regresarlos. Hoy son 0 de las cinco cuentas viejas; `medir.sql` lo dice ese día. Lo demás con `*_uid` (`orders`, `order_timeline`, `notifications`…; miles de renglones) se queda: son historia, y la cuenta sigue existiendo.
 7. **Lo de abrir la app del celular o la de otra área:** con el paso 1 ya no le cierra sus otras apps a nadie.
+8. **La planta entra a PrintFlow por `print-flow-eosin.vercel.app`, no por `produccion.sygma.mx`** (`edge_logs`, 24 h al 7-nov, medido por Central: 16 llamadas de 7 personas, todas por ese dominio; en `produccion.` sólo las pruebas). Son el mismo despliegue y cada dominio guarda su sesión. Los avisos no mandan a nadie a otra dirección: que sigan entrando por donde entran. La revisión de ese día mira los dos.
 
 ## Los archivos
 
 - `medir.sql`: cómo está cada persona, sólo leyendo.
 - `paso4_base.sql`: lo que se aplica una vez, antes de tocar a nadie: las cuatro funciones de arriba y el esquema `cuentas_29nov` (una línea por persona, con su bitácora). Se detiene si alguna de las cuatro cambió desde el 6-nov (la huella); **Almacén trae trabajo en camino (su bitácora) y puede cambiar `quien`**: si frena, se vuelve a comparar y se ajusta aquí.
 - `paso4_base_vuelta_atras.sql`: lo regresa todo; se detiene si queda alguien sin regresar.
-- `paso4_ensayo.sql`: lo anterior más las nueve personas, dentro de un DO que siempre truena: nada se queda. Se corre con `execute_sql`; el resultado es el mensaje de error («ENSAYO OK…»). **Corrido contra la base de verdad el 6-nov-2026, 14:35: 0 fallas, con las 14 cuentas** (Genaro, 81 órdenes; Lupita, `secretaria` en PrintFlow y Almacén y `vendedor` en CobranzaFlow; Dulce, `visor`, `contabilidad`, con «Corte del mes»; Marcelo, «Marcelo» en Almacén), y revisado después que no quedó nada.
+- `paso4_ensayo.sql`: lo anterior más las nueve personas, dentro de un DO que siempre truena: nada se queda. Se corre con `execute_sql`; el resultado es el mensaje de error («ENSAYO OK…»). **Corrido contra la base de verdad el 6-nov-2026, 14:35: 0 fallas, con las 14 cuentas** (Genaro, 81 órdenes; Lupita, `secretaria` en PrintFlow y Almacén y `vendedor` en CobranzaFlow; Dulce, `visor`, `contabilidad`, con «Corte del mes»; Marcelo, «Marcelo» en Almacén), y revisado después que no quedó nada. **Otra vez el 7-nov, 02:21**, con `get_my_session` ya aplicada: 0 fallas, las mismas huellas, y no quedó nada.
 - `ensayar-local.mjs`: el mismo ensayo en PGlite, con las cuentas y las funciones copiadas de producción: segundos y sin tocar nada. **9 sabotajes, todos caen** (`armar_paso4.py <sabotaje>`): sin cada una de las cuatro funciones, `verify_actor_role` abierto, ligar sin pasar lo que mandó, apagar sin revisar, regresar sin encender y cambiar el correo sin la identidad.
 - `armar_paso4.py`: de donde salen `paso4_base.sql`, su vuelta atrás y el ensayo. Se cambia aquí, no en los `.sql`.
 - `mensajes.md`: los textos para la gente, para Central y para Sygma Central.
@@ -61,9 +62,9 @@ ser nombre@sygma.mx»*. 6-nov: los pasos 1 a 3, ya, sin que nadie pierda acceso;
    select cuentas_29nov.ligar('karla');           -- también 'genaro', 'lupita', 'dulce', 'marcelo'
    ```
    Si alguien no entró con la nueva, `ligar` se niega y lo dice: se decide con Marcelo (esa persona sigue con su cuenta de hoy, o `ligar('…', p_sin_comprobar => true)` con su OK). Empezar por Marcelo: si algo sale mal, él lo ve primero.
-3. Las contraseñas débiles (la pregunta del 6-nov; `printflow-contrasenas-legibles`): lo que Marcelo decidió, en la memoria `una-sola-cuenta-sygma`.
+3. Las contraseñas débiles (la pregunta del 6-nov; `printflow-contrasenas-legibles`): **al 7-nov, sin contestar**. Lo recomendado: ese domingo, sólo Gerardo, Germán y Noemí; las de Karla, Genaro y Lupita se van con su cuenta vieja. Lo que decida, en la memoria `una-sola-cuenta-sygma`. Igual quién cambia una contraseña olvidada: recomendado, Marcelo y Manuel con «Nueva contraseña» de CobranzaFlow ampliada (hay que construirla y sube con el OK de Marcelo); si no, sólo Marcelo desde el panel de Supabase.
 4. Lo que dicen las pantallas, en `paso5_pantallas.md` (sin escribir todavía: Almacén cambia todos los días y una rama de hoy no llegaría limpia): se escribe con sus pruebas y sube con su candado, una app a la vez. PrintFlow, ~24 min; Almacén, ~20; Contabilidad, 1. Orden: base → app → Central.
-5. **Probar**: Marcelo entra con `marcelo@sygma.mx` a las seis apps, y con la cuenta de pruebas se recorre sin escribir. Vuelta atrás ensayada a mano en Marcelo: `select cuentas_29nov.regresar('marcelo');` y `ligar` otra vez.
+5. **Probar**: Marcelo entra con `marcelo@sygma.mx` a las seis apps, y con la cuenta de pruebas se recorre sin escribir, en los dos dominios de PrintFlow. Vuelta atrás ensayada a mano en Marcelo: `select cuentas_29nov.regresar('marcelo');` y `ligar` otra vez.
 
 **Lunes 30-nov:**
 

@@ -35,6 +35,12 @@ Paso 3 de 5 de «una sola cuenta `nombre@sygma.mx`». **Quien entra como siempre
 
 **Para Marcelo.** Hasta el 29-nov, Karla, Genaro, Dulce y Lupita que escriban su `@sygma.mx` en PrintFlow van a leer que esa cuenta todavía no tiene PrintFlow: es lo correcto, y el aviso les dice que entren con su usuario de siempre.
 
+**En producción.** 7-nov ~02:56, READY `dpl_UJ2KkdqWabw9v9Zrz5172E4KCZBb`, commits `7000b65` y `d487f2c`. Candado 3459 de 3459 (33 nuevas), de a 4, 983 s, a la primera, sin regresiones y sin inestables. Revisado en producción sin escribir, en los dos dominios (`print-flow-eosin.vercel.app` y `produccion.sygma.mx`): la misma página y los mismos archivos, byte a byte; contra Auth y la base de verdad, el correo completo de la cuenta de pruebas abre, su nombre con mayúsculas y espacios abre, una cuenta real sin renglón (`claude-pruebas@sygma.mx`) lee que todavía no tiene PrintFlow y sale sólo de aquí, y un correo con la contraseña mala dice «Correo o contraseña incorrectos». `tests/recorrido/sesion.mjs` A a E en los dos, y el recorrido de los 8 roles: nada truena.
+
+**Vuelta atrás.** Promover `dpl_B2ficfXrJSCjZeaagfR648cBPn1x` (el código de la 190), o `git revert --no-edit 7000b65` y subir (ensayada en un worktree: deja `src`, `scripts` y `tests` como 7a4fa92). La base no cambió con esta.
+
+**Sin probar.** En un teléfono de verdad: que el teclado no ponga mayúscula ni corrija. Con los correos nuevos de la gente: no existen hasta el 29-nov, y esa parte se probó con la base simulada (ses-333 y ses-334) y con el ensayo en la base.
+
 ## v10.84.190 — PrintFlow busca el perfil por la cuenta, no por el nombre (una sola cuenta, paso 2) — 7-nov-2026
 
 Paso 2 de 5 de «una sola cuenta `nombre@sygma.mx`» (Marcelo, 19-oct y 6-nov; el plan y lo medido, en `docs/una-sola-cuenta/LEEME.md`). Se le preguntó como 187 y 188: se recorrieron a 190 y 191 porque la 189 del ISO subió antes. **No le cambia nada a nadie**: es lo que deja hacer el cambio de cuentas del 29-nov.
