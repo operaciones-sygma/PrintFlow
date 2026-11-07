@@ -255,8 +255,8 @@ function Banco() {
     <pre id="log">{bitacora.join("\\n")}</pre></div>;
   // flujos=1: los botones de flujo de TODAS las etapas con todos los roles, como en el tablero (sin variante): para comparar
   //   versiones y comprobar que el tablero no cambió
-  if (Q.get("flujos") === "1") return <div>{ALL_S.flatMap(s => ["admin", "karla", "produccion", "preprensa", "german", "secretaria", "vendedor"].map(r =>
-    <div key={s.id + r} data-k={s.id + "|" + r}><StageFlowButtons o={{ ...BASE, production_number: "P-1", stage: s.id, order_type: s.id.startsWith("maq_") ? "maquila" : "interna" }} role={r} onAction={() => {}} /></div>))}</div>;
+  if (Q.get("flujos") === "1") return <div><button id="abrir-detalle">(los botones de flujo)</button>{ALL_S.flatMap(s => ["admin", "karla", "produccion", "preprensa", "german", "secretaria", "vendedor"].map(r =>
+    <div key={s.id + r} data-k={s.id + "|" + r}><StageFlowButtons o={{ ...BASE, production_number: "P-1", stage: s.id, order_type: s.id.startsWith("maq_") ? "maquila" : "interna" }} role={r} onAction={() => {}} /></div>))}<pre id="log" /></div>;
   return <div style={{ padding: 20, fontFamily: "'Geist',sans-serif", background: C.canvas, minHeight: "100vh" }}>
     {/* el tablero de atrás (v10.84.54): un clic que le llega se anota, como el que abría otra orden tras un doble clic */}
     <div id="tablero" style={{ position: "fixed", inset: 0, zIndex: 0 }} onClick={() => anotar("clic en el tablero")} />

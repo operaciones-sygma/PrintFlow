@@ -1620,6 +1620,11 @@ for (const [rol, etapa] of [["produccion", "design"], ["german", "design"], ["ka
   const n = await dlg(p).getByRole("button", { name: BOTON_AUT }).count();
   ok(`det-254-${rol}-en-${etapa}-no-lo-tiene`, n === 0, `${n} botones`);
 });
+await caso("det-254-flujos-en-diseno-solo-pre-prensa-y-direccion", "flujos=1", async p => {
+  const t = k => p.locator(`[data-k="${k}"]`).innerText({ timeout: 3000 }).catch(() => "(no está)");
+  const si = await Promise.all(["design|preprensa", "design|admin"].map(t)), no = await Promise.all(["design|produccion", "design|german", "design|karla", "design|secretaria", "design|vendedor", "ctp|preprensa", "ctp|admin", "proof_client|preprensa", "proof_client|admin", "draft|preprensa", "draft|admin", "ready|admin"].map(t));
+  ok("det-254-flujos-en-diseno-solo-pre-prensa-y-direccion", si.every(x => BOTON_AUT.test(x)) && !no.some(x => BOTON_AUT.test(x)) && !no.includes("(no está)"), `sí: ${si.map(x => BOTON_AUT.test(x)).join()} · no: ${no.map(x => BOTON_AUT.test(x)).join()}`);
+});
 await caso("det-255-el-boton-pregunta-en-app-y-el-detalle-se-queda", "caso=alertas&rol=preprensa", async p => {
   await aDiseno(p); await espera(p, 400);
   await dlg(p).getByRole("button", { name: BOTON_AUT }).click(); await espera(p, 800);
@@ -1634,7 +1639,7 @@ await caso("det-256-el-detalle-dice-quien-y-cuando", "caso=alertas&rol=karla", a
 await caso("det-257-la-aprobada-con-prueba-dice-con-prueba", "caso=alertas&rol=karla", async p => {
   await p.evaluate(() => window.__cambiar({ stage: "ctp", current_machine: null, proof_approved: "2026-11-06T16:00:00Z", timeline: [{ action: "✅ Prueba aprobada", date: "2026-11-06T16:00:00Z", by: "secretaria", to: "ctp" }] })); await espera(p, 400);
   const t = (await dlg(p).innerText()).replace(/\s+/g, " ");
-  ok("det-257-la-aprobada-con-prueba-dice-con-prueba", /Con prueba de color/.test(t) && /Lupita/.test(t) && !/Sin prueba de color/.test(t), (t.match(/Cliente autorizó.{0,70}/i) || [t.slice(0, 120)])[0]);
+  ok("det-257-la-aprobada-con-prueba-dice-con-prueba", /Cliente autorizó\s+Con prueba de color · 06-nov[^·]* · Lupita/i.test(t) && !/Sin prueba de color/.test(t), (t.match(/Cliente autorizó.{0,70}/i) || [t.slice(0, 120)])[0]);
 });
 await caso("det-258-regresada-a-diseno-ya-no-esta-autorizada", "caso=alertas&rol=karla", async p => {
   await p.evaluate(x => window.__cambiar({ stage: "design", current_machine: null, proof_approved: null, timeline: [x] }), LINEA_AUT); await espera(p, 400);
