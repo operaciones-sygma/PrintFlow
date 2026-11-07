@@ -34,6 +34,12 @@ Paso 2 de 5 de «una sola cuenta `nombre@sygma.mx`» (Marcelo, 19-oct y 6-nov; e
 
 **Qué NO se tocó.** Ninguna cuenta, ningún rol, ningún renglón. Las otras apps. Cómo se entra: eso es la 191.
 
+**En producción.** 7-nov ~02:35, READY `dpl_B2ficfXrJSCjZeaagfR648cBPn1x`, commits `3a49fb3` a `7a4fa92`; la base, a las 02:15:37. Candado 3426 de 3426 (17 nuevas), de a 4, 981 s, a la primera, sin regresiones y sin inestables. Revisado en producción sin escribir, en los dos dominios (`print-flow-eosin.vercel.app`, por donde entra la planta, y `produccion.sygma.mx`): la misma página y los mismos 5 archivos, byte a byte, con `get_my_session` y ya sin `get_user_session`; entrar de verdad con la cuenta de pruebas (`tests/recorrido/sesion.mjs`, A a E) en los dos; y el recorrido de los 8 roles, 99 pasos: nada truena.
+
+**Vuelta atrás.** De urgencia, promover `dpl_3Qq5W8R8oCJTtT9Ws7tRPajLGjFE` (el código de la 189). Y `git revert --no-edit 34abbab 3a49fb3` y subir (ensayada en un worktree: deja `src`, `scripts` y `tests` como 7eed755). La base se puede quedar: `get_my_session` sin quien la llame no estorba y `get_user_session` nunca se tocó. Si también se quita, DESPUÉS de la app: `git show 7a4fa92:docs/migrations/v10.84.190_perfil_por_la_cuenta_vuelta_atras.sql`, en el editor (lleva `DROP`: el conector lo rechaza).
+
+**Sin probar.** Entrar con la cuenta de cada persona: eso lo mide el ensayo en la base, las 10 por su uid, y de verdad sólo entró la cuenta de pruebas. En un teléfono de verdad.
+
 ## v10.84.189 — Toda orden nueva con fecha de entrega, «Cliente autorizó sin prueba» y los avisos en festivo (ISO 9001) — 6-nov-2026
 
 Para la auditoría interna de ISO 9001 del jueves 12-nov. El 187 y el 188 son de «Una sola cuenta», que sube después.
