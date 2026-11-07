@@ -489,7 +489,8 @@ await caso("ses-06-abrir-cuenta-desactivada", async ({ p, s }) => {
   const e = await esperarEntrada(p);
   await esperarQue(() => s.salidas.length > 0, 5000);
   const t = await texto(p);
-  ok("ses-06-abrir-cuenta-desactivada", e === "login" && s.salidas.length >= 1 && soloLocales(s) && /desactivad|ya no existe|no está activ/i.test(t),
+  // v10.84.PASO5 — desde el 29-nov la cuenta de antes sin perfil lee «Ya no se entra con esta cuenta…» y cómo se entra ahora (ses-355): también es decir por qué
+  ok("ses-06-abrir-cuenta-desactivada", e === "login" && s.salidas.length >= 1 && soloLocales(s) && /desactivad|ya no existe|no está activ|Ya no se entra con esta cuenta/i.test(t),
     `una cuenta sin perfil activo sale sólo de aquí (salidas: ${s.salidas.join(" ") || "ninguna"}) y la pantalla de entrar dice por qué: «${t.slice(0, 140)}» (${e})`);
 });
 
