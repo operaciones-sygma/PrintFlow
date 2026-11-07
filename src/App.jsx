@@ -382,10 +382,21 @@ try{ supabase.auth.onAuthStateChange((_e,s)=>{ AUTH_UID=s?.user?.id||null; }); }
 // era «Usuario o contraseña incorrectos», también con la red caída o con una cuenta de otra app; y la sesión que se cerraba sola no
 // decía nada. Un corte de red (o el servidor que no contesta) NO es una sesión cerrada ni una contraseña equivocada.
 const AVISO_SESION_CERRADA="Tu sesión se cerró: saliste en otra ventana, o se cerró desde otro equipo o desde otra app. Vuelve a entrar para seguir.";
-const AVISO_SIN_PERFIL="Esta cuenta ya no está activa en PrintFlow (la desactivaron o ya no existe). Si es un error, pídele a Marcelo que la revise.";
+// v10.84.PASO5 — desde el 29-nov se entra con el correo completo (una sola cuenta, paso 5; docs/una-sola-cuenta/paso5_pantallas.md). Los usuarios de siempre
+//   (nombre@padillahnos.local) dejan de existir en Auth: la app no rechaza el nombre (la cuenta de pruebas lo sigue usando), pero lo que se lee dice cómo se entra,
+//   con el correo de esa persona. Dos usuarios no son un nombre: secretaria es Lupita y admin es Marcelo. Lo que no parece un nombre no inventa un correo.
+const CORREO_NUEVO_DE={secretaria:"lupita@sygma.mx",admin:"marcelo@sygma.mx"};
+const correoNuevoDe=escrito=>{
+  const t=String(escrito||"").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/@padillahnos\.local$/,"");
+  if(!/^[a-z0-9._-]{2,40}$/.test(t)) return null;
+  return CORREO_NUEVO_DE[t]||t+"@sygma.mx";
+};
+const comoSeEntra=escrito=>"Ahora se entra con tu correo completo: "+(correoNuevoDe(escrito)||"nombre@sygma.mx")+".";
+const avisoCuentaDeAntes=escrito=>"Ya no se entra con esta cuenta. "+comoSeEntra(escrito)+" Si no te deja, pídele a Marcelo que la revise.";
 const AVISO_SIN_ACCESO="Esa cuenta no tiene acceso a PrintFlow (es de otra app de SYGMA).";
 // v10.84.191 — entró con su correo, la contraseña está bien y esa cuenta no tiene renglón en PrintFlow: Lucero o Manuel, o Karla antes del cambio de cuentas. No es «la desactivaron».
-const AVISO_SIN_LIGAR="Tu contraseña está bien, pero esa cuenta todavía no tiene PrintFlow. Si ya usas PrintFlow, entra con tu usuario de siempre; si no, pídele a Marcelo que te dé acceso.";
+// v10.84.PASO5 — ya no hay «usuario de siempre» al que mandarla.
+const AVISO_SIN_LIGAR="Tu contraseña está bien, pero esa cuenta no tiene PrintFlow. Si debería, pídele a Marcelo que te dé acceso.";
 const AVISO_ABRIR_SIN_RED="No se pudo comprobar tu sesión: falló la conexión o el servidor no contestó. Tu sesión sigue guardada en este equipo: «Reintentar» la abre sin escribir la contraseña.";
 const AVISO_ENTRAR_SIN_RED="No se pudo conectar para entrar: falló la conexión o el servidor no contestó. Revisa el internet y vuelve a intentar.";
 const AVISO_CUENTA_SIN_RED="No se pudo comprobar tu cuenta: falló la conexión o el servidor no contestó. Vuelve a intentar.";
@@ -1760,7 +1771,7 @@ const db = {
       if(r.error||!r.data?.user){
         if(esFallaDeRed(r.error)) return {error:AVISO_ENTRAR_SIN_RED};
         if(r.error?.status===429) return {error:"Demasiados intentos seguidos. Espera un minuto y vuelve a intentar."};
-        return {error:(String(escrito||"").includes("@")?"Correo":"Usuario")+" o contraseña incorrectos"}; // credenciales incorrectas / cuenta inexistente
+        return {error:String(escrito||"").includes("@")?"Correo o contraseña incorrectos":"Usuario o contraseña incorrectos. "+comoSeEntra(escrito)}; // credenciales incorrectas / cuenta inexistente (v10.84.PASO5: con el nombre, cómo se entra ahora)
       }
       authData=r.data;
     }catch(e){ console.warn("[login] auth:",e?.message); return {error:AVISO_ENTRAR_SIN_RED}; }
@@ -1770,7 +1781,7 @@ const db = {
     const dbUser=Array.isArray(sess)&&sess.length>0?sess[0]:null;
     // desactivado o error → la sesión no queda viva (sólo la de aquí); un error de la base no dice que la cuenta no exista
     if(sErr){ try{await supabase.auth.signOut({scope:"local"})}catch(e){} return {error:AVISO_CUENTA_SIN_RED}; }
-    if(!dbUser){ try{await supabase.auth.signOut({scope:"local"})}catch(e){} return {error:String(escrito||"").includes("@")?AVISO_SIN_LIGAR:AVISO_SIN_PERFIL}; }
+    if(!dbUser){ try{await supabase.auth.signOut({scope:"local"})}catch(e){} return {error:String(escrito||"").includes("@")?AVISO_SIN_LIGAR:avisoCuentaDeAntes(escrito)}; }   // v10.84.PASO5 — con el nombre: la cuenta de antes, ya sin renglón
     /* v10.77.6 — ALLOWLIST DE ROLES. public.users es la tabla de usuarios de LAS DOS apps: quien
        tiene cuenta para SygmaAlmacen (rol 'almacen') podia entrar a PrintFlow con la misma
        contrasena y ver precios y margenes de todas las ordenes, que no es asunto suyo. Aqui no
@@ -3239,8 +3250,8 @@ function Login({onLogin,aviso,onReintentar,onIntentar}) {
           {aviso.tipo==="sin-red"&&onReintentar&&<div style={{marginTop:8}}><button onClick={onReintentar} disabled={!!aviso.comprobando} style={{...bs(C.sf,C.tx),border:"0.5px solid "+C.bdSt,fontSize:13,padding:"8px 14px",cursor:aviso.comprobando?"wait":"pointer"}}>{aviso.comprobando?"Comprobando…":"Reintentar"}</button></div>}
         </div>}
         <div style={{textAlign:"left",marginBottom:12}}>
-          <label style={lbl}>Usuario o correo</label>
-          <input style={inp} value={username} onChange={e=>setUsername(e.target.value)} placeholder="Ej: gerardo, o tu correo completo" autoComplete="username" autoCapitalize="none" autoCorrect="off" spellCheck={false} inputMode="email" onKeyDown={e=>e.key==="Enter"&&submit()}/>
+          <label style={lbl}>Correo</label>
+          <input style={inp} value={username} onChange={e=>setUsername(e.target.value)} placeholder="Ej: gerardo@sygma.mx" autoComplete="username" autoCapitalize="none" autoCorrect="off" spellCheck={false} inputMode="email" onKeyDown={e=>e.key==="Enter"&&submit()}/>
         </div>
         <div style={{textAlign:"left",marginBottom:16}}>
           <label style={lbl}>Contraseña</label>
@@ -22375,7 +22386,8 @@ export default function PrintFlow() {
         if(sesionCerradaPorAuth(authErr)) return fuera("cerrada",AVISO_SESION_CERRADA);
         if(resp.error) return sinRed();   // la base no contestó: eso no dice que la cuenta no exista
         const dbUser=Array.isArray(resp.data)&&resp.data.length>0?resp.data[0]:null;
-        if(!dbUser) return fuera("sin-perfil",AVISO_SIN_PERFIL);
+        // v10.84.PASO5 — la sesión guardada de una cuenta de antes (nombre@padillahnos.local, ya sin renglón) dice cómo se entra ahora; la de un correo, que no tiene PrintFlow
+        if(!dbUser) return fuera("sin-perfil",/@padillahnos\.local$/i.test(authSess.user.email||"")?avisoCuentaDeAntes(authSess.user.email):AVISO_SIN_LIGAR);
         if(!ROLES_PF.includes(dbUser.role)) return fuera("sin-acceso",AVISO_SIN_ACCESO);
         const {data:{session:viva},error:vErr}=await supabase.auth.getSession();
         if(!viva&&!esFallaDeRed(vErr)) return fuera("cerrada",AVISO_SESION_CERRADA);
