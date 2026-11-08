@@ -16,7 +16,7 @@ ser nombre@sygma.mx»*. 6-nov: los pasos 1 a 3, ya, sin que nadie pierda acceso;
 
 | Persona | Hoy | El cambio | Contraseña después | Vuelta atrás |
 |---|---|---|---|---|
-| Arturo, Gerardo, Germán, Noemí | sólo `nombre@padillahnos.local` | `pasar_correo`: la misma cuenta cambia de correo. El mismo id, la misma contraseña; quien ya estaba adentro no se entera. **No hay cuenta vieja que apagar** | la misma | `regresar` |
+| Arturo, Gerardo, Germán, Noemí | sólo `nombre@padillahnos.local` | `pasar_correo`: la misma cuenta cambia de correo. El mismo id, la misma contraseña; quien ya estaba adentro no se entera. **No hay cuenta vieja que apagar** | la misma; a Gerardo, Germán y Noemí Marcelo se las cambia antes, del 26 al 28 («Contraseñas», abajo) | `regresar` |
 | Karla, Genaro, Dulce, Lupita, Marcelo | dos cuentas: la de PrintFlow (Lupita, `secretaria`; Marcelo, `admin`) y `nombre@sygma.mx` | `ligar`: su renglón de PrintFlow pasa a `nombre@sygma.mx`; `apagar_vieja` después, sólo cuando ya entró con la nueva. No se borra ninguna | **la de CobranzaFlow** | `regresar` |
 | Lucero, Manuel, Víctor | sólo `@sygma.mx` | nada | | |
 | Christian, Jaime, Pepe Chuy | sólo `@sygma.mx`, apagadas (`banned_until`), nunca han entrado | nada | | |
@@ -45,13 +45,33 @@ ser nombre@sygma.mx»*. 6-nov: los pasos 1 a 3, ya, sin que nadie pierda acceso;
 - `ensayar-local.mjs`: el mismo ensayo en PGlite, con las cuentas y las funciones copiadas de producción: segundos y sin tocar nada. **9 sabotajes, todos caen** (`armar_paso4.py <sabotaje>`): sin cada una de las cuatro funciones, `verify_actor_role` abierto, ligar sin pasar lo que mandó, apagar sin revisar, regresar sin encender y cambiar el correo sin la identidad.
 - `armar_paso4.py`: de donde salen `paso4_base.sql`, su vuelta atrás y el ensayo. Se cambia aquí, no en los `.sql`.
 - `mensajes.md`: los textos para la gente, para Central y para Sygma Central.
+- `cambiar_contrasena.sql`: una contraseña nueva para Arturo, Gerardo, Germán o Noemí, en el editor del panel («Contraseñas», abajo).
+
+## Contraseñas (Marcelo, 8-nov)
+
+*«solo yo cambio una contraseña vieja. la contraseñas débiles se cambian hasta que regrese de china el 25»*
+
+- **Una olvidada, sólo la cambia Marcelo**, también mientras viaja, si desde allá puede entrar al panel; si no, esa persona espera a que regrese. No se construye nada: era la otra opción a ampliar «Nueva contraseña» para que también la diera Manuel.
+  - A quien está en CobranzaFlow (`cobranza.users`: Karla, Genaro, Dulce, Lupita, Lucero, Manuel, Víctor): «Nueva contraseña» de CobranzaFlow. Manuel también la tiene, porque es Dirección; no se le quitó: lo decidido es quién lo hace.
+  - A Arturo, Gerardo, Germán y Noemí, que no están en CobranzaFlow: `cambiar_contrasena.sql` en el editor SQL del panel de Supabase. Se cambia NOMBRE por el de la persona, y el resultado da su correo y una contraseña de 12 letras y números al azar, como las de «Nueva contraseña». Si no sale ningún renglón, no cambió nada. Sirve antes y después del 29-nov y sólo toca a esos cuatro.
+  - Por el editor no se cierra ninguna sesión: lo abierto sigue abierto y la nueva se pide la próxima vez que entre. Por la API de Auth, la de «Nueva contraseña», cambiar la contraseña termina sus sesiones (según la documentación de Supabase), y Gerardo tiene 21 abiertas.
+  - La nueva se entrega en persona. No va en un mensaje ni en una conversación con Claude.
+- **Las seis débiles, después del 25-nov.**
+  - Gerardo, Germán y Noemí, del 26 al 28, en persona, con `cambiar_contrasena.sql`: el domingo `pasar_correo` les deja la misma contraseña, así que el lunes sólo les cambia el correo. Arturo no está entre las débiles.
+  - Las de Karla, Genaro y Lupita (`secretaria`) se van con su cuenta vieja: desde que se ligan, el domingo, ya no abren PrintFlow ni Almacén, y el lunes `apagar_vieja` las apaga.
+- **Medido el 8-nov, sólo leyendo:**
+  - 16 cuentas tienen la huella que deja `crypt` (`$2a$06$`, la de una contraseña puesta por SQL), y 6 de ellas entraron en los últimos 30 días: Auth la acepta. `cambiar_contrasena.sql` deja `$2a$10$`, la misma que pone Auth.
+  - Con el nombre, cada uno de los cuatro da un renglón, también con mayúsculas, acento o espacio. Karla, secretaria, admin, lupita, vacío o NOMBRE dan cero.
+  - En 200 corridas separadas, las 200 contraseñas salieron distintas y de 12 letras permitidas.
+  - `auth.users` no tiene disparadores. El `EXPLAIN` del archivo tal cual pasa sin ejecutarlo.
 
 ## El 29-nov, en orden
 
 **Del 26 al 28 (Marcelo ya está):**
 
 1. Cada quien entra una vez a CobranzaFlow con `nombre@sygma.mx` (Karla, Genaro, Dulce y Lupita; el texto en `mensajes.md`). `medir.sql`, columna `entro_con_la_nueva`, tiene que decir 26-nov o después. A quien no se acuerde, Marcelo le da «Nueva contraseña» en CobranzaFlow: están en `cobranza.users`.
-2. Decidir la fecha del ensayo de Almacén y el corte de Finanzas: dependen de este domingo.
+2. Las contraseñas débiles de Gerardo, Germán y Noemí: Marcelo se las cambia en persona con `cambiar_contrasena.sql` («Contraseñas», arriba), y cada quien entra una vez con su nombre y la nueva, como hoy. Así el lunes sólo les cambia el correo, y si algo falla se ve antes del domingo.
+3. Decidir la fecha del ensayo de Almacén y el corte de Finanzas: dependen de este domingo.
 
 **Domingo 29-nov, sin gente en la planta. Turno a Central; cada SQL con el OK de Marcelo:**
 
@@ -62,13 +82,13 @@ ser nombre@sygma.mx»*. 6-nov: los pasos 1 a 3, ya, sin que nadie pierda acceso;
    select cuentas_29nov.ligar('karla');           -- también 'genaro', 'lupita', 'dulce', 'marcelo'
    ```
    Si alguien no entró con la nueva, `ligar` se niega y lo dice: se decide con Marcelo (esa persona sigue con su cuenta de hoy, o `ligar('…', p_sin_comprobar => true)` con su OK). Empezar por Marcelo: si algo sale mal, él lo ve primero.
-3. Las contraseñas débiles (la pregunta del 6-nov; `printflow-contrasenas-legibles`): **al 7-nov, sin contestar**. Lo recomendado: ese domingo, sólo Gerardo, Germán y Noemí; las de Karla, Genaro y Lupita se van con su cuenta vieja. Lo que decida, en la memoria `una-sola-cuenta-sygma`. Igual quién cambia una contraseña olvidada: recomendado, Marcelo y Manuel con «Nueva contraseña» de CobranzaFlow ampliada (hay que construirla y sube con el OK de Marcelo); si no, sólo Marcelo desde el panel de Supabase.
+3. Las contraseñas (decidido el 8-nov, «Contraseñas», arriba): este día no se cambia ninguna. Si a Gerardo, Germán o Noemí no se les cambió del 26 al 28, se hace el lunes con la persona enfrente, y su mensaje dice «la contraseña te la doy en persona».
 4. Lo que dicen las pantallas, en `paso5_pantallas.md`: **ya escrito y probado el 7-nov**, en una rama `cuenta-29nov` de PrintFlow, Almacén y Contabilidad (sólo en la PC, sin subir; los pasos, arriba de esa página). Ese día cada rama se pone encima de lo que haya en `main` (Almacén, con su conversación: cambia todos los días; la misma noche del 7-nov le subieron siete pasadas, una tocó `tests/romper/recorridos.mjs`, que la rama también toca, y aun así se mezcla sin choques; ver esa página), se corre su tanda y sube con su candado, una app a la vez. PrintFlow, ~24 min; Almacén, ~20; Contabilidad, 1. Orden: base → app → Central.
 5. **Probar**: Marcelo entra con `marcelo@sygma.mx` a las seis apps, y con la cuenta de pruebas se recorre sin escribir, en los dos dominios de PrintFlow. Vuelta atrás ensayada a mano en Marcelo: `select cuentas_29nov.regresar('marcelo');` y `ligar` otra vez.
 
 **Lunes 30-nov:**
 
-6. Repartir los avisos (`mensajes.md`) antes de las 9:00. Marcelo en la planta: quien se atore, «Nueva contraseña».
+6. Repartir los avisos (`mensajes.md`) antes de las 9:00. Marcelo en la planta: a quien se atore, una nueva («Nueva contraseña» de CobranzaFlow, o `cambiar_contrasena.sql` a Arturo, Gerardo, Germán y Noemí).
 7. Cuando cada uno de los cinco ya entró con la nueva: `select cuentas_29nov.apagar_vieja('karla');` (se niega si no ha entrado). Marcelo, el último.
 
 **Después (cuando ya nadie use lo de antes):**

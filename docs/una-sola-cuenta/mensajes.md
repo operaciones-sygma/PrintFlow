@@ -6,11 +6,13 @@ Sin mandar. Cada uno, cuando el `LEEME.md` lo diga; los de la gente, por WhatsAp
 
 > Hola [nombre]. El lunes 30 vamos a entrar a todas las apps con una sola cuenta. Para que ese día no te atores: ¿me ayudas a entrar hoy a CobranzaFlow (cobranza.sygma.mx) con tu correo [nombre]@sygma.mx y tu contraseña de siempre de CobranzaFlow? Con que entres una vez basta. Si no te acuerdas de la contraseña, dime y te doy una nueva. No cambia nada más por ahora: PrintFlow sigue igual hasta el lunes.
 
+**Gerardo, Germán y Noemí, esos mismos días:** sin mensaje. Marcelo les cambia la contraseña en persona (`cambiar_contrasena.sql`; en `LEEME.md`, «Contraseñas»), se la dice ahí mismo y cada quien entra una vez con su nombre y la nueva. A Arturo no se le cambia. Si a alguno no se le pudo cambiar, su mensaje del lunes dice «La contraseña te la doy en persona» en vez de «no cambia».
+
 ## Domingo 29 en la noche o lunes 30 a primera hora
 
 **Arturo, Gerardo, Germán y Noemí:**
 
-> Hola [nombre]. Desde hoy se entra a PrintFlow y a Almacén con tu correo: **[nombre]@sygma.mx** (sin acentos), ya no sólo con tu nombre. La contraseña [es la misma de siempre / te la doy en persona, según lo que decida Marcelo]. Si tu pantalla ya estaba abierta, sigue abierta: no tienes que hacer nada hasta que te vuelva a pedir entrar. Si no te deja, avísame y lo vemos en un minuto.
+> Hola [nombre]. Desde hoy se entra a PrintFlow y a Almacén con tu correo: **[nombre]@sygma.mx** (sin acentos), ya no sólo con tu nombre. La contraseña no cambia: es la misma con la que entras hoy. Si tu pantalla ya estaba abierta, sigue abierta: no tienes que hacer nada hasta que te vuelva a pedir entrar. Si no te deja, avísame y lo vemos en un minuto.
 
 **Karla, Genaro, Dulce:**
 
