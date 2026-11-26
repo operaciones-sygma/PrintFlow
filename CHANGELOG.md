@@ -53,7 +53,7 @@ Marcelo, 8-nov: «Crees que también se pueda mejorar el sistema de fecha recome
   - **En las capturas a 1366 y 1920, las fechas se partían entre renglones** (ord-398, escrita antes del arreglo: fallaba a 1366 y a 1920).
   - De mis pruebas: ord-392 escribía en la fecha el mismo valor que ya tenía, y eso no es un cambio (ni para React ni para quien elige el mismo día en el calendario): ahora escribe otro día.
 - **Sabotajes:** 18, todos caen. Dos de mis primeros apuntaban a pruebas que no miran ese arreglo (el aviso de fecha corta lo miran ord-378, 381 y 393, no ord-376 y 377). Y dos destaparon huecos de mis pruebas, ya cerrados: det-266 sólo pedía que no saliera basura (sin los candados, «0026-06-01» se decía «mar 1-jun», el martes de 1926, y pasaba), y ninguna cuidaba el candado de los años antes de 1900 (hab-76). Los dos candados de `fechaEnPalabras` se cubren uno al otro con «0026»: quitando los dos, cae.
-- Las tandas de lo tocado: `habiles` 76 de 76, `detalle` 302 de 302, `orden` y `orden-2` 333 de 335 en la primera corrida (ord-359 y ord-392, arriba) y, con los arreglos, las 36 de la fecha; todas, en el candado (abajo). `npx vite build`, `probar-alcance.sh` sin fugas y el detector de impeccable: 227 marcas en App.jsx, las mismas del 8-nov, ninguna en lo cambiado.
+- Las tandas de lo tocado: `habiles` 76 de 76, `detalle` 302 de 302, `orden` y `orden-2` 333 de 335 en la primera corrida (ord-359 y ord-392, arriba) y, con los arreglos, las 36 de la fecha. El candado, 3509 de 3509 (abajo). `npx vite build`, `probar-alcance.sh` sin fugas y el detector de impeccable: 227 marcas en App.jsx, las mismas del 8-nov, ninguna en lo cambiado.
 
 **Qué NO se tocó.** La base (ninguna migración). La fecha de lo que ya existe: sólo se recorren las de la OC que recibe su 5.º producto, y sólo si siguen en su estándar y no han entrado a máquina. La regla de la web (`calcDeliveryDate`). Lo que ya va urgente.
 
@@ -61,9 +61,9 @@ Marcelo, 8-nov: «Crees que también se pueda mejorar el sistema de fecha recome
 - **Lo grande de temporada necesita su fecha a mano.** Los calendarios de 10,000 a 45,000 piezas tardan unos 20 días hábiles; la estándar les da 11 o 13. Del 1-jun al 13-nov, los 7 calendarios llegaron tarde el 57% aun con los +3. Y del 24-oct al 13-nov (fuera de lo que se usó para decidir) la regla nueva no mejora nada: no hubo OC grandes, y lo que llegó tarde fueron sobre todo los calendarios grandes de temporada.
 - **«Cliente autorizó sin prueba»** (la 189, para el ISO): del 9 al 26-nov se usó 2 veces, contra 74 órdenes que salieron de Diseño. Si en la planta se sigue autorizando por teléfono sin marcarlo, la evidencia no queda.
 
-**En producción.** Se anota al subir, con el candado.
+**En producción.** 26-nov 14:18, READY `dpl_95TA4dZvVLdShuAAHfo9SBEJgqeD` (listo a las 14:18:19), commits `0f2e892` (pruebas), `9732322` (la app) y `3b288fe` (docs). Candado 3509 de 3509 (50 nuevas), de a 4, 985 s, a la primera, sin regresiones y sin inestables. Revisado en producción sin escribir: los dos dominios (`print-flow-eosin.vercel.app`, por donde entra la planta, y `produccion.sygma.mx`) sirven la misma página y los mismos 6 archivos, byte a byte, con los textos nuevos y ya sin «Sugerir fecha»; el recorrido de los 8 roles contra `print-flow-eosin.vercel.app`, nada truena (lo lento, las firmas de las fotos, como antes), y «Nueva» dice «Estándar: martes 8-dic, a 8 días hábiles».
 
-**Vuelta atrás.** Se anota al subir. La base no cambia: basta con la pantalla.
+**Vuelta atrás.** De urgencia, promover `dpl_7GycwaJSVZKQ7HFCE2BffBB9Uhqm` (efbdb77: el código de la 191). Y `git revert --no-edit 9732322 0f2e892` y subir (ensayada en un worktree: deja `src`, `scripts` y `tests` como efbdb77, salvo `tests/LEEME.md`, que es del commit de docs). La base no cambió. Las fechas que la 192 ya haya recorrido en una OC grande se quedan: son estándar y su bitácora dice de dónde salieron.
 
 **Sin probar.** En un lector de pantalla de verdad (NVDA): se probó el `aria-describedby` y el `aria-live`, no cómo se oye. Con la gente: cuántas veces aceptan «Marcar urgente».
 
