@@ -2338,7 +2338,7 @@ await caso("ord-337 «Editar Specs» abierta desde antes no regresa el precio co
 for (const [n, reloj, esperado] of [["ord-339 «Sugerir fecha» salta el festivo", "2026-11-06T10:00:00-06:00", "2026-11-19"], ["ord-340 «Sugerir fecha» de noche no se corre un día", "2026-11-06T19:30:00-06:00", "2026-11-19"]]) await caso(n, "", async p => {
   await p.clock.setFixedTime(new Date(reloj));
   await p.locator("#ff-entrega").fill("2026-12-01"); await espera(p, 100);   // v10.84.189 — la forma nueva ya trae la estándar: el botón sale cuando se cambió
-  await p.getByRole("button", { name: "Sugerir fecha" }).click();
+  await p.getByRole("button", { name: /Usar la estándar/ }).click();   // (v10.84.192) el botón ahora dice «Usar la estándar» y la estándar se queda a la vista
   await espera(p, 100);
   const v = await p.locator("#ff-entrega").inputValue();
   ok(n, v === esperado, `propuso ${v}`);
@@ -2388,7 +2388,7 @@ await caso("ord-345 borrarla no deja crear: lo dice, lleva al campo, y «Sugerir
   await capturar(p); await p.locator("#ff-entrega").fill(""); await espera(p, 100);
   await crear(p); await espera(p, 600);
   const n = await cuenta(p, "saveOrder "), t = await forma(p).innerText(), foco = await p.evaluate(() => document.activeElement?.id), inv = await p.locator("#ff-entrega").getAttribute("aria-invalid");
-  await p.getByRole("button", { name: "Sugerir fecha" }).click(); await espera(p, 100);
+  await p.getByRole("button", { name: /Usar la estándar/ }).click(); await espera(p, 100);   // (v10.84.192) el botón ahora dice «Usar la estándar» y la estándar se queda a la vista
   const v = await entregaDe(p);
   await crear(p); await espera(p, 1500);
   const o = (await ordenesNuevas(p))[0];
@@ -2492,8 +2492,8 @@ await caso("ord-358 una fecha ya pasada avisa y deja crear (se captura después 
 });
 await caso("ord-359 al editar, «Sugerir fecha» da la estándar, sin los 3 de acabados", "modo=editar", async p => {
   await p.clock.setFixedTime(VIERNES_187);
-  await p.getByRole("button", { name: "Sugerir fecha" }).click(); await espera(p, 100);
-  const v = await entregaDe(p), tt = await p.getByRole("button", { name: "Sugerir fecha" }).getAttribute("title");
+  await p.getByRole("button", { name: /Usar la estándar/ }).click(); await espera(p, 100);   // (v10.84.192) el botón ahora dice «Usar la estándar» y la estándar se queda a la vista
+  const v = await entregaDe(p), tt = await p.getByRole("button", { name: /Usar la estándar/ }).getAttribute("title");
   ok("ord-359 al editar, «Sugerir fecha» da la estándar, sin los 3 de acabados", v === "2026-11-19" && !/acabados/i.test(tt || ""), `${v} · «${tt}»`);
 });
 await caso("ord-360 elegir un acabado no alarga la fecha", "", async p => {
@@ -2547,7 +2547,7 @@ await caso("ord-366 la OC con fecha por delante no se alarga por el 5.º product
 await caso("ord-367 «Sugerir fecha» en esa OC pone la estándar, con sus productos", "modo=oc&ocproductos=4", async p => {
   await p.clock.setFixedTime(new Date("2026-10-20T10:00:00-06:00"));
   await llenar(p, "Ejemplo · 1000", "500"); await espera(p, 100);
-  await p.getByRole("button", { name: "Sugerir fecha" }).click(); await espera(p, 100);
+  await p.getByRole("button", { name: /Usar la estándar/ }).click(); await espera(p, 100);   // (v10.84.192) el botón ahora dice «Usar la estándar» y la estándar se queda a la vista
   const v = await entregaDe(p), n = await notaDeEntrega(p);
   ok("ord-367 «Sugerir fecha» en esa OC pone la estándar, con sus productos", v === "2026-11-04" && /11 días hábiles/.test(n), `${v} «${n}»`);
 });
@@ -2601,6 +2601,217 @@ await caso("ord-375 sin fecha, el pie y el botón lo dicen", "", async p => {
   const b = await p.getByRole("button", { name: /Crear Orden/ }).getAttribute("title"), t = await forma(p).innerText();
   ok("ord-375 sin fecha, el pie y el botón lo dicen", /Fecha de entrega/.test(b || "") && /1 campo por completar/.test(t), `«${b}»`);
 });
+
+// ── v10.84.192 — la estándar, segunda vuelta. Marcelo, 26-nov, con lo medido en 620 órdenes y la crítica de la fecha (26/40): la nota dice el día y el festivo que no cuenta;
+//    +3 a libros, libretas y calendarios; una fecha más corta que la estándar avisa con lo medido y ofrece «Marcar urgente»; la estándar se queda a la vista al cambiarla
+//    («Usar la estándar»); y el 5.º producto de una OC recorre también a los cuatro anteriores (los que siguen en su estándar y no han entrado a máquina), con su renglón en la
+//    bitácora. Vuelta 1: escritas antes del código. El reloj, en el viernes 6-nov: 8 días = jueves 19-nov (sin el lunes 16), 11 = martes 24-nov.
+const avisoCorto = async p => { const n = p.locator("#ff-entrega-corta"); return (await n.count()) ? (await n.innerText()).replace(/\s+/g, " ") : ""; };
+const lineaEstandar = async p => { const n = p.locator("#ff-entrega-estandar"); return (await n.count()) ? (await n.innerText()).replace(/\s+/g, " ") : ""; };
+const usarEstandar = p => p.getByRole("button", { name: /Usar la estándar/ });
+const botonUrgente = p => p.locator('[role="group"][aria-label="Prioridad"] button').first();
+const deLaOC = async p => (await lineas(p, "update OP-OC9")).map(l => { const m = /^update (\S+) (.*)$/.exec(l); let v = {}; try { v = JSON.parse(m[2]); } catch {} return { id: m?.[1], ...v }; });
+const fechasDeLaOC = p => p.evaluate(() => Object.fromEntries(window.__estado().base.filter(o => /^OP-OC9/.test(o.id)).map(o => [o.id, (o.due_date || "") + (o.delivery_calculated_at ? "·e" : "")])));
+const agregarALaOC = async p => { await llenar(p, "Ejemplo · 1000", "500"); await elegirVendedor(p, "Manuel"); await espera(p, 100); const v = await entregaDe(p); await p.getByRole("button", { name: /Agregar a OC-0900/ }).first().click(); await espera(p, 2000); return v; };
+
+await caso("ord-376 la nota dice el día y el festivo que no cuenta", "", async p => {
+  await p.clock.setFixedTime(VIERNES_187); await llenar(p, "Ejemplo · 1000", "500"); await espera(p, 150);   // (la forma se pinta otra vez con el reloj puesto)
+  const n = await notaDeEntrega(p);
+  ok("ord-376 la nota dice el día y el festivo que no cuenta", /Estándar: jueves 19-nov/.test(n) && /8 días hábiles/.test(n) && /no cuenta el lunes 16-nov, festivo/.test(n) && /urge/.test(n), `«${n}»`);
+});
+await caso("ord-376b sin festivo en medio, no lo menciona", "", async p => {
+  await p.clock.setFixedTime(new Date("2026-11-17T10:00:00-06:00")); await llenar(p, "Ejemplo · 1000", "500"); await espera(p, 150);
+  const v = await entregaDe(p), n = await notaDeEntrega(p);
+  ok("ord-376b sin festivo en medio, no lo menciona", v === "2026-11-27" && /viernes 27-nov/.test(n) && !/festivo/.test(n), `${v} «${n}»`);
+});
+await caso("ord-377 libros, libretas y calendarios suman 3, y se quita si cambia la categoría", "", async p => {
+  await p.clock.setFixedTime(VIERNES_187);
+  await capturar(p, { cantidad: "500" });
+  await elegirCategoria(p, "libros"); const a = await entregaDe(p), na = await notaDeEntrega(p);
+  await elegirCategoria(p, "calendarios"); const b = await entregaDe(p);
+  await elegirCategoria(p, "libretas"); const c = await entregaDe(p);
+  await elegirCategoria(p, "folletos"); const d = await entregaDe(p), nd = await notaDeEntrega(p);
+  ok("ord-377 libros, libretas y calendarios suman 3, y se quita si cambia la categoría", a === "2026-11-24" && /11 días hábiles/.test(na) && /libro, libreta o calendario/.test(na) && /martes 24-nov/.test(na) && b === "2026-11-24" && c === "2026-11-24" && d === "2026-11-19" && !/libro/.test(nd), `${a} «${na}» · ${b} · ${c} · ${d} «${nd}»`);
+});
+await caso("ord-377b el libro se guarda con sus 11 días, como estándar", "", async p => {
+  await p.clock.setFixedTime(VIERNES_187);
+  await capturar(p, { cantidad: "500" }); await elegirCategoria(p, "libros");
+  await crear(p); await espera(p, 1500);
+  const o = (await ordenesNuevas(p))[0];
+  ok("ord-377b el libro se guarda con sus 11 días, como estándar", o?.due_date === "2026-11-24" && !!o?.delivery_calculated_at && o?.categoria === "libros", `${o?.due_date} · ${o?.delivery_calculated_at} · ${o?.categoria}`);
+});
+await caso("ord-378 una fecha más corta que la estándar avisa con lo medido y ofrece marcarla urgente", "", async p => {
+  await p.clock.setFixedTime(VIERNES_187);
+  await capturar(p); await p.locator("#ff-entrega").fill("2026-11-11"); await espera(p, 150);
+  const t = await avisoCorto(p), antes = await botonUrgente(p).getAttribute("aria-pressed");
+  await p.getByRole("button", { name: "Marcar urgente" }).click({ timeout: 2000 }).catch(() => {}); await espera(p, 150);
+  const despues = await botonUrgente(p).getAttribute("aria-pressed"), t2 = await avisoCorto(p), queda = await p.getByRole("button", { name: "Marcar urgente" }).count();
+  await crear(p); await espera(p, 1500);
+  const o = (await ordenesNuevas(p))[0];
+  ok("ord-378 una fecha más corta que la estándar avisa con lo medido y ofrece marcarla urgente", /antes de la estándar/i.test(t) && /jueves 19-nov/.test(t) && /la mitad/.test(t) && /Gerardo/.test(t) && antes === "false" && despues === "true" && queda === 0 && /Va urgente/.test(t2) && o?.due_date === "2026-11-11" && o?.priority === "urgente" && !o?.delivery_calculated_at, `«${t}» · urgente ${antes}→${despues} · botón ${queda} · «${t2}» · ${o?.due_date} ${o?.priority}`);
+});
+for (const [id, fecha, cat, debe] of [["ord-379a a 5 días hábiles: 6 de cada 10", "2026-11-13", null, /6 de cada 10/], ["ord-379b un libro a 8 días: antes de su estándar, sin cifra", "2026-11-19", "libros", /martes 24-nov/], ["ord-379c después de la estándar: no avisa", "2026-11-27", null, null], ["ord-379d el mismo día de la estándar: no avisa", "2026-11-19", null, null]]) await caso(id, "", async p => {
+  await p.clock.setFixedTime(VIERNES_187);
+  await capturar(p); if (cat) await elegirCategoria(p, cat);
+  await p.locator("#ff-entrega").fill(fecha); await espera(p, 150);
+  const t = await avisoCorto(p);
+  ok(id, debe ? debe.test(t) && /antes de la estándar/i.test(t) && (cat ? !/la mitad|de cada 10/.test(t) : true) : t === "", `«${t}»`);
+});
+await caso("ord-380 al cambiarla, la estándar se queda a la vista y «Usar la estándar» la regresa", "", async p => {
+  await p.clock.setFixedTime(VIERNES_187);
+  await capturar(p); await p.locator("#ff-entrega").fill("2026-11-11"); await espera(p, 150);
+  const l = await lineaEstandar(p);
+  await usarEstandar(p).click({ timeout: 2000 }).catch(() => {}); await espera(p, 150);
+  const v = await entregaDe(p), n = await notaDeEntrega(p), t = await avisoCorto(p);
+  ok("ord-380 al cambiarla, la estándar se queda a la vista y «Usar la estándar» la regresa", /La estándar: jueves 19-nov/.test(l) && v === "2026-11-19" && /Estándar: jueves 19-nov/.test(n) && t === "", `«${l}» · ${v} «${n}» «${t}»`);
+});
+await caso("ord-381 el lector de pantalla oye los avisos del campo", "", async p => {
+  await p.clock.setFixedTime(VIERNES_187);
+  await capturar(p); await p.locator("#ff-entrega").fill("2026-11-11"); await espera(p, 150);
+  const a = await p.locator("#ff-entrega").getAttribute("aria-describedby");
+  await p.locator("#ff-entrega").fill("2026-11-02"); await espera(p, 150);
+  const b = await p.locator("#ff-entrega").getAttribute("aria-describedby"), pasada = await p.locator("#ff-entrega-pasada").count();
+  ok("ord-381 el lector de pantalla oye los avisos del campo", /ff-entrega-corta/.test(a || "") && /ff-entrega-estandar/.test(a || "") && pasada === 1 && /ff-entrega-pasada/.test(b || "") && !/ff-entrega-corta/.test(b || ""), `«${a}» · «${b}» · pasada ${pasada}`);
+});
+await caso("ord-382 el asterisco de «Entrega» se ve como el de «Cantidad»", "", async p => {
+  const r = await p.evaluate(() => { const ast = id => { const l = document.querySelector(`label[for="${id}"]`); const s = l && [...l.querySelectorAll("span")].find(x => x.textContent.trim() === "*"); if (!s) return null; const a = s.getBoundingClientRect(), b = l.getBoundingClientRect(); const tx = document.createRange(); tx.selectNodeContents(l); const c = tx.getClientRects()[0]; return { dy: Math.round(a.top - b.top), alto: Math.round(a.height), etiqueta: Math.round(b.height), base: Math.round(a.bottom - b.top) }; }; return { entrega: ast("ff-entrega"), cantidad: ast("ff-cantidad") }; });
+  ok("ord-382 el asterisco de «Entrega» se ve como el de «Cantidad»", !!r.entrega && !!r.cantidad && Math.abs(r.entrega.dy - r.cantidad.dy) <= 1 && Math.abs(r.entrega.etiqueta - r.cantidad.etiqueta) <= 1, JSON.stringify(r));
+});
+await caso("ord-383 el 5.º producto recorre también a los cuatro anteriores, y queda en su bitácora", "modo=oc&ocproductos=4&ocestandar=1", async p => {
+  await p.clock.setFixedTime(VIERNES_187);
+  const v = await agregarALaOC(p);
+  const f = await fechasDeLaOC(p), u = await deLaOC(p), tl = await lineas(p, "timeline OP-OC9"), av = (await avisos(p)).join(" | "), o = (await ordenesNuevas(p))[0];
+  ok("ord-383 el 5.º producto recorre también a los cuatro anteriores, y queda en su bitácora", v === "2026-11-24" && o?.due_date === "2026-11-24" && ["OP-OC90", "OP-OC91", "OP-OC92", "OP-OC93"].every(id => f[id] === "2026-11-24·e") && u.length === 4 && u.every(x => x.due_date === "2026-11-24" && x.delivery_calculated_at) && tl.length === 4 && tl.every(l => /📅/.test(l) && /martes 24-nov/.test(l) && /OC-0900/.test(l)) && /P-0910/.test(av) && /P-0913/.test(av) && /24-nov/.test(av), `${v} · ${JSON.stringify(f)} · ${u.length} update · ${tl.length} bitácora · «${av.slice(0, 220)}»`);
+});
+await caso("ord-384 no recorre la que alguien cambió a mano ni la que ya entró a máquina", "modo=oc&ocproductos=4&ocestandar=1&ocetapas=design,in_production&octocada=2", async p => {
+  await p.clock.setFixedTime(VIERNES_187);
+  await agregarALaOC(p);
+  const f = await fechasDeLaOC(p), u = await deLaOC(p), tl = await lineas(p, "timeline OP-OC9");
+  ok("ord-384 no recorre la que alguien cambió a mano ni la que ya entró a máquina", f["OP-OC90"] === "2026-11-24·e" && f["OP-OC91"] === "2026-11-19·e" && f["OP-OC92"] === "2026-11-20" && f["OP-OC93"] === "2026-11-24·e" && u.length === 2 && tl.length === 2, `${JSON.stringify(f)} · ${u.length} update · ${tl.length} bitácora`);
+});
+await caso("ord-385 con una cancelada son cuatro: no recorre nada y la nueva lleva 8 días", "modo=oc&ocproductos=4&ocestandar=1&occanceladas=1", async p => {
+  await p.clock.setFixedTime(VIERNES_187);
+  const v = await agregarALaOC(p);
+  const u = await deLaOC(p), o = (await ordenesNuevas(p))[0];
+  ok("ord-385 con una cancelada son cuatro: no recorre nada y la nueva lleva 8 días", v === "2026-11-19" && o?.due_date === "2026-11-19" && u.length === 0, `${v} · ${o?.due_date} · ${u.length} update`);
+});
+await caso("ord-386 el 4.º producto no recorre a nadie", "modo=oc&ocproductos=3&ocestandar=1", async p => {
+  await p.clock.setFixedTime(VIERNES_187);
+  await agregarALaOC(p);
+  const u = await deLaOC(p), f = await fechasDeLaOC(p);
+  ok("ord-386 el 4.º producto no recorre a nadie", u.length === 0 && Object.values(f).every(x => x === "2026-11-19·e"), `${u.length} update · ${JSON.stringify(f)}`);
+});
+await caso("ord-387 el 6.º no vuelve a mover lo que ya se recorrió", "modo=oc&ocproductos=5&ocestandar=1&ocfecha=2026-11-24", async p => {
+  await p.clock.setFixedTime(VIERNES_187);
+  const v = await agregarALaOC(p);
+  const u = await deLaOC(p);
+  ok("ord-387 el 6.º no vuelve a mover lo que ya se recorrió", v === "2026-11-24" && u.length === 0, `${v} · ${u.length} update`);
+});
+await caso("ord-388 si la base no deja recorrerlas, la orden nueva sí queda y el aviso dice cuáles faltaron", "modo=oc&ocproductos=4&ocestandar=1&editar=falla", async p => {
+  await p.clock.setFixedTime(VIERNES_187);
+  await agregarALaOC(p);
+  const o = (await ordenesNuevas(p))[0], f = await fechasDeLaOC(p), av = await avisos(p), tl = await lineas(p, "timeline OP-OC9");
+  const aviso = av.find(t => /recorrer/i.test(t)) || "";
+  ok("ord-388 si la base no deja recorrerlas, la orden nueva sí queda y el aviso dice cuáles faltaron", !!o && o.due_date === "2026-11-24" && Object.values(f).every(x => x === "2026-11-19·e") && /^warning:/.test(aviso) && /no se pudo recorrer/i.test(aviso) && /P-0910/.test(aviso) && tl.length === 0, `${o?.due_date} · ${JSON.stringify(f)} · «${aviso.slice(0, 200)}» · ${tl.length} bitácora`);
+});
+await caso("ord-389 si ya va urgente, no lo ofrece otra vez", "", async p => {
+  await p.clock.setFixedTime(VIERNES_187);
+  await capturar(p); await botonUrgente(p).click(); await espera(p, 100);
+  await p.locator("#ff-entrega").fill("2026-11-11"); await espera(p, 150);
+  const t = await avisoCorto(p), n = await p.getByRole("button", { name: "Marcar urgente" }).count();
+  ok("ord-389 si ya va urgente, no lo ofrece otra vez", n === 0 && /antes de la estándar/i.test(t) && /Va urgente/.test(t) && /Gerardo/.test(t), `«${t}» · botón ${n}`);
+});
+for (const [id, vp] of [["ord-390a a 1366", { width: 1366, height: 768 }], ["ord-390b a 1920", { width: 1920, height: 1080 }], ["ord-390c a 360", { width: 360, height: 740 }]]) await caso(`${id}: el aviso y la estándar caben en su columna`, "modo=oc&ocproductos=6", async p => {
+  await p.clock.setFixedTime(VIERNES_187);
+  await llenar(p, "Ejemplo · 1000", "20000"); await elegirCategoria(p, "libros").catch(() => {}); await espera(p, 150);
+  await p.locator("#ff-entrega").fill("2026-11-11"); await espera(p, 150);
+  const r = await p.evaluate(() => { const i = document.querySelector("#ff-entrega").getBoundingClientRect(); const de = id => { const e = document.getElementById(id); if (!e) return null; const a = e.getBoundingClientRect(); return { izq: Math.round(a.left), der: Math.round(a.right) }; }; return { campo: { izq: Math.round(i.left), der: Math.round(i.right) }, corta: de("ff-entrega-corta"), estandar: de("ff-entrega-estandar"), ancho: document.documentElement.scrollWidth, ventana: innerWidth }; });
+  const cabe = x => !!x && x.der <= r.campo.der + 1 && x.izq >= r.campo.izq - 1;
+  ok(`${id}: el aviso y la estándar caben en su columna`, cabe(r.corta) && cabe(r.estandar) && r.ancho <= r.ventana, JSON.stringify(r));
+}, vp);
+
+// ── v10.84.192, vuelta 2: por donde no se diseñó ──
+await caso("ord-391 doble clic en «Agregar a OC»: una sola orden, y cada anterior se recorre una vez", "modo=oc&ocproductos=4&ocestandar=1&guardar=lento&lento=1", async p => {
+  await p.clock.setFixedTime(VIERNES_187);
+  await llenar(p, "Ejemplo · 1000", "500"); await elegirVendedor(p, "Manuel"); await espera(p, 100);
+  await p.getByRole("button", { name: /Agregar a OC-0900/ }).first().dblclick(); await espera(p, 3500);
+  const n = (await ordenesNuevas(p)).length, u = await deLaOC(p), ids = new Set(u.map(x => x.id));
+  ok("ord-391 doble clic en «Agregar a OC»: una sola orden, y cada anterior se recorre una vez", n === 1 && (await cuenta(p, "saveOrder ")) === 1 && u.length === 4 && ids.size === 4, `${n} nuevas · ${u.length} update (${ids.size} distintas)`);
+});
+await caso("ord-392 la categoría elegida después de cambiar la fecha también cuenta para el aviso", "", async p => {
+  await p.clock.setFixedTime(VIERNES_187);
+  // (vuelta 2) otro día que la estándar (19-nov): escribir el mismo valor que ya tiene no es un cambio, ni para React ni para la persona que lo elige en el calendario
+  await capturar(p, { cantidad: "500" }); await p.locator("#ff-entrega").fill("2026-11-20"); await espera(p, 150);
+  const a = await avisoCorto(p);
+  await elegirCategoria(p, "libros"); const b = await avisoCorto(p), l = await lineaEstandar(p), v = await entregaDe(p);
+  ok("ord-392 la categoría elegida después de cambiar la fecha también cuenta para el aviso", a === "" && /martes 24-nov/.test(b) && /La estándar: martes 24-nov/.test(l) && v === "2026-11-20", `«${a}» · «${b}» · «${l}» · ${v}`);
+});
+await caso("ord-393 «Marcar urgente» es algo capturado: Cancelar pregunta", "", async p => {
+  await p.clock.setFixedTime(VIERNES_187); await llenar(p, "Ejemplo · 1000", "500"); await espera(p, 100);
+  await p.locator("#ff-entrega").fill("2026-11-11"); await espera(p, 100);
+  await p.getByRole("button", { name: "Marcar urgente" }).click(); await espera(p, 100);
+  await p.getByRole("button", { name: "Cancelar" }).click(); await espera(p, 400);
+  const hay = await hayPregunta(p), e = await estado(p);
+  ok("ord-393 «Marcar urgente» es algo capturado: Cancelar pregunta", hay && e.vista === "form", `pregunta ${hay} · vista ${e.vista}`);
+});
+await caso("ord-394 una fecha que cae en festivo lo dice, antes o después de la estándar", "", async p => {
+  await p.clock.setFixedTime(VIERNES_187); await llenar(p, "Ejemplo · 1000", "500"); await espera(p, 100);
+  await p.locator("#ff-entrega").fill("2026-11-16"); await espera(p, 150);
+  const a = await p.locator("#ff-entrega-festivo").innerText().catch(() => ""), ca = await avisoCorto(p);
+  await p.locator("#ff-entrega").fill("2026-12-25"); await espera(p, 150);
+  const b = await p.locator("#ff-entrega-festivo").innerText().catch(() => ""), cb = await avisoCorto(p), d = await p.locator("#ff-entrega").getAttribute("aria-describedby");
+  await p.locator("#ff-entrega").fill("2026-12-24"); await espera(p, 150);
+  const c = await p.locator("#ff-entrega-festivo").count();
+  ok("ord-394 una fecha que cae en festivo lo dice, antes o después de la estándar", /lunes 16-nov es festivo/.test(a) && /antes de la estándar/i.test(ca) && /viernes 25-dic es festivo/.test(b) && cb === "" && /ff-entrega-festivo/.test(d || "") && c === 0, `«${a}» · «${b}» · «${cb}» · ${d} · 24-dic ${c}`);
+});
+await caso("ord-395 lo que otra sesión cambió mientras se capturaba no se pisa", "modo=oc&ocproductos=4&ocestandar=1&ocotro=1", async p => {
+  await p.clock.setFixedTime(VIERNES_187); await espera(p, 1700);
+  await agregarALaOC(p);
+  const f = await fechasDeLaOC(p), av = (await avisos(p)).join(" | "), tl = await lineas(p, "timeline OP-OC91");
+  ok("ord-395 lo que otra sesión cambió mientras se capturaba no se pisa", f["OP-OC91"] === "2026-11-21·e" && f["OP-OC90"] === "2026-11-24·e" && f["OP-OC92"] === "2026-11-24·e" && f["OP-OC93"] === "2026-11-24·e" && tl.length === 0 && !/P-0911/.test(av), `${JSON.stringify(f)} · «${av.slice(0, 200)}»`);
+});
+await caso("ord-396 el aviso de fecha corta se lee: 4.5:1 o más", "", async p => {
+  await p.clock.setFixedTime(VIERNES_187); await llenar(p, "Ejemplo · 1000", "500"); await espera(p, 100);
+  await p.locator("#ff-entrega").fill("2026-11-11"); await espera(p, 150);
+  const r = await contraste(p, `document.querySelector("#ff-entrega-corta b")`), r2 = await contraste(p, `[...document.querySelectorAll("#ff-entrega-corta button")].find(b => /Marcar urgente/.test(b.textContent))`);
+  ok("ord-396 el aviso de fecha corta se lee: 4.5:1 o más", r !== null && r >= 4.5 && r2 !== null && r2 >= 4.5, `texto ${r} · botón ${r2}`);
+});
+await caso("ord-397 al editar, la estándar dice que es desde hoy", "modo=editar", async p => {
+  await p.clock.setFixedTime(VIERNES_187); await espera(p, 200); await listaParaGuardar(p);
+  const l = await lineaEstandar(p), avisa = await avisoCorto(p);
+  ok("ord-397 al editar, la estándar dice que es desde hoy", /La estándar desde hoy: jueves 19-nov/.test(l) && avisa === "", `«${l}» · «${avisa}»`);
+});
+
+// (vuelta 2, de las capturas) una fecha no se parte entre renglones: «no cuenta el lunes 16-» y abajo «nov» (la nota del calendario de 20,000 piezas, a 1366)
+const fechasPartidas = p => p.evaluate(() => {
+  const malas = []; let vistas = 0;
+  for (const id of ["ff-entrega-nota", "ff-entrega-corta", "ff-entrega-festivo", "ff-entrega-estandar"]) {
+    const el = document.getElementById(id); if (!el) continue;
+    const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT); let t;
+    while ((t = w.nextNode())) {
+      const re = /\d{1,2}-(ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic)/g; let m;
+      while ((m = re.exec(t.data))) {
+        const r = document.createRange(); r.setStart(t, m.index); r.setEnd(t, m.index + m[0].length); vistas++;
+        const arriba = new Set([...r.getClientRects()].map(x => Math.round(x.top)));
+        if (arriba.size > 1) malas.push(id + ": " + m[0]);
+      }
+    }
+  }
+  return { malas, vistas };
+});
+for (const [ancho, alto] of [[1366, 768], [1920, 1080]]) {
+  await caso("ord-398" + (ancho === 1366 ? "a" : "b") + " a " + ancho + ": ninguna fecha de los avisos se parte entre renglones", "", async p => {
+    await p.clock.setFixedTime(VIERNES_187);
+    await capturar(p, { cantidad: "20000" }); await elegirCategoria(p, "calendarios"); await espera(p, 150);
+    const a = await fechasPartidas(p);
+    await p.locator("#ff-entrega").fill("2026-11-16"); await espera(p, 150);   // festivo y antes de la estándar: el aviso, el festivo y la estándar
+    const b = await fechasPartidas(p);
+    await p.locator("#ff-entrega").fill("2026-11-11"); await espera(p, 150);
+    const c = await fechasPartidas(p);
+    const malas = [...a.malas, ...b.malas, ...c.malas], vistas = a.vistas + b.vistas + c.vistas;
+    ok("ord-398" + (ancho === 1366 ? "a" : "b") + " a " + ancho + ": ninguna fecha de los avisos se parte entre renglones", vistas >= 6 && malas.length === 0, vistas + " fechas · " + (malas.join(", ") || "ninguna partida"));
+  }, { width: ancho, height: alto });
+}
 
 await browser.close();
 const fallas = res.filter(r => r.startsWith("FALLA")).length;

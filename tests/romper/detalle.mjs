@@ -1661,7 +1661,15 @@ await caso("det-261-la-entrega-dice-si-es-la-estandar", "caso=factura&rol=karla"
   const a = (await dlg(p).innerText()).replace(/\s+/g, " ");
   await p.evaluate(() => window.__cambiar({ delivery_calculated_at: null })); await espera(p, 400);
   const b = (await dlg(p).innerText()).replace(/\s+/g, " ");
-  ok("det-261-la-entrega-dice-si-es-la-estandar", /ENTREGA\s+19-nov · estándar/.test(a) && !/· estándar/.test(b), `${(a.match(/ENTREGA\s.{0,30}/) || [a.slice(0, 200)])[0]} | ${(b.match(/ENTREGA\s.{0,30}/) || [""])[0]}`);
+  ok("det-261-la-entrega-dice-si-es-la-estandar", /ENTREGA\s+jue 19-nov · estándar/.test(a) && /ENTREGA\s+jue 19-nov/.test(b) && !/· estándar/.test(b),   // (v10.84.192) y el día de la semana, como lo dice Lupita al teléfono
+    `${(a.match(/ENTREGA\s.{0,30}/) || [a.slice(0, 200)])[0]} | ${(b.match(/ENTREGA\s.{0,30}/) || [""])[0]}`);
+});
+
+await caso("det-266-una-fecha-de-dedazo-de-las-de-antes-se-dice-como-antes", "caso=factura&rol=karla", async p => {
+  await p.evaluate(() => window.__cambiar({ due_date: "0026-06-01", delivery_calculated_at: null })); await espera(p, 400);
+  const a = (await dlg(p).innerText()).replace(/\s+/g, " ");
+  // (sabotajes) y sin día de la semana: esa fecha no existe (sin los candados de fechaEnPalabras salía «mar 1-jun», el martes de 1926, y pasaba)
+  ok("det-266-una-fecha-de-dedazo-de-las-de-antes-se-dice-como-antes", /ENTREGA\s+\S+/.test(a) && !/undefined|NaN|Invalid/.test(a) && !/ENTREGA\s+(lun|mar|mié|jue|vie|sáb|dom)\s/.test(a), (a.match(/ENTREGA\s.{0,30}/) || [""])[0]);
 });
 
 // ── v10.84.189, vuelta 2 ──

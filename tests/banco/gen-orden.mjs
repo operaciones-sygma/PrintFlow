@@ -95,7 +95,10 @@ function libres(codigo) {
   return [...fuera];
 }
 const sueltos = libres([addTL, create, update, navClick, preguntas, origenForma, atajos, "return <>" + contenedor + montaje + "</div>" + montajeCliente + montajePrecio + montajeToast + "</>;"].join("\n"));
-const delModulo = sueltos.filter(n => !APP.has(n) && !REACT.has(n) && !GLOBALES.has(n));
+// v10.84.192 — lo que App importa de ./lib/ ya llega al banco por `importacionesDeLib` (abajo): `create` recorre la estándar de la OC con
+//   `queSeRecorre`, `RECORRE_LA_OC` y `fechaEnPalabras` de src/lib/fechaEstandar.js. Con su nombre local (`diaLocal as diaDeHoy` → diaDeHoy)
+const DE_LIB = new Set(importacionesDeLib(fuente).flatMap(l => /^import \{([^}]*)\}/.exec(l)[1].split(",").map(x => x.trim().split(/\s+as\s+/).pop()).filter(Boolean)));
+const delModulo = sueltos.filter(n => !APP.has(n) && !REACT.has(n) && !GLOBALES.has(n) && !DE_LIB.has(n));
 const RAICES = ["OrderForm", "ClientConfirmModal", "PriceDropModal", "Toast", ...delModulo];
 const SIMULADOS = ["supabase", "db", "SignedImg", "firmarOrderFile", "propsArchivoFirmado", "useSignedFile", "abrirArchivoFirmado"];
 const { codigo, nombres, simuladosUsados } = extraer(fuente, RAICES, { simulados: SIMULADOS });
@@ -185,6 +188,13 @@ const PURCHASE_ORDERS = [{ id: "OC-0950", client: "GOBIERNO DEL ESTADO", shared_
 const OC = { id: "OC-0900", client: "GOBIERNO DEL ESTADO", client_id: "c-gob", client_email: "compras@guanajuato.gob.mx", client_rfc: "GEG850101AB1", vendedor: "Manuel", delivery_date: "2026-10-30" };
 // v10.84.189 — ocproductos=N: la OC-0900 ya trae N órdenes; occanceladas=M: M de ellas canceladas (no cuentan para la fecha estándar)
 for (let i = 0, N = Number(Q.get("ocproductos") || 0), M = Number(Q.get("occanceladas") || 0); i < N; i++) BASE.push({ id: "OP-OC9" + i, production_number: "P-09" + (10 + i), client: OC.client, client_id: OC.client_id, client_company: OC.client, client_email: OC.client_email, product_type: "Folders", product: "Producto " + i, quantity: 100, source: "internal", agent: "Manuel", created_by: "lupita", price: 100, order_type: "interna", purchase_order_id: OC.id, created_at: "2026-10-09T10:00:00Z", stage: i < M ? "cancelled" : "design", ...(i < M ? { cancelled_at: "2026-10-10T10:00:00Z" } : {}) });
+// v10.84.192 — los productos de la OC como los deja la 189: ocestandar=1 les pone su estándar (la de ocfecha, o el jueves 19-nov) y los da por capturados el 6-nov a las 9:00;
+//   ocetapas=design,in_production,… la etapa de cada uno; octocada=i al i-ésimo le cambiaron la fecha a mano (20-nov, sin delivery_calculated_at)
+if (Q.get("ocestandar") === "1") BASE.filter(o => /^OP-OC9/.test(o.id) && !o.cancelled_at).forEach(o => Object.assign(o, { created_at: "2026-11-06T15:00:00Z", due_date: Q.get("ocfecha") || "2026-11-19", delivery_calculated_at: "2026-11-06T15:00:00.000Z" }));
+(Q.get("ocetapas") || "").split(",").forEach((e, i) => { const o = BASE.find(x => x.id === "OP-OC9" + i); if (o && e) o.stage = e; });
+// ocotro=1: en otra sesión, alguien le cambió la fecha a OP-OC91 cuando la forma ya estaba abierta (App todavía tiene la de antes)
+if (Q.get("ocotro") === "1") setTimeout(() => { const o = BASE.find(x => x.id === "OP-OC91"); if (o) Object.assign(o, { due_date: "2026-11-21", delivery_calculated_at: "2026-11-07T15:00:00.000Z" }); }, 1500);
+if (Q.get("octocada") != null) { const o = BASE.find(x => x.id === "OP-OC9" + Q.get("octocada")); if (o) { o.due_date = "2026-11-20"; delete o.delivery_calculated_at; } }
 const RESUMEN = ["id", "production_number", "order_type", "stage", "priority", "client", "client_id", "client_email", "client_phone", "client_rfc", "client_agent", "product_type", "product",
   "quantity", "agent", "price", "maq_provider", "maq_cost", "maq_price", "due_date", "delivery_calculated_at", "finishes", "distribution", "sin_empaque_sygma", "purchase_order_id", "plate_status", "image_url", "image_url_2", "file_url", "notes", "categoria"];
 const resumen = o => Object.fromEntries(RESUMEN.filter(k => k in o).map(k => [k, o[k]]));
@@ -207,7 +217,10 @@ async function correr(q) {
     anotar("update " + id + " " + JSON.stringify(q.valores));
     await espera(EDITAR);
     if (EDITAR === "falla") return { data: null, error: sinConexion };
-    const o = BASE.find(x => x.id === id); if (o) Object.assign(o, q.valores);
+    const o = BASE.find(x => x.id === id);
+    // v10.84.192 — las condiciones del UPDATE (eq de más, como el recorrido de la OC): si la orden ya no las cumple, la base no toca nada y contesta sin renglones
+    if (o && q.filtros.some(([op, c, v]) => op === "eq" && c !== "id" && o[c] !== v)) return { data: [], error: null };
+    if (o) Object.assign(o, q.valores);
     return { data: null, error: null };
   }
   if (q.tabla === "orders" && q.accion === "select") {   // «Replicar de orden anterior»
