@@ -12,6 +12,61 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.192 — La fecha estándar, segunda vuelta: +3 a libros, libretas y calendarios, una sola fecha en la OC grande, y la fecha corta avisa — 26-nov-2026
+
+Marcelo, 8-nov: «Crees que también se pueda mejorar el sistema de fecha recomendada, analiza todo, hay veces que son más de 10,000 piezas, 40,000, 100,000 etc… también si tiene acabado, analiza datos y historial». Con su crítica (26/40, `.impeccable/critique/2026-11-08T10-14-03Z__src-app-jsx-orderform-fecha-de-entrega.md`) y lo medido, sus respuestas del 26-nov: la regla, «Los dos»; el tiraje, «Nada más»; la pantalla, «Todo»; la fecha corta, «Avisa y ofrece marcarla».
+
+**Qué pasaba.** Se midió en 620 órdenes de la planta, capturadas del 1-jun al 23-oct. La vara es la de «a tiempo» de la app: quedó LISTA a más tardar ese día, en días hábiles y sin festivos. Fuera las H- importadas que no pasaron por Salidas en la bitácora, y las de «Entrega lejana».
+- **Con la regla de la 189, el 8% habría llegado tarde.** En dos casos, mucho más:
+  - **Libros, libretas y calendarios:** 22 órdenes, 9 días hábiles en el caso típico, 59% tarde.
+  - **Una OC de 5 productos o más:** sus primeros cuatro llegaban tarde el 28%, porque nacían con 8 días y el 5.º con 11 (del 5.º en adelante, 5%). La misma OC quedaba con dos fechas. Se capturan juntos (9 de 12 OC grandes, del 1.º al 5.º en menos de 2 horas) y casi siempre antes de empezar (43 de 48).
+- **El tiraje y los acabados no piden más:** 40,000 o 100,000 piezas tardan lo mismo que 15,000 (son etiquetas y formas, muchas por pliego), y con acabado llega tarde el 5%.
+- **Una fecha más corta que la estándar entraba sin aviso.** De las 377 fechas pedidas a mano (1-jun al 13-nov), a 3 días hábiles o menos quedó lista a tiempo el 48%; a 4 a 7 días, el 62%; a 8 o más, el 90%. Desde el 9-nov: de 90 órdenes nuevas, 74 llevan la estándar y 16 una fecha a mano, 11 de ellas más cortas que 8 días.
+- La fecha se leía sólo en números, sin el día de la semana; el festivo que no cuenta se brincaba sin decirlo; al cambiarla, la estándar desaparecía («Sugerir fecha» no decía cuál); el asterisco de «Entrega» se veía como punto, 3 px abajo; y el aviso de fecha pasada no lo oía el lector de pantalla.
+
+**Qué se cambió.**
+- **La regla** (`src/lib/fechaEstandar.js`; el porqué y lo medido, en su encabezado):
+  - **+3 días hábiles a libros, libretas y calendarios** (`ENCUADERNADOS`, por la categoría). Se suma con el tiraje y la OC, y lo dice el porqué: «11 días hábiles (8 +3 por ser libro, libreta o calendario)».
+  - 🔑 **El 5.º producto de una OC recorre a los cuatro anteriores** (`queSeRecorre`; en App, `create`). Al crear el 5.º, las otras de la OC se van a su estándar con los +3, cada una desde su propio día de captura, con su tiraje y su categoría. Sólo las que siguen en la estándar (nadie la cambió: `delivery_calculated_at`), vivas, que no han entrado a máquina (`ETAPAS_ANTES_DE_MAQUINA`) y cuya fecha nueva va más lejos.
+    - El UPDATE lleva su condición, la misma estándar que se leyó: lo que otra sesión cambió mientras se capturaba no se pisa (ord-395).
+    - Cada una deja su renglón en la bitácora («📅 Fecha estándar recorrida al martes 24-nov (era el jueves 19-nov): la OC-0900 ya trae 5 productos») y el aviso de crear dice cuáles se recorrieron.
+    - Si la base no deja recorrer una, la orden nueva sí queda, y el aviso dice «no se pudo recorrer la fecha de …: cámbiala a mano».
+  - **Nada más por tiraje ni por acabados.** Con todo, 8% → 6% tarde y 8.9 días prometidos en promedio (eran 8.6).
+  - Volver a medir: `node scripts/medir-fecha-estandar.mjs [desde] [hasta]` (nuevo; sólo lee, con `read_only`). Hoy, del 1-jun al 13-nov (689 órdenes): 6% tarde con la regla, 12% con 8 fijos.
+- **La forma** (la fecha de entrega):
+  - **La fecha en palabras** (`fechaEnPalabras`): «Estándar: martes 24-nov, a 11 días hábiles (8 +3 por ser libro, libreta o calendario); no cuenta el lunes 16-nov, festivo (`queNoCuenta`). Si al cliente le urge, cámbiala.»
+  - 🔑 **La estándar siempre a la vista**: «La estándar: martes 24-nov. · Usar la estándar» (al editar, «La estándar desde hoy», y se calcula en el clic; el botón se llamaba «Sugerir fecha»). En el alta, usarla vuelve a dejarla sola: la forma la recalcula mientras se captura.
+  - **Una fecha no se parte entre renglones** (`fechasSinPartir`): el navegador cortaba después del guion, «no cuenta el lunes 16-» y abajo «nov».
+  - 🔑 **La fecha más corta que la estándar avisa** (`riesgoDeFechaCorta`, con lo medido: `A_TIEMPO_SEGUN_LO_PEDIDO`), en ámbar y sin trabar nada: «Es antes de la estándar (martes 24-nov). Pedidas a 4 a 7 días hábiles, 6 de cada 10 quedaron listas a tiempo. Márcala urgente y avísale a Gerardo.» con «Marcar urgente». Ya urgente, «Va urgente: avísale a Gerardo.», sin el botón.
+  - **Una entrega que cae en festivo lo dice**: «El lunes 16-nov es festivo: la planta no trabaja.»
+  - Lo menor: el asterisco pegado a su etiqueta también cuando trae ícono (`FC`); el campo lleva ligados sus avisos (`aria-describedby`: la nota, la fecha corta, el festivo, la estándar, la pasada y la que falta); la nota de la estándar se anuncia al cambiar (`aria-live`).
+- **El detalle**: «ENTREGA jue 19-nov · estándar» (decía «19-nov · estándar»). Una fecha de dedazo de las de antes («0026-06-01») se dice como antes.
+- Duplicar y la devolución también cuentan la categoría.
+
+**Cómo se probó.**
+- **Vuelta 1**, antes del cambio: 37 fallaban contra la 191 (14 de `habiles`, hab-59 a hab-73; 23 de `orden-2` y `detalle`), y las de control pasaban (hab-61, ord-379c y d, ord-385 a ord-387). 6 de las 37 eran de antes y piden lo nuevo: ord-339, 340, 345, 359 y 367 buscaban «Sugerir fecha» (siguen con su número y ahora buscan «Usar la estándar»), y det-261 pide «jue 19-nov · estándar».
+- Lo que la vuelta 1 enseñó de mis pruebas, no de la app: ord-376 y ord-376b ponían el reloj sin volver a pintar la forma, y ord-388 pedía «No se pudo» con mayúscula.
+- Lo que encontró de la app: el asterisco 3 px abajo y la etiqueta con ícono a 16 px en vez de 13 (ord-382).
+- **Vuelta 2**, por donde no se diseñó (hab-74 a hab-76, ord-391 a ord-398, det-266): doble clic en «Agregar a OC» (una sola orden, y cada anterior se recorre una vez); la categoría elegida después de cambiar la fecha; «Marcar urgente» cuenta como captura (Cancelar pregunta); la fecha en festivo, antes o después de la estándar; lo que otra sesión cambió mientras se capturaba; el aviso en AA; «desde hoy» al editar; del sábado al lunes es un día; cada día de 2026 y 2027 con su nombre; la fecha de dedazo. Lo que encontró:
+  - **El banco de la forma no se armaba** con el código nuevo: `create` usa `queSeRecorre`, `RECORRE_LA_OC` y `fechaEnPalabras` de `src/lib/`, y el generador no sabía de dónde salen (`gen-orden.mjs`, `DE_LIB`).
+  - 🔥 **Al editar, «Usar la estándar» ponía la fecha de cuando se pintó la forma** (lo vio ord-359, de la 189): con la forma abierta de un día para otro, ponía la de ayer. «Sugerir fecha» la calculaba en el clic; ahora otra vez.
+  - **En las capturas a 1366 y 1920, las fechas se partían entre renglones** (ord-398, escrita antes del arreglo: fallaba a 1366 y a 1920).
+  - De mis pruebas: ord-392 escribía en la fecha el mismo valor que ya tenía, y eso no es un cambio (ni para React ni para quien elige el mismo día en el calendario): ahora escribe otro día.
+- **Sabotajes:** 18, todos caen. Dos de mis primeros apuntaban a pruebas que no miran ese arreglo (el aviso de fecha corta lo miran ord-378, 381 y 393, no ord-376 y 377). Y dos destaparon huecos de mis pruebas, ya cerrados: det-266 sólo pedía que no saliera basura (sin los candados, «0026-06-01» se decía «mar 1-jun», el martes de 1926, y pasaba), y ninguna cuidaba el candado de los años antes de 1900 (hab-76). Los dos candados de `fechaEnPalabras` se cubren uno al otro con «0026»: quitando los dos, cae.
+- Las tandas de lo tocado: `habiles` 76 de 76, `detalle` 302 de 302, `orden` y `orden-2` 333 de 335 en la primera corrida (ord-359 y ord-392, arriba) y, con los arreglos, las 36 de la fecha; todas, en el candado (abajo). `npx vite build`, `probar-alcance.sh` sin fugas y el detector de impeccable: 227 marcas en App.jsx, las mismas del 8-nov, ninguna en lo cambiado.
+
+**Qué NO se tocó.** La base (ninguna migración). La fecha de lo que ya existe: sólo se recorren las de la OC que recibe su 5.º producto, y sólo si siguen en su estándar y no han entrado a máquina. La regla de la web (`calcDeliveryDate`). Lo que ya va urgente.
+
+**Para Marcelo.**
+- **Lo grande de temporada necesita su fecha a mano.** Los calendarios de 10,000 a 45,000 piezas tardan unos 20 días hábiles; la estándar les da 11 o 13. Del 1-jun al 13-nov, los 7 calendarios llegaron tarde el 57% aun con los +3. Y del 24-oct al 13-nov (fuera de lo que se usó para decidir) la regla nueva no mejora nada: no hubo OC grandes, y lo que llegó tarde fueron sobre todo los calendarios grandes de temporada.
+- **«Cliente autorizó sin prueba»** (la 189, para el ISO): del 9 al 26-nov se usó 2 veces, contra 74 órdenes que salieron de Diseño. Si en la planta se sigue autorizando por teléfono sin marcarlo, la evidencia no queda.
+
+**En producción.** Se anota al subir, con el candado.
+
+**Vuelta atrás.** Se anota al subir. La base no cambia: basta con la pantalla.
+
+**Sin probar.** En un lector de pantalla de verdad (NVDA): se probó el `aria-describedby` y el `aria-live`, no cómo se oye. Con la gente: cuántas veces aceptan «Marcar urgente».
+
 ## v10.84.191 — PrintFlow acepta también el correo completo, y sigue aceptando el nombre (una sola cuenta, paso 3) — 7-nov-2026
 
 Paso 3 de 5 de «una sola cuenta `nombre@sygma.mx`». **Quien entra como siempre, entra como siempre.** Los pasos 4 y 5 (cada quien a su `@sygma.mx` y apagar las cuentas viejas) están listos en `docs/una-sola-cuenta/`, sin aplicar, para el domingo 29-nov.
