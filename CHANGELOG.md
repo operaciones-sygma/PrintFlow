@@ -12,6 +12,41 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.193 — Salir de Diseño pregunta cómo autorizó el cliente (la evidencia para la ISO 9001, 1 de 3) — 27-nov-2026
+
+Marcelo, 27-nov, a «¿qué recomiendas hacer para tener evidencia para la ISO?»: «Que pregunte al salir» de Diseño (las otras dos, «No conformidades» y el reporte mensual de indicadores, van después). Medido ese día en la base, sólo leyendo: de unas 603 salidas de Diseño desde junio, 8 dejaron registro de que el cliente aprobó; desde el 9-nov, 3 de 76.
+
+**Qué pasaba.**
+- «Directo a CTP» (36 desde el 9-nov) y «Sin CTP, Lista» (37) movían la orden en un clic sin decir si el cliente la aprobó: para la auditoría (8.2.3 y 8.6) no había con qué enseñar quién del cliente autorizó, por dónde ni cuándo.
+- 44 de las 75 salidas desde el 9-nov eran del mismo cliente y el mismo producto que una orden anterior: reimpresiones, cuya autorización es la de la original, y tampoco lo decía nada.
+- El botón suelto «Cliente autorizó sin prueba» (la 189) pedía un paso de más y se usó dos veces, el 9-nov.
+
+**Qué se cambió.**
+- «Directo a CTP» y «Sin CTP, Lista» (en la ficha y en el detalle, y cualquier puerta que pase por `advance`) abren «¿Cómo autorizó el cliente P-…?» (`ComoAutorizoVentana`, encima del detalle; la acción es `salir_de_diseno`):
+  - **Aprobó la prueba** (vio el PDF o la foto) o **Autorizó sin ver prueba**: quién del cliente (hasta 60 letras; sin «·» ni «→», que son los que separan el renglón) y por dónde (WhatsApp, correo, teléfono o en persona).
+  - **Es reimpresión sin cambios**: las 5 más nuevas del mismo cliente (por su ficha o, sin ella, por el nombre), de antes que ésta y sin cancelar, primero las del mismo producto; o se escribe el número («p1302», «1302» y «P - 1302» son P-1302). La que no existe, ella misma o un número mal escrito no dejan; la de otro cliente o la cancelada se avisan y dejan.
+  - Lo que falta se dice al pie («Falta: por dónde.»), y «Registrar y pasar a CTP» (o «a Lista») queda siempre a la vista. Esc o el fondo con algo elegido preguntan: «¿Salir sin registrar?».
+- Queda en la bitácora un renglón que empieza con «✅», a nombre de quien la pasó: «✅ Cliente aprobó la prueba · Ana Pérez por WhatsApp · 🎨 Diseño → 💿 CTP», «✅ Cliente autorizó sin ver prueba · …», «✅ Reimpresión sin cambios de P-0743 · …». Y `proof_approved`, en el mismo UPDATE que el cambio de etapa y con su condición; como en la 189, sin el renglón la autorización no se queda y la orden regresa a Diseño.
+- El detalle («Cliente autorizó») y la ficha («Aprobó», «Autorizó», «Reimpresión», «Prueba») dicen cómo fue. Lo que guardó la 189 se sigue leyendo igual.
+- Se fue el botón suelto «Cliente autorizó sin prueba»: es una de las tres respuestas.
+- El renglón del detalle (`FilaDelDetalle`, el de todas sus filas) parte una palabra larga: el nombre que se escribe se salía.
+
+**Cómo se probó.**
+- **Vuelta 1, escrita antes del código** (`343a228`): 82 pruebas contra la app de hoy, **53 fallaban** (la app no preguntaba, enseñaba cuatro botones y no sabía leer las respuestas nuevas). Con el código, 76 de 82 a la primera. Las 6 que fallaban eran de la prueba: cinco buscaban «Cliente autorizó» con minúsculas (el detalle lo pinta en mayúsculas; las de la 189 llevaban la `i`) y una hacía el clic fuera dentro de los 600 ms del escudo contra el doble clic, que es a propósito. Corregidas, 6 de 6.
+- Las de la 189 que cuidaban el botón suelto (ses-200 a ses-228) cuidan lo mismo por la puerta nueva: el doble clic escribe una vez, otra sesión la movió, la base que no guarda, sin el renglón no queda autorizada, la ventana que se queda vieja, el teclado de punta a punta, los datos raros y las dos pantallas. ses-209 y ses-210 pasaron de «se queda como estaba» a «ya pregunta».
+- Tanda nueva **`sesion-5`** (ses-400 en adelante; la app real, puerto 5474) y en `detalle` det-252 a det-275. 🔑 **El banco del detalle copia de `App.jsx` renglón por renglón** lo que dice cómo autorizó el cliente: `autorizacionDelCliente` va en UN renglón (partida en varios, el banco no compilaba).
+
+**Qué NO se tocó.** La base (ninguna migración: un renglón de la bitácora y `proof_approved`, como la 189). «Prueba de Color» y «Cliente Aprobó» (la prueba de color) siguen igual. Lo ya autorizado.
+
+**Para Marcelo.**
+- Hablarlo con Noemí: cada salida de Diseño le pregunta ahora (un clic y, si no es reimpresión, el nombre de quien autorizó y por dónde).
+- «Cliente Aprobó», después de la prueba de color, todavía no pide quién del cliente ni por dónde (9 órdenes desde junio): si lo quieres igual, es un cambio chico.
+- Si quieres de vuelta el botón suelto, se regresa fácil.
+
+**Sin probar.** Con Noemí de verdad (cuánto tarda en contestar y si elige bien). En un lector de pantalla de verdad.
+
+---
+
 ## v10.84.192 — La fecha estándar, segunda vuelta: +3 a libros, libretas y calendarios, una sola fecha en la OC grande, y la fecha corta avisa — 26-nov-2026
 
 Marcelo, 8-nov: «Crees que también se pueda mejorar el sistema de fecha recomendada, analiza todo, hay veces que son más de 10,000 piezas, 40,000, 100,000 etc… también si tiene acabado, analiza datos y historial». Con su crítica (26/40, `.impeccable/critique/2026-11-08T10-14-03Z__src-app-jsx-orderform-fecha-de-entrega.md`) y lo medido, sus respuestas del 26-nov: la regla, «Los dos»; el tiraje, «Nada más»; la pantalla, «Todo»; la fecha corta, «Avisa y ofrece marcarla».
