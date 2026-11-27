@@ -3725,6 +3725,87 @@ await caso("ses-451-la-orden-escrita-sin-p", async ({ p, s }) => {
   const c = escritoEn(s, "no_conformidades")[0]?.cuerpo;
   ok("ses-451-la-orden-escrita-sin-p", c?.order_id === "OP-P-1400" && c?.canal === "persona" && c?.cliente === "LIC. ORLANDO CASAS", JSON.stringify(c));
 });
+// ════════════════════════ v10.84.195: «Indicadores del mes» (ISO 9001 6.2, 9.1.3 y 9.3; las metas de Marcelo, 27-nov) ════════════════════════
+// Lo que debería ver Dirección: cada mes guardado contra las metas de ESE día (no las de hoy), el mes en curso «hasta hoy», sin lectura nada falso, y su
+//   revisión con quién y cuándo. Vuelta 1: escritas contra la primera versión. La base, simulada (s.filas, s.rpcRespuestas, s.contesta).
+const METAS_C = (u = 85) => [{ clave: "entrega_a_tiempo", nombre: "Entrega a tiempo", meta: u + "% o más (entregada o lista a más tardar su día)", umbral: u, sentido: "al_menos", orden: 1 }, { clave: "regresos_por_falla", nombre: "Regresos de etapa por falla", meta: "1 o menos al mes", umbral: 1, sentido: "a_lo_mas", orden: 2 }, { clave: "devoluciones", nombre: "Devoluciones", meta: "0 al mes", umbral: 0, sentido: "a_lo_mas", orden: 3 }, { clave: "quejas", nombre: "Quejas del cliente", meta: "2 o menos al mes", umbral: 2, sentido: "a_lo_mas", orden: 4 }, { clave: "merma", nombre: "Merma", meta: "Que se registre en toda orden que la tenga", umbral: null, sentido: null, orden: 5 }];
+const VALORES = (x = {}) => ({ mes: "2026-11", entrega_a_tiempo: { pct: 85.5, a_tiempo: 47, con_fecha: 55, sin_fecha: 33 }, regresos_por_falla: { n: 2, por_revisar: 1, no_eran: 1 }, devoluciones: { n: 0 }, quejas: { n: 3 }, merma: { renglones: 0, ordenes: 0, piezas: 0, pliegos: 0 }, no_conformidades: { del_mes: 14, abiertas: 6, cerradas: 7, no_eran: 1 }, diseno: { salidas: 95, con_autorizacion: 40 }, ...x });
+const MES_NOV = (x = {}) => ({ mes: "2026-11-01", valores: VALORES(), metas: METAS_C(), guardado_en: "2026-12-01T06:20:00Z", guardado_por: "cada noche", revision: null, acciones: null, revisado_por: null, revisado_en: null, ...x });
+const conInd = (meses = [MES_NOV()], enCurso = VALORES({ mes: "2026-12", quejas: { n: 0 }, regresos_por_falla: { n: 0, por_revisar: 0, no_eran: 0 } })) => ({ filas: { orders: [ordenK("P-1400", { stage: "ctp" })], order_timeline: [], indicadores_mes: meses, metas_calidad: METAS_C() }, enCurso });
+const aInd = async (p, s, quien = "marcelo") => { await abrirYEntrar(p, s, quien); await esperarMenu(p, /^Indicadores del mes$/); await despertar(p); await p.locator('button[title="Indicadores del mes"]').first().click(); await p.waitForTimeout(900); };
+const filaDe = (p, nombre, seccion) => p.getByRole("region", { name: seccion }).getByRole("row", { name: new RegExp("^" + nombre) }).first().innerText().then(t => t.replace(/\s+/g, " ")).catch(() => "(sin la fila)");
+for (const [quien, ve] of [["marcelo", true], ["karla", false], ["noemi", false], ["lupita", false], ["gerardo", false]]) await caso(`ses-460-${quien}-${ve ? "ve" : "no-ve"}-los-indicadores`, async ({ p, s }) => {
+  const c = conInd(); s.filas = c.filas; s.rpcRespuestas.indicadores_del_mes_en_curso = c.enCurso;
+  await abrirYEntrar(p, s, quien); await esperarMenu(p, /^Todas$/); await despertar(p);
+  const menu = await p.evaluate(() => [...document.querySelectorAll("button[title]")].map(b => b.title));
+  ok(`ses-460-${quien}-${ve ? "ve" : "no-ve"}-los-indicadores`, menu.includes("Indicadores del mes") === ve, menu.filter(t => /Indicadores|Analytics/.test(t)).join(" | ") || "(ninguna)");
+});
+await caso("ses-461-el-mes-guardado-contra-sus-metas", async ({ p, s }) => {
+  const c = conInd(); s.filas = c.filas; s.rpcRespuestas.indicadores_del_mes_en_curso = c.enCurso;
+  await aInd(p, s);
+  const sec = "Indicadores de noviembre de 2026", f = {};
+  for (const n of ["Entrega a tiempo", "Regresos de etapa por falla", "Devoluciones", "Quejas del cliente", "Merma"]) f[n] = await filaDe(p, n, sec);
+  ok("ses-461-el-mes-guardado-contra-sus-metas", /85\.5% \(47 de 55 con fecha; 33 sin fecha/.test(f["Entrega a tiempo"]) && /✓ Cumple/.test(f["Entrega a tiempo"]) && /✗ No cumple/.test(f["Regresos de etapa por falla"]) && /1 por revisar/.test(f["Regresos de etapa por falla"]) && /✓ Cumple/.test(f["Devoluciones"]) && /✗ No cumple/.test(f["Quejas del cliente"]) && /No se registró merma/.test(f["Merma"]) && /—$/.test(f["Merma"].trim()),
+    JSON.stringify(f));
+});
+await caso("ses-462-el-mes-en-curso-hasta-hoy", async ({ p, s }) => {
+  const c = conInd(); s.filas = c.filas; s.rpcRespuestas.indicadores_del_mes_en_curso = c.enCurso;
+  await aInd(p, s);
+  const t = await p.getByRole("region", { name: "El mes en curso" }).innerText().then(x => x.replace(/\s+/g, " ")).catch(() => "");
+  ok("ses-462-el-mes-en-curso-hasta-hoy", /diciembre de 2026 · hasta hoy/.test(t) && /Quejas del cliente.{0,80}✓ Cumple/.test(t), t.slice(0, 200));
+});
+await caso("ses-463-sin-lectura-no-dice-nada-falso", async ({ p, s }) => {
+  const c = conInd(); s.filas = { ...c.filas, indicadores_mes: "falla" }; s.rpcRespuestas.indicadores_del_mes_en_curso = c.enCurso;
+  await aInd(p, s);
+  await p.getByText(/No se pudieron leer los indicadores/).first().waitFor({ timeout: 12000 }).catch(() => {});   // (con 503 la librería reintenta ~7 s)
+  const t = await texto(p);
+  ok("ses-463-sin-lectura-no-dice-nada-falso", /No se pudieron leer los indicadores/.test(t) && !/Todavía no se guarda ningún mes/.test(t), (t.match(/No se pudieron.{0,60}|Todavía no se guarda.{0,40}/) || [t.slice(0, 120)])[0]);
+});
+await caso("ses-464-si-el-mes-en-curso-falla-lo-dice", async ({ p, s }) => {
+  const c = conInd(); s.filas = c.filas; s.rpcFalla = "indicadores_del_mes_en_curso";
+  await aInd(p, s);
+  const t = await texto(p);
+  ok("ses-464-si-el-mes-en-curso-falla-lo-dice", /No se pudo leer el mes en curso/.test(t) && /noviembre de 2026/.test(t), (t.match(/No se pudo leer el mes.{0,60}/) || [t.slice(0, 120)])[0]);
+});
+await caso("ses-465-sin-meses-guardados-lo-dice", async ({ p, s }) => {
+  const c = conInd([]); s.filas = c.filas; s.rpcRespuestas.indicadores_del_mes_en_curso = VALORES();
+  await aInd(p, s);
+  const t = await texto(p);
+  ok("ses-465-sin-meses-guardados-lo-dice", /Todavía no se guarda ningún mes: el primero, noviembre, se guarda solo el 1 de diciembre/.test(t), (t.match(/Todavía no.{0,90}/) || [t.slice(0, 120)])[0]);
+});
+await caso("ses-466-la-revision-queda-con-quien", async ({ p, s }) => {
+  const c = conInd(); s.filas = c.filas; s.rpcRespuestas.indicadores_del_mes_en_curso = c.enCurso;
+  s.contesta.indicadores_mes = (m, cuerpo) => [{ ...MES_NOV(), ...cuerpo, revisado_por: "admin", revisado_en: new Date().toISOString() }];
+  await aInd(p, s);
+  const r = p.getByRole("region", { name: "Indicadores de noviembre de 2026" });
+  await r.getByLabel(/Revisión de Dirección/).fill("85% a tiempo, en la meta; las quejas, arriba");
+  await r.getByLabel(/Lo que se decide hacer/).fill("Revisar con Lupita las quejas de color");
+  await r.getByRole("button", { name: "Guardar la revisión" }).click();
+  await esperarQue(() => escritoEn(s, "indicadores_mes", "PATCH").length > 0, 6000); await p.waitForTimeout(500);
+  const u = escritoEn(s, "indicadores_mes", "PATCH")[0], t = await texto(p);
+  ok("ses-466-la-revision-queda-con-quien", JSON.stringify(u?.cuerpo) === JSON.stringify({ revision: "85% a tiempo, en la meta; las quejas, arriba", acciones: "Revisar con Lupita las quejas de color" }) && /mes=eq\.2026-11-01/.test(u?.qs) && /Revisado por Administrador/.test(t) && /Quedó la revisión de noviembre de 2026/.test(t),
+    `${JSON.stringify(u?.cuerpo)} ${u?.qs}`);
+});
+await caso("ses-467-sin-entregas-con-fecha-no-inventa", async ({ p, s }) => {
+  const c = conInd([MES_NOV({ valores: VALORES({ entrega_a_tiempo: { pct: null, a_tiempo: 0, con_fecha: 0, sin_fecha: 4 } }) })]); s.filas = c.filas; s.rpcRespuestas.indicadores_del_mes_en_curso = c.enCurso;
+  await aInd(p, s);
+  const f = await filaDe(p, "Entrega a tiempo", "Indicadores de noviembre de 2026");
+  ok("ses-467-sin-entregas-con-fecha-no-inventa", /Sin entregas con fecha \(4 sin fecha\)/.test(f) && /—$/.test(f.trim()) && !/NaN|null|0%|✗/.test(f), f);
+});
+await caso("ses-468-cada-mes-con-las-metas-de-ese-dia", async ({ p, s }) => {
+  const c = conInd([MES_NOV({ metas: METAS_C(90) })]); s.filas = c.filas; s.rpcRespuestas.indicadores_del_mes_en_curso = VALORES({ mes: "2026-12" });
+  await aInd(p, s);
+  const guardado = await filaDe(p, "Entrega a tiempo", "Indicadores de noviembre de 2026"), hoy = await filaDe(p, "Entrega a tiempo", "El mes en curso");
+  // noviembre se guardó con la meta de 90 (85.5 no cumple); el mes en curso, con la de hoy (85: cumple)
+  ok("ses-468-cada-mes-con-las-metas-de-ese-dia", /90% o más/.test(guardado) && /✗ No cumple/.test(guardado) && /85% o más/.test(hoy) && /✓ Cumple/.test(hoy), `${guardado} | ${hoy}`);
+});
+for (const [id, vp] of [["ses-469a-a-1366", { width: 1366, height: 768 }], ["ses-469b-a-1920", { width: 1920, height: 1080 }]]) await caso(id + "-con-datos-raros-no-se-sale", async ({ p, s }) => {
+  const largo = "Benachrichtigungseinstellungen".repeat(6);
+  const c = conInd([MES_NOV({ revision: largo + " 🎉 عربي", acciones: largo, revisado_por: "admin", revisado_en: haceH(2) })]); s.filas = c.filas; s.rpcRespuestas.indicadores_del_mes_en_curso = c.enCurso;
+  await aInd(p, s);
+  const r = await p.evaluate(() => ({ ancho: document.documentElement.scrollWidth, ventana: innerWidth, sale: [...document.querySelectorAll("section *")].filter(x => !/^(INPUT|TEXTAREA|TABLE|TBODY|THEAD|TR)$/.test(x.tagName) && x.scrollWidth > x.clientWidth + 2 && getComputedStyle(x).overflowX !== "auto").length }));
+  ok(id + "-con-datos-raros-no-se-sale", r.ancho <= r.ventana && r.sale === 0, JSON.stringify(r));
+}, { viewport: vp });
 await caso("ses-446-el-historial-dice-quien-y-que", async ({ p, s }) => {
   s.filas = conNC([NCF("NC-0001", { es_no_conformidad: true, causa: "RGB", historial: [{ en: haceH(3), por: "admin", cambios: { es_no_conformidad: [null, true], causa: [null, "RGB"] } }], cambiada_en: haceH(3), cambiada_por: "admin" })]);
   await aNC(p, s);
