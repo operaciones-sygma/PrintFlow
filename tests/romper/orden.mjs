@@ -5,6 +5,7 @@
 // tocar lo que no guarda.
 // Uso: node orden.mjs <dir-capturas> [puerto=5188]   ·   SOLO=<regex> corre sólo los casos que coinciden (sabotajes)
 import { chromium } from "playwright";
+import { NO_EMPEZO } from "../../scripts/reintento.mjs";   // 27-nov: la marca de lo que ni empezó (la segunda oportunidad, igual en las cuatro apps)
 import { deVite } from "../consola.mjs";   // (v10.84.117) el canal de recarga de Vite no es la app
 import fs from "node:fs";
 const OUT = process.argv[2] || "."; const PORT = Number(process.argv[3] || 5188);
@@ -32,9 +33,10 @@ async function caso(nombre, query, fn, viewport = { width: 1366, height: 768 }, 
     page.setDefaultTimeout(6000); page.setDefaultNavigationTimeout(30000);
     await page.goto(`http://127.0.0.1:${PORT}/?${query}`);
     await page.waitForSelector("#log", { state: "attached", timeout: 30000 }); await page.waitForTimeout(400);   // (la primera carga, con dos tandas a la vez, puede pasar de 6 s: espera hasta 30, como la navegación)
+    page.empezo = true;   // 27-nov (NO_EMPEZO): hasta aquí sólo se abrió la página; de aquí en adelante corren las pruebas
     await fn(page);
-  } catch (e) { ok(nombre + " (la prueba se cayó)", false, e.message.split("\n")[0]); }
-  if (errs.length) ok(nombre + " · errores de consola", false, errs.join(" ; ").slice(0, 300));
+  } catch (e) { ok(nombre + " (la prueba se cayó)", false, e.message.split("\n")[0] + (page.empezo ? "" : "  " + NO_EMPEZO)); }
+  if (errs.length) ok(nombre + " · errores de consola", false, errs.join(" ; ").slice(0, 300) + (page.empezo ? "" : "  " + NO_EMPEZO));
   if (nativos.length) ok(nombre + " · usó un diálogo del navegador", false, nativos.join(" ; "));
   await page.screenshot({ path: OUT + "/" + nombre.split(" ")[0] + ".png" }).catch(() => {});
   await page.close();

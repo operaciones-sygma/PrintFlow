@@ -9,12 +9,13 @@ import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { leer, aRepetir, queRepetir, combinar, hacerSinSegunda, candados, TOPE_DE_GOLPE } from './reintento.mjs';
+import * as todoReintento from './reintento.mjs';   // NO_EMPEZO (27-nov), por nombre: así la prueba corre también contra la copia de antes
 import { cargar, anotar, pendientes, revisar, textoDePendientes } from './inestables.mjs';
 
 const AQUI = path.dirname(fileURLToPath(import.meta.url));
 // La huella de los dos módulos (sin finales de línea): la misma en los cuatro repos. Si cambias uno, cópialo a los cuatro y pon aquí la
 // huella nueva en los cuatro (la prueba rei-14 dice cuál salió).
-const HUELLA = '65560ec85d7debe1';
+const HUELLA = 'da4de60e749074d4';   // 27-nov-2026: lo que ni empezó (NO_EMPEZO). Antes, '65560ec85d7debe1' (8-oct)
 const res = [];
 const ok = (id, cond, desc, detalle = '') => res.push(`${cond ? 'PASA ' : 'FALLA'} ${id} ${desc}${cond ? '' : '  · ' + detalle}`);
 const igual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -115,6 +116,44 @@ try {
     && fs.readFileSync(tmp, 'utf8').startsWith('{"entradas": [ {"clave": "cobranza/cob-57"') && subidaRota.status === 1,
     'una bitácora que no se puede leer frena la subida (no cuenta como vacía) y no se sobrescribe ni se marca', JSON.stringify({ ilegible: rota.ilegible, anotoEnRota, revisoEnRota, subida: subidaRota.status }));
 } finally { fs.rmSync(tmp, { force: true }); fs.rmSync(tmp + '.tmp', { force: true }); }
+
+// ── 27-nov-2026: lo que ni empezó (Marcelo: «sí, da una segunda oportunidad»; la decisión del 6-nov) ──
+// La sesión (o el caso) que se cayó antes de correr cualquier prueba —la página ni abrió: ERR_NO_BUFFER_SPACE, un arranque de golpe— no pudo
+// esconder un doble envío: se repite UNA vez aunque sea de dinero, y si pasa sale INESTABLE como cualquiera. Lo que sí corrió sigue sin
+// segunda oportunidad. El corredor de cada repo marca esa línea con NO_EMPEZO.
+const NO_EMPEZO = todoReintento.NO_EMPEZO;
+const marca = String(NO_EMPEZO);
+ok('rei-22', typeof NO_EMPEZO === 'string' && /^⟪[^⟫]{8,}⟫$/.test(NO_EMPEZO), 'reintento.mjs dice con qué se marca lo que ni empezó (NO_EMPEZO)', String(NO_EMPEZO));
+const deRep = hacerSinSegunda({ tandasDeDinero: ['rep', 'folio'], tanda: 'rep', idsDeDinero: ['fis-44'] });
+const R1 = leer([
+  `FALLA rep-mil-arranque la sesión no pudo empezar  · page.goto: net::ERR_NO_BUFFER_SPACE  ${marca}  ⟦rep-mil⟧`,
+  'FALLA rep-otra-arranque la sesión no pudo empezar  · locator.click: Timeout 30000ms exceeded.  ⟦rep-otra⟧',
+  'FALLA rep-07 timbra una sola vez  · 2 timbres  ⟦rep-cien⟧',
+].join('\n'));
+const qR = queRepetir(R1, deRep);
+ok('rei-23', qR.sesiones.join(',') === 'rep-mil' && aRepetir(R1, deRep).join(',') === 'rep-mil-arranque',
+  'en una tanda de dinero, la sesión que ni empezó SÍ se repite; la que se cayó con algo corrido y la prueba de dinero que falló, no', JSON.stringify(qR));
+const cR = combinar(R1, leer('PASA  rep-mil-arranque la sesión empezó y no se cayó\nPASA  rep-07 timbra una sola vez'), deRep);
+ok('rei-24', cR.porPrueba['rep-mil-arranque'] === 'PASA' && cR.inestables.join(',') === 'rep-mil-arranque' && cR.porPrueba['rep-otra-arranque'] === 'FALLA'
+  && cR.porPrueba['rep-07'] === 'FALLA' && (cR.detalle['rep-07'] || []).some(d => /sin segunda oportunidad/.test(d)),
+  'si a la segunda empieza y pasa, sale INESTABLE (se anota y se revisa); lo de dinero que corrió y falló sigue frenando', JSON.stringify({ p: cR.porPrueba, i: cR.inestables }));
+const cR2 = combinar(R1, leer(`FALLA rep-mil-arranque la sesión no pudo empezar  · otra vez  ${marca}  ⟦rep-mil⟧`), deRep);
+ok('rei-25', cR2.porPrueba['rep-mil-arranque'] === 'FALLA' && !cR2.inestables.length && (cR2.detalle['rep-mil-arranque'] || []).some(d => /^\(a la segunda\)/.test(d)),
+  'si tampoco empieza a la segunda, frena (y dice las dos veces)', JSON.stringify(cR2.detalle['rep-mil-arranque']));
+ok('rei-26', !deRep('fis-44', `x  ${marca}`) && !hacerSinSegunda({})('doble-clic-cobro-arranque', `la sesión no pudo empezar  ${marca}  ⟦doble-clic-cobro⟧`)
+  && hacerSinSegunda({})('doble-clic-cobro-arranque', 'la sesión no pudo empezar  ⟦doble-clic-cobro⟧') && deRep('rep-03', 'se cayó a media sesión'),
+  'la marca gana también sobre la doble acción y el id de dinero (nada corrió); sin la marca, todo sigue como antes', '');
+// (en PrintFlow la línea «se cayó» comparte el id con las afirmaciones del caso) si una sola de sus FALLA no lleva la marca, algo corrió:
+// sin segunda oportunidad. Con todas marcadas, sí.
+const R3 = leer([`FALLA inv-33 (la prueba se cayó)  · page.goto: net::ERR_NO_BUFFER_SPACE  ${marca}`, 'FALLA inv-33 un solo folio  · salieron 2',
+  `FALLA inv-34 (la prueba se cayó)  · page.goto: net::ERR_NO_BUFFER_SPACE  ${marca}`, `FALLA inv-34 · errores de consola  · Failed to load resource  ${marca}`].join('\n'));
+const deFolio = hacerSinSegunda({ tandasDeDinero: ['folio'], tanda: 'folio' });
+const cR3 = combinar(R3, leer('PASA  inv-33 un solo folio\nPASA  inv-34 el total a la vista'), deFolio);
+ok('rei-28', aRepetir(R3, deFolio).join(',') === 'inv-34' && cR3.porPrueba['inv-33'] === 'FALLA' && cR3.porPrueba['inv-34'] === 'PASA' && cR3.inestables.join(',') === 'inv-34',
+  'con una sola línea sin la marca (algo corrió) no hay segunda oportunidad; con todas marcadas, sí', JSON.stringify({ rep: aRepetir(R3, deFolio), p: cR3.porPrueba }));
+const golpe = candados({ inestables: ['rep/a-arranque', 'rep/b-arranque', 'timbrar/c-arranque', 'folio/d-arranque'].map(clave => ({ clave })), historial: [], ahora });
+ok('rei-27', golpe.deGolpe && golpe.frenan.size === 4,
+  'cuatro que ni empezaron y pasan a la segunda son cuatro de golpe: frenan (la red, la carga), como cualquier otra', JSON.stringify([...golpe.frenan]));
 
 // ── la misma en los cuatro repos ──
 const sinCR = f => fs.readFileSync(path.join(AQUI, f), 'utf8').replace(/\r\n/g, '\n');

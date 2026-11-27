@@ -16,6 +16,11 @@
 //   1. MÁS DE 3 DE GOLPE FRENAN: varias a la vez no son mala suerte (la red, la carga del equipo, o un cambio que hace lenta la app).
 //   2. SIN SEGUNDA OPORTUNIDAD: las pruebas de doble acción (doble clic, doble toque, doble Enter) y las de dinero (lo que timbra,
 //      folia o factura; cada repo dice cuáles). Ahí fallar a veces ES el bug: un doble envío que se cuela una de cada dos veces.
+//      🔑 SALVO LO QUE NI EMPEZÓ (27-nov-2026, Marcelo: «sí, da una segunda oportunidad»; la decisión del 6-nov): la sesión (o el caso)
+//      que se cayó antes de correr cualquier prueba —la página ni abrió: ERR_NO_BUFFER_SPACE, un arranque de golpe— no pudo esconder un
+//      doble envío, porque nada corrió. Ésa se repite UNA vez como las demás y, si pasa, sale INESTABLE (con los candados 1, 3 y 4). Lo que
+//      sí corrió sigue sin segunda oportunidad. El corredor de cada repo marca con NO_EMPEZO cada FALLA de lo que ni empezó, y sólo
+//      cuando nada corrió; si una sola FALLA de esa prueba no la lleva, algo corrió y no hay segunda.
 //   3. LA MISMA, INESTABLE OTRA VEZ, FRENA: si ya salió inestable en los últimos 14 días (revisada o no), no es suerte.
 //   4. NO SE SUBE CON UNA INESTABLE SIN REVISAR (lo hace el corredor de cada repo con scripts/inestables.mjs).
 
@@ -36,10 +41,11 @@ export function leer(salida) {
   return { porPrueba, detalle, sesionDe };
 }
 
-// Las que fallaron y SÍ se repiten (las que no tienen segunda oportunidad se quedan como están). `sinSegunda(id, texto)` dice cuáles no.
+// Las que fallaron y SÍ se repiten (las que no tienen segunda oportunidad se quedan como están). `sinSegunda(id, texto, lineas)` dice
+// cuáles no (`lineas`: cada FALLA de esa prueba; `texto`: las mismas, juntas).
 export function aRepetir(leida, sinSegunda = () => false) {
   return Object.entries(leida.porPrueba)
-    .filter(([id, estado]) => estado === 'FALLA' && !sinSegunda(id, (leida.detalle[id] || []).join(' | ')))
+    .filter(([id, estado]) => estado === 'FALLA' && !sinSegunda(id, (leida.detalle[id] || []).join(' | '), leida.detalle[id] || []))
     .map(([id]) => id).sort();
 }
 
@@ -62,7 +68,7 @@ export function combinar(primera, segunda, sinSegunda = () => false) {
   const inestables = [];
   for (const [id, estado] of Object.entries(primera.porPrueba)) {
     if (estado !== 'FALLA') continue;
-    if (sinSegunda(id, (primera.detalle[id] || []).join(' | '))) {
+    if (sinSegunda(id, (primera.detalle[id] || []).join(' | '), primera.detalle[id] || [])) {
       detalle[id] = [...(detalle[id] || []), '(sin segunda oportunidad: es de doble acción o de dinero; si falla a veces, eso es el bug)'];
       continue;
     }
@@ -78,10 +84,16 @@ export const TOPE_DE_GOLPE = 3;
 export const DIAS_PARA_REPETIDA = 14;
 // Las pruebas de doble acción, por su nombre: «doble clic», «doble-toque», «doble Enter», «doble Ctrl+Enter».
 export const DOBLE_ACCION = /doble[\s_-]+(clic|click|toque|enter|ctrl)/i;
-// ¿Esta prueba tiene segunda oportunidad? No, si es de doble acción o si es de una tanda de dinero (cada repo da las suyas).
+// La marca de lo que ni empezó (candado 2): el corredor la pone en la línea de la sesión (o del caso) que se cayó antes de correr nada.
+export const NO_EMPEZO = '⟪no empezó: ninguna prueba corrió⟫';
+// ¿Esta prueba tiene segunda oportunidad? No, si es de doble acción o si es de una tanda de dinero (cada repo da las suyas), salvo que
+// TODAS sus líneas digan que ni empezó: si una no lo dice, algo corrió (con `lineas`; sin ellas, se mira el texto junto).
 export function hacerSinSegunda({ tandasDeDinero = [], tanda = '', idsDeDinero = [] } = {}) {
   const deDinero = tandasDeDinero.includes(tanda);
-  return (id, texto = '') => deDinero || idsDeDinero.includes(id) || DOBLE_ACCION.test(id) || DOBLE_ACCION.test(texto);
+  return (id, texto = '', lineas = null) => {
+    const noEmpezo = Array.isArray(lineas) && lineas.length ? lineas.every(l => String(l).includes(NO_EMPEZO)) : String(texto).includes(NO_EMPEZO);
+    return !noEmpezo && (deDinero || idsDeDinero.includes(id) || DOBLE_ACCION.test(id) || DOBLE_ACCION.test(texto));
+  };
 }
 
 // Decide qué de lo que pasó a la segunda NO se acepta. `inestables`: [{clave, linea}] de esta corrida (clave = «tanda/id»);

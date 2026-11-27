@@ -12,6 +12,35 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## Pruebas: la segunda oportunidad de lo que ni empezó, la misma de las cuatro apps — 27-nov-2026 (sólo pruebas, la app no cambia)
+
+Marcelo, 27-nov: *«sí, da una segunda oportunidad»* (la decisión del 6-nov, en `../cobranzaflow/docs/PENDIENTES.md`). Las tandas de dinero no
+repetían ni el caso que no llegó a abrir su página. El 5-nov frenaron tres candados de PrintFlow por `net::ERR_NO_BUFFER_SPACE` en una prueba
+de dinero distinta cada vez, y la 184 subió al cuarto intento.
+
+**Lo que se cambió.**
+- `scripts/reintento.mjs` y `scripts/probar-reintento.mjs`, copiados de CobranzaFlow v3.7.1057, porque son iguales en las cuatro apps. La huella
+  nueva es `da4de60e749074d4`. Una prueba de dinero o de doble acción se repite una vez si TODAS sus FALLA dicen que ni empezó (`NO_EMPEZO`), y
+  si pasa sale INESTABLE con los candados de siempre.
+- El `caso` de las 7 tandas de dinero con navegador (`folio`, `oc`, `plan`, `partes`, `cancelar`, `orden` y `venta-inventario`) prende
+  `page.empezo` justo antes de `fn(page)`. Si se cae antes, su «se cayó» y su «errores de consola» llevan la marca. Lo que ya llamó a sus
+  pruebas pudo apretar un botón de dinero: sin marca, sin segunda oportunidad, como antes. `corregir` y `cancelaciones` no abren página.
+- La tanda nueva `no-empezo`, sin banco.
+
+**Cómo se probó.**
+- **Vuelta 1, antes del marcado:** emp-01 a emp-07, que leen el `caso` de cada tanda, caían las 7. emp-11 a emp-17 corren cada tanda contra el
+  puerto 9, donde Chromium ni intenta abrir la página (`ERR_UNSAFE_PORT`), y caían las 7: los 231 casos que ni abrieron la página se caían sin
+  la marca.
+- **Con el marcado:** 15 de 15, en 18 s.
+- **4 sabotajes, todos caen:** `folio` sin la marca en «se cayó»; `oc` prendiendo la marca antes de abrir la página; `plan` con la marca
+  siempre puesta; y la regla compartida ignorando la marca.
+- `probar-reintento.mjs` da 28 de 28, con rei-22 a rei-28 nuevos. El candado completo corre al subir.
+
+**No se tocó:** la app, ni la base.
+
+**Documentos:** `tests/LEEME.md` (el punto de los candados decía sólo `folio`, `oc`, `partes`, `cancelar` y `orden`; ahora va la lista entera y
+la tanda `no-empezo`) y la regla 21 del `CLAUDE.md`.
+
 ## v10.84.193 — Salir de Diseño pregunta cómo autorizó el cliente (la evidencia para la ISO 9001, 1 de 3) — 27-nov-2026
 
 Marcelo, 27-nov, a «¿qué recomiendas hacer para tener evidencia para la ISO?»: «Que pregunte al salir» de Diseño (las otras dos, «No conformidades» y el reporte mensual de indicadores, van después). Medido ese día en la base, sólo leyendo: de unas 603 salidas de Diseño desde junio, 8 dejaron registro de que el cliente aprobó; desde el 9-nov, 3 de 76.

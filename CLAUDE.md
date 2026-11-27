@@ -148,7 +148,9 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
     misma metodología para todos los proyectos»): lo que falla se repite UNA vez (sólo sus casos, con `SOLO`); lo que vuelve a fallar
     frena; lo que pasa a la segunda sale **INESTABLE**: se sube, queda anotado y se revisa, y **no se sube otra vez con una sin
     revisar** (`node scripts/inestables.mjs`; se marca con `revisada <id> "qué era"`). Más de 3 a la vez frenan; sin segunda
-    oportunidad las tandas de dinero (`folio`, `oc`, `partes`) y lo de doble acción; la misma otra vez en 14 días frena.
+    oportunidad las tandas de dinero (`TANDAS_DE_DINERO` de `scripts/probar.mjs`) y lo de doble acción, 🔑 salvo el caso que ni empezó (27-nov, sólo
+    pruebas; Marcelo: *«sí, da una segunda oportunidad»*): el `caso` de una tanda de dinero con navegador prende `page.empezo` justo antes de
+    `fn(page)`, y lo que se cayó antes lleva `NO_EMPEZO` y se repite una vez (tanda `no-empezo`); la misma otra vez en 14 días frena.
     🔎 **Y `npm run recorrido`** (v10.84.36) después de un cambio grande y después de subir: abre TODA la app como cada rol con
     la cuenta de pruebas `visor` y las escrituras cortadas en el navegador (~4 min, cero agentes; `tests/LEEME.md`). Contra la app publicada
     también manda la contraseña de sitio (desde v10.84.162; sin `credencial-sitio.json` se detiene diciendo qué falta).

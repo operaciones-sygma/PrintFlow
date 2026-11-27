@@ -78,6 +78,9 @@ const TANDAS = [
   // sin banco: «Cancelaciones» cancela cada orden completa, como el detalle (v10.84.113, P-0629): src/lib/cancelarEnLote.js con una base de mentira
   //   (la fila de la máquina antes de la RPC, el historial, el comentario, los avisos; el rechazo regresa la orden a su lugar)
   { nombre: "cancelaciones", romper: "tests/romper/cancelaciones.mjs" },
+  // sin banco (27-nov, sólo pruebas): la segunda oportunidad de lo que ni empezó; lee el `caso` de las 7 tandas de dinero con navegador y las corre
+  //   contra un puerto donde la página no abre: cada caso lleva NO_EMPEZO y se repetiría, aunque la tanda sea de dinero
+  { nombre: "no-empezo", romper: "tests/romper/no-empezo.mjs" },
   // «¿ya existe este cliente?» al capturar una orden o una OC: lo que casi seguro ya existe lo frena y dice cuál es (v10.84.69, con
   // CobranzaFlow v3.7.999m); el banco extrae la pregunta, su montaje y la lógica de las dos puertas, con la base simulada
   { nombre: "cliente", gen: "tests/banco/gen-cliente.mjs", romper: "tests/romper/cliente.mjs", puerto: 5192 },
@@ -163,6 +166,8 @@ const TANDAS = [
 // subida no pasa con una sin revisar). Sin segunda oportunidad: las tandas de dinero (las que folian y facturan) y toda prueba de doble
 // acción; más de 3 a la vez, o la misma otra vez en 14 días, frenan. Las tandas que aceptan SOLO repiten sólo sus casos que fallaron;
 // las demás (cortas), completas.
+// 🔑 27-nov (Marcelo: «sí, da una segunda oportunidad»; la misma en las cuatro apps) — salvo el caso que ni empezó: el `caso` de las de dinero
+// con navegador prende `page.empezo` justo antes de sus pruebas, y lo que se cayó antes lleva NO_EMPEZO y se repite una vez (tanda no-empezo).
 const TANDAS_DE_DINERO = ["folio", "oc", "plan", "partes", "cancelar", "orden", "orden-2", "corregir", "cancelaciones", "venta-inventario"];   // cancelar mueve facturas y saldos; orden, el precio de una facturada; corregir, el de una por facturar: sin segunda oportunidad
 const sinSegundaDe = tanda => hacerSinSegunda({ tandasDeDinero: TANDAS_DE_DINERO, tanda });
 const TOPE_MS = 12 * 60 * 1000;   // una tanda colgada no puede detener el candado para siempre

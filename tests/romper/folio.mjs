@@ -1,6 +1,7 @@
 // Tratar de ROMPER «Asignar folio» (InvoiceModal, PreInvoiceModal, MultiPaymentPicker) en el banco de folio. Cada caso afirma lo
 // que DEBERÍA pasar: una FALLA es un bug. Uso: node romper-folio.mjs <dir-capturas> [puerto=5199]
 import { chromium } from "playwright";
+import { NO_EMPEZO } from "../../scripts/reintento.mjs";   // 27-nov: la marca de lo que ni empezó (la segunda oportunidad, igual en las cuatro apps)
 import { deFuera } from "../consola.mjs";   // (un recurso de fuera que no cargó no es error de la app)
 import fs from "node:fs";
 const OUT = process.argv[2] || "."; const PORT = Number(process.argv[3] || 5199);
@@ -19,9 +20,10 @@ async function caso(nombre, query, fn, viewport = { width: 1366, height: 768 }) 
     page.setDefaultTimeout(6000); page.setDefaultNavigationTimeout(30000);
     await page.goto(`http://127.0.0.1:${PORT}/?${query}`);
     await page.waitForSelector("#abrir-inv", { timeout: 30000 });   // (la primera carga, con dos tandas a la vez, puede pasar de 6 s: espera hasta 30, como la navegación)
+    page.empezo = true;   // 27-nov (NO_EMPEZO): hasta aquí sólo se abrió la página; de aquí en adelante corren las pruebas
     await fn(page);
-  } catch (e) { ok(nombre + " (la prueba se cayó)", false, e.message.split("\n")[0]); }
-  if (errs.length) ok(nombre + " · errores de consola", false, errs.join(" ; ").slice(0, 300));
+  } catch (e) { ok(nombre + " (la prueba se cayó)", false, e.message.split("\n")[0] + (page.empezo ? "" : "  " + NO_EMPEZO)); }
+  if (errs.length) ok(nombre + " · errores de consola", false, errs.join(" ; ").slice(0, 300) + (page.empezo ? "" : "  " + NO_EMPEZO));
   await page.close();
 }
 const log = async p => (await p.textContent("#log")) || "";

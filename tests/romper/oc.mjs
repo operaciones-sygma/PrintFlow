@@ -2,6 +2,7 @@
 // una FALLA es un bug. Las cifras salen del banco: 5 órdenes pendientes con subtotal $96,230.50 (con IVA $111,627.38),
 // 2 ya facturadas (F-120, F-121). Uso: node oc.mjs <dir-capturas> [puerto=5195]
 import { chromium } from "playwright";
+import { NO_EMPEZO } from "../../scripts/reintento.mjs";   // 27-nov: la marca de lo que ni empezó (la segunda oportunidad, igual en las cuatro apps)
 import { deFuera } from "../consola.mjs";   // (un recurso de fuera que no cargó no es error de la app)
 import fs from "node:fs";
 const OUT = process.argv[2] || "."; const PORT = Number(process.argv[3] || 5195);
@@ -22,9 +23,10 @@ async function caso(nombre, query, fn, viewport = { width: 1366, height: 768 }) 
     await page.goto(`http://127.0.0.1:${PORT}/?${query}`);
     await page.waitForSelector("#abrir-oc", { timeout: 30000 });   // (la primera carga, con dos tandas a la vez, puede pasar de 6 s: espera hasta 30, como la navegación)
     await page.click("#abrir-oc"); await page.waitForTimeout(800);
+    page.empezo = true;   // 27-nov (NO_EMPEZO): hasta aquí sólo se abrió la página; de aquí en adelante corren las pruebas
     await fn(page);
-  } catch (e) { ok(nombre + " (la prueba se cayó)", false, e.message.split("\n")[0]); }
-  if (errs.length) ok(nombre + " · errores de consola", false, errs.join(" ; ").slice(0, 300));
+  } catch (e) { ok(nombre + " (la prueba se cayó)", false, e.message.split("\n")[0] + (page.empezo ? "" : "  " + NO_EMPEZO)); }
+  if (errs.length) ok(nombre + " · errores de consola", false, errs.join(" ; ").slice(0, 300) + (page.empezo ? "" : "  " + NO_EMPEZO));
   await page.screenshot({ path: OUT + "/" + nombre + ".png" }).catch(() => {});
   await page.close();
 }

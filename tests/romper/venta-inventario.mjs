@@ -6,6 +6,7 @@
 // (80 hojas/kg) a $40 el kg, China impreso a $0.62, Etiqueta colgante a $2.10, Soporte 3-25 a $3.41 y el Cordón sin precio de lista.
 // Uso: node venta-inventario.mjs <dir-capturas> [puerto=5492]   ·   SOLO=<regex> corre sólo los casos que coinciden
 import { chromium } from "playwright";
+import { NO_EMPEZO } from "../../scripts/reintento.mjs";   // 27-nov: la marca de lo que ni empezó (la segunda oportunidad, igual en las cuatro apps)
 import { deFuera } from "../consola.mjs";
 import fs from "node:fs";
 const OUT = process.argv[2] || "."; const PORT = Number(process.argv[3] || 5492);
@@ -26,11 +27,12 @@ async function caso(nombre, query, fn, { viewport = { width: 1366, height: 768 }
     await page.goto(`http://127.0.0.1:${PORT}/?${query}`);
     await page.getByText("Inventario Cuadra").first().waitFor({ timeout: 30000 });
     await page.waitForTimeout(400);
+    page.empezo = true;   // 27-nov (NO_EMPEZO): hasta aquí sólo se abrió la página; de aquí en adelante corren las pruebas
     await fn(page);
     const nativos = (await lineas(page, "alert:")).concat(await lineas(page, "confirm:"));
     if (nativos.length) ok(nombre + " · diálogo nativo", false, nativos.join(" ; ").slice(0, 200));
-  } catch (e) { ok(nombre + " (la prueba se cayó)", false, e.message.split("\n")[0]); }
-  if (errs.length) ok(nombre + " · errores de consola", false, errs.join(" ; ").slice(0, 300));
+  } catch (e) { ok(nombre + " (la prueba se cayó)", false, e.message.split("\n")[0] + (page.empezo ? "" : "  " + NO_EMPEZO)); }
+  if (errs.length) ok(nombre + " · errores de consola", false, errs.join(" ; ").slice(0, 300) + (page.empezo ? "" : "  " + NO_EMPEZO));
   await page.screenshot({ path: OUT + "/" + nombre + ".png" }).catch(() => {});
   await ctx.close();
 }
