@@ -12,7 +12,8 @@
 // hecha con un tiempo fijo: espera la señal (la app abierta, o la pantalla de entrar sin «Verificando…»).
 // Uso: node tests/romper/sesion.mjs [dir-capturas]   (lo corre scripts/probar.mjs)   ·   SOLO=<regex> corre sólo esos casos
 //   SESION_PARTE=1 hasta ses-119, 2 desde ses-120, 3 desde ses-200 (v10.84.173 y v10.84.189: ya no cabía en los 12 minutos de una tanda; cada parte compila aparte y en su puerto),
-//   4 desde ses-300 (v10.84.190, la cuenta: una sola cuenta nombre@sygma.mx); sin SESION_PARTE, todos
+//   4 desde ses-300 (v10.84.190, la cuenta: una sola cuenta nombre@sygma.mx), 5 desde ses-400 (v10.84.193, salir de Diseño pregunta cómo autorizó el cliente);
+//   sin SESION_PARTE, todos
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -21,7 +22,7 @@ import { chromium } from "playwright";
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const OUT = process.argv[2] || path.join(RAIZ, "tests", "salida", "sesion");
 const PARTE = process.env.SESION_PARTE || "";
-const DIST = path.join(RAIZ, "tests", "salida", "sesion-dist" + (PARTE === "2" || PARTE === "3" || PARTE === "4" ? "-" + PARTE : ""));
+const DIST = path.join(RAIZ, "tests", "salida", "sesion-dist" + (PARTE === "2" || PARTE === "3" || PARTE === "4" || PARTE === "5" ? "-" + PARTE : ""));
 fs.mkdirSync(OUT, { recursive: true });
 const SIMULADA = "https://simulada.supabase.co";
 const ANON = "llave-anon-simulada";
@@ -48,7 +49,7 @@ try {
 }
 // (16-oct, la auditoría del candado: era el 5190, el del banco de «plan»; de a 6 tandas corrieron juntas y «plan» no pudo servir su banco. Ahora un
 //   puerto fuera de los de los bancos, 5183-5199; can-g10 lo vigila)
-const servidor = await preview({ root: RAIZ, logLevel: "error", build: { outDir: DIST }, preview: { host: "127.0.0.1", ...(PARTE === "4" ? { port: 5473 } : PARTE === "3" ? { port: 5472 } : PARTE === "2" ? { port: 5471 } : { port: 5470 }), strictPort: false } });
+const servidor = await preview({ root: RAIZ, logLevel: "error", build: { outDir: DIST }, preview: { host: "127.0.0.1", ...(PARTE === "5" ? { port: 5474 } : PARTE === "4" ? { port: 5473 } : PARTE === "3" ? { port: 5472 } : PARTE === "2" ? { port: 5471 } : { port: 5470 }), strictPort: false } });
 const BASE = String(servidor.resolvedUrls?.local?.[0] || "http://127.0.0.1:5470/").replace(/\/$/, "");
 const ORIGEN = new URL(BASE).origin;
 
@@ -307,7 +308,7 @@ const cualesAnonimas = (s, t0) => s.peticiones.filter(x => x.t >= t0 && x.quien 
 
 async function caso(nombre, fn, { viewport = { width: 1366, height: 768 } } = {}) {
   const numeroDelCaso = Number((/^ses-(\d+)/.exec(nombre) || [])[1]);
-  if (PARTE && (numeroDelCaso >= 300 ? "4" : numeroDelCaso >= 200 ? "3" : numeroDelCaso >= 120 ? "2" : "1") !== PARTE) return;
+  if (PARTE && (numeroDelCaso >= 400 ? "5" : numeroDelCaso >= 300 ? "4" : numeroDelCaso >= 200 ? "3" : numeroDelCaso >= 120 ? "2" : "1") !== PARTE) return;
   if (process.env.SOLO && !new RegExp(process.env.SOLO).test(nombre)) return;
   const s = simulada();
   const ctx = await browser.newContext({ viewport });
@@ -2933,31 +2934,54 @@ const EV187 = (pn, h, to_stage, by_user, action) => ({ order_id: "OP-" + pn, act
 const enDiseno = (pn, x = {}) => ({ orders: [ordenK(pn, { stage: "design", created_at: haceH(30), validated_by_production: true, validated_by_preprensa: true, ...x })], order_timeline: [EV187(pn, 30, "draft", "secretaria", "📋 Orden creada"), EV187(pn, 28, "design", "produccion", "📝 → 🎨 Ambos validaron → Diseño")] });
 const escritoEn = (s, tabla, m = "POST") => s.peticiones.filter(x => x.m === m && x.ruta === "/rest/v1/" + tabla);
 const abrirOrden = async (p, s, pn, quien = "noemi") => { await aTodas(p, s, quien); const f = fichaDe(p, pn); await f.focus(); await p.keyboard.press("Enter"); const d = p.getByRole("dialog").first(); await d.waitFor({ timeout: 8000 }); await p.waitForTimeout(400); return d; };
-const BOTON_AUT = /Cliente autorizó sin prueba/;
-const ventanaAut = p => p.getByRole("dialog", { name: /sin prueba de color/ });
-const autorizar = async (p, dlg) => { await dlg.getByRole("button", { name: BOTON_AUT }).click(); await ventanaAut(p).waitFor({ timeout: 6000 }); await p.waitForTimeout(700); };
-const LINEA_AUT = "✅ Cliente autorizó sin prueba de color";
+// v10.84.193 — Marcelo, 27-nov (ISO 9001: de ~603 salidas de Diseño desde junio, 8 con registro de que el cliente aprobó): «Directo a CTP» y «Sin CTP, Lista»
+//   PREGUNTAN cómo autorizó el cliente: aprobó la prueba, autorizó sin ver prueba (quién del cliente y por dónde) o es reimpresión sin cambios de P-…. El botón
+//   suelto «Cliente autorizó sin prueba» de la 189 se fue (es una de las tres respuestas): las pruebas de abajo cuidan lo mismo que cuidaban, por la puerta nueva.
+const BOTON_AUT = /^Cliente autorizó sin prueba/;   // el botón suelto de la 189: ya no debe estar
+const ventanaAut = p => p.getByRole("dialog", { name: /Cómo autorizó el cliente/ });
+const autorizar = async (p, donde, boton = "Directo a CTP") => { await donde.getByRole("button", { name: boton, exact: true }).click(); await ventanaAut(p).waitFor({ timeout: 6000 }); await p.waitForTimeout(500); };
+const COMO = { aprobo: /^Aprobó la prueba/, sin: /^Autorizó sin ver prueba/, reimpresion: /^Es reimpresión sin cambios/ };
+// la respuesta como la da Noemí: cómo autorizó, quién del cliente y por dónde (o de cuál orden es la reimpresión)
+const responder = async (p, { como = "sin", quien = "Lic. Ramírez", canal = "Correo", de = null, otra = null } = {}) => {
+  const v = ventanaAut(p);
+  await v.getByRole("radio", { name: COMO[como] }).check();
+  if (como === "reimpresion") {
+    if (de) await v.getByRole("radio", { name: new RegExp("^" + de + " ") }).check();
+    if (otra != null) await v.getByLabel(/Otra orden/).fill(otra);
+  } else {
+    if (quien != null) await v.getByLabel(/Quién del cliente/).fill(quien);
+    if (canal) await v.getByRole("radio", { name: new RegExp("^" + canal + "$") }).check();
+  }
+  await p.waitForTimeout(200);
+};
+const PASAR = /^Registrar y pasar a /;
+const pasar = async (p, como = "click") => { const b = ventanaAut(p).getByRole("button", { name: PASAR }); if (como === "dblclick") await b.dblclick(); else await b.click(); };
+const LINEA_AUT = "✅ Cliente autorizó sin prueba de color";   // lo que escribía la 189 (2 órdenes, 9-nov): se sigue leyendo
+const LINEA_SIN = "✅ Cliente autorizó sin ver prueba", LINEA_APROBO = "✅ Cliente aprobó la prueba", LINEA_REIMP = "✅ Reimpresión sin cambios de ";
+const A_CTP = " · 🎨 Diseño → 💿 CTP", A_LISTA = " · 🎨 Diseño → ✅ Lista para imprimir";
 // las etiquetas menores de la ficha van detrás de «+N» (v10.84.56): se abren para leerlas
 const fichaConEtiquetas = async (p, pn) => { const b = fichaDe(p, pn).getByRole("button", { name: /Mostrar \d+ etiqueta/ }); if (await b.count()) { await b.first().click(); await p.waitForTimeout(200); } return leerTexto(fichaDe(p, pn)); };
-for (const [id, boton, destino, avisoA] of [["ses-200-noemi-autoriza-y-pasa-a-ctp", /Sí, pasar a CTP/, "ctp", "german"], ["ses-201-noemi-autoriza-y-pasa-sin-ctp-a-lista", /Sí, sin CTP: a Lista/, "ready", "produccion"]]) await caso(id, async ({ p, s }) => {
+for (const [id, boton, destino, avisoA, cola] of [["ses-200-noemi-autoriza-y-pasa-a-ctp", "Directo a CTP", "ctp", "german", A_CTP], ["ses-201-noemi-autoriza-y-pasa-sin-ctp-a-lista", "Sin CTP, Lista", "ready", "produccion", A_LISTA]]) await caso(id, async ({ p, s }) => {
   s.filas = enDiseno("P-1100"); s.ordenesSeMueven = true;
   const dlg = await abrirOrden(p, s, "P-1100");
-  await autorizar(p, dlg);
+  await autorizar(p, dlg, boton);
+  await responder(p, { como: "sin", quien: "Lic. Ramírez", canal: "Correo" });
   const pide = await leerTexto(ventanaAut(p));
   const t0 = Date.now();
-  await ventanaAut(p).getByRole("button", { name: boton }).click();
+  await pasar(p);
   await esperarQue(() => escritoEn(s, "order_comments").length > 0, 6000);
   await p.waitForTimeout(400);
-  const u = escritoEn(s, "orders", "PATCH")[0], tl = escritoEn(s, "order_timeline").map(x => x.cuerpo).find(x => String(x.action).startsWith(LINEA_AUT)), av = escritoEn(s, "notifications").map(x => x.cuerpo), com = escritoEn(s, "order_comments")[0]?.cuerpo;
-  ok(id, !!u && com?.text === LINEA_AUT && u.cuerpo.stage === destino && !isNaN(Date.parse(u.cuerpo.proof_approved)) && Date.parse(u.cuerpo.proof_approved) >= t0 - 60000 && /stage=eq\.design/.test(u.qs) && !!tl && tl.by_user === "preprensa" && tl.to_stage === destino && av.some(a => a.target_role === avisoA) && /a tu nombre/i.test(pide),
-    `PATCH ${JSON.stringify(u?.cuerpo)} ${u?.qs} · bitácora ${JSON.stringify(tl)} · avisos ${av.map(a => a.target_role).join()} · «${pide.slice(0, 90)}»`);
+  const dice = LINEA_SIN + " · Lic. Ramírez por correo";
+  const u = escritoEn(s, "orders", "PATCH")[0], tl = escritoEn(s, "order_timeline").map(x => x.cuerpo).find(x => String(x.action).startsWith(LINEA_SIN)), av = escritoEn(s, "notifications").map(x => x.cuerpo), com = escritoEn(s, "order_comments")[0]?.cuerpo;
+  ok(id, !!u && com?.text === dice && u.cuerpo.stage === destino && !isNaN(Date.parse(u.cuerpo.proof_approved)) && Date.parse(u.cuerpo.proof_approved) >= t0 - 60000 && /stage=eq\.design/.test(u.qs) && !!tl && tl.action === dice + cola && tl.by_user === "preprensa" && tl.to_stage === destino && av.some(a => a.target_role === avisoA) && /a tu nombre/i.test(pide),
+    `PATCH ${JSON.stringify(u?.cuerpo)} ${u?.qs} · bitácora ${JSON.stringify(tl)} · comentario «${com?.text}» · avisos ${av.map(a => a.target_role).join()} · «${pide.slice(0, 90)}»`);
 });
 await caso("ses-202-tambien-desde-la-ficha", async ({ p, s }) => {
   s.filas = enDiseno("P-1101"); s.ordenesSeMueven = true;
   await aTodas(p, s, "noemi");
-  await fichaDe(p, "P-1101").getByRole("button", { name: BOTON_AUT }).click();
-  await ventanaAut(p).waitFor({ timeout: 6000 }); await p.waitForTimeout(700);
-  await ventanaAut(p).getByRole("button", { name: /Sí, pasar a CTP/ }).click();
+  await autorizar(p, fichaDe(p, "P-1101"));
+  await responder(p);
+  await pasar(p);
   await esperarQue(() => escritoEn(s, "order_timeline").length > 0, 6000);
   const u = escritoEn(s, "orders", "PATCH")[0];
   ok("ses-202-tambien-desde-la-ficha", u?.cuerpo?.stage === "ctp" && !!u?.cuerpo?.proof_approved, JSON.stringify(u?.cuerpo));
@@ -2970,24 +2994,26 @@ await caso("ses-203-esc-y-todavia-no-no-escriben-nada", async ({ p, s }) => {
   const tras1 = await ventanaAut(p).count(), sigue1 = await dlg.count();
   await autorizar(p, dlg);
   await ventanaAut(p).getByRole("button", { name: /Todavía no/ }).click(); await p.waitForTimeout(400);
-  const tras2 = await ventanaAut(p).count(), sigue2 = await dlg.getByRole("button", { name: BOTON_AUT }).count();
+  const tras2 = await ventanaAut(p).count(), sigue2 = await dlg.getByRole("button", { name: "Directo a CTP", exact: true }).count();
   const n = s.peticiones.filter(x => x.m !== "GET" && x.m !== "HEAD" && /orders|order_timeline|order_comments/.test(x.ruta) && !/rpc/.test(x.ruta)).length;
   ok("ses-203-esc-y-todavia-no-no-escriben-nada", tras1 === 0 && tras2 === 0 && sigue1 >= 1 && sigue2 === 1 && n === 0, `ventana ${tras1},${tras2} · detalle ${sigue1},${sigue2} · escrituras ${n}`);
 });
-for (const [id, boton] of [["ses-204a-doble-clic-en-pasar-a-ctp-una-sola-vez", /Sí, pasar a CTP/], ["ses-204b-doble-clic-en-sin-ctp-una-sola-vez", /Sí, sin CTP: a Lista/]]) await caso(id, async ({ p, s }) => {
+for (const [id, boton] of [["ses-204a-doble-clic-en-pasar-a-ctp-una-sola-vez", "Directo a CTP"], ["ses-204b-doble-clic-en-sin-ctp-una-sola-vez", "Sin CTP, Lista"]]) await caso(id, async ({ p, s }) => {
   s.filas = enDiseno("P-1103"); s.ordenesSeMueven = true;
   const dlg = await abrirOrden(p, s, "P-1103");
-  await autorizar(p, dlg);
-  await ventanaAut(p).getByRole("button", { name: boton }).dblclick();
+  await autorizar(p, dlg, boton);
+  await responder(p);
+  await pasar(p, "dblclick");
   await p.waitForTimeout(1800);
-  const u = escritoEn(s, "orders", "PATCH").length, tl = escritoEn(s, "order_timeline").filter(x => String(x.cuerpo.action).startsWith(LINEA_AUT)).length;
+  const u = escritoEn(s, "orders", "PATCH").length, tl = escritoEn(s, "order_timeline").filter(x => String(x.cuerpo.action).startsWith(LINEA_SIN)).length;
   ok(id, u === 1 && tl === 1, `${u} PATCH · ${tl} renglones`);
 });
 await caso("ses-205-otra-sesion-la-movio-no-se-anota-nada", async ({ p, s }) => {
   s.filas = enDiseno("P-1104"); s.ordenesSeMueven = false;   // el UPDATE con su condición no encuentra la orden
   const dlg = await abrirOrden(p, s, "P-1104");
   await autorizar(p, dlg);
-  await ventanaAut(p).getByRole("button", { name: /Sí, pasar a CTP/ }).click();
+  await responder(p);
+  await pasar(p);
   await p.waitForTimeout(1500);
   const tl = escritoEn(s, "order_timeline").length, c = escritoEn(s, "order_comments").length, t = await texto(p);
   ok("ses-205-otra-sesion-la-movio-no-se-anota-nada", tl === 0 && c === 0 && /otra sesión/.test(t), `${tl} renglones · ${c} comentarios · «${(t.match(/.{40}otra sesión.{30}/) || [""])[0]}»`);
@@ -2996,7 +3022,8 @@ await caso("ses-206-la-base-no-guarda-no-se-anota-nada-y-lo-dice", async ({ p, s
   s.filas = enDiseno("P-1105"); s.escrituraFalla = "orders";
   const dlg = await abrirOrden(p, s, "P-1105");
   await autorizar(p, dlg);
-  await ventanaAut(p).getByRole("button", { name: /Sí, pasar a CTP/ }).click();
+  await responder(p);
+  await pasar(p);
   await p.waitForTimeout(1800);
   const tl = escritoEn(s, "order_timeline").length, t = await texto(p);
   ok("ses-206-la-base-no-guarda-no-se-anota-nada-y-lo-dice", tl === 0 && /no pasó a «CTP»/.test(t), `${tl} renglones · «${(t.match(/.{30}no pasó.{50}/) || [t.slice(0, 80)])[0]}»`);
@@ -3005,7 +3032,8 @@ await caso("ses-207-sin-el-renglon-de-quien-no-queda-autorizada", async ({ p, s 
   s.filas = enDiseno("P-1106"); s.ordenesSeMueven = true; s.escrituraFalla = "order_timeline";
   const dlg = await abrirOrden(p, s, "P-1106");
   await autorizar(p, dlg);
-  await ventanaAut(p).getByRole("button", { name: /Sí, pasar a CTP/ }).click();
+  await responder(p);
+  await pasar(p);
   await esperarQue(() => escritoEn(s, "orders", "PATCH").length >= 2, 6000);
   await p.waitForTimeout(500);
   const u = escritoEn(s, "orders", "PATCH").map(x => x.cuerpo), t = await texto(p);
@@ -3014,17 +3042,17 @@ await caso("ses-207-sin-el-renglon-de-quien-no-queda-autorizada", async ({ p, s 
 for (const quien of ["gerardo", "german", "karla", "lupita"]) await caso(`ses-208-${quien}-no-lo-ve`, async ({ p, s }) => {
   s.filas = enDiseno("P-1107");
   const dlg = await abrirOrden(p, s, "P-1107", quien);
-  const n = await dlg.getByRole("button", { name: BOTON_AUT }).count();
+  const n = await dlg.getByRole("button", { name: /^(Cliente autorizó sin prueba|Directo a CTP|Sin CTP, Lista)/ }).count();
   ok(`ses-208-${quien}-no-lo-ve`, n === 0, `${n} botones`);
 });
-for (const [id, boton, destino, linea] of [["ses-209-directo-a-ctp-se-queda-como-estaba", "Directo a CTP", "ctp", "🎨 Diseño → 💿 CTP"], ["ses-210-sin-ctp-lista-se-queda-como-estaba", "Sin CTP, Lista", "ready", "🎨 Diseño → ✅ Lista para imprimir"]]) await caso(id, async ({ p, s }) => {
+// v10.84.193 — eran «se queda como estaba» (la 189 no tocaba estos dos): desde el 27-nov preguntan, y sin respuesta no se mueve nada
+for (const [id, boton, hacia] of [["ses-209-directo-a-ctp-ya-pregunta", "Directo a CTP", /Pasa a «CTP»/], ["ses-210-sin-ctp-lista-ya-pregunta", "Sin CTP, Lista", /sin CTP a «Lista para imprimir»/]]) await caso(id, async ({ p, s }) => {
   s.filas = enDiseno("P-1108"); s.ordenesSeMueven = true;
   const dlg = await abrirOrden(p, s, "P-1108");
-  await dlg.getByRole("button", { name: boton }).click(); await p.waitForTimeout(700);
-  await p.getByRole("button", { name: /Sí, pasar/ }).click();
-  await esperarQue(() => escritoEn(s, "order_timeline").length > 0, 6000);
-  const u = escritoEn(s, "orders", "PATCH")[0], tl = escritoEn(s, "order_timeline")[0]?.cuerpo;
-  ok(id, u?.cuerpo?.stage === destino && !("proof_approved" in (u?.cuerpo || {})) && tl?.action === linea, `${JSON.stringify(u?.cuerpo)} · «${tl?.action}»`);
+  await dlg.getByRole("button", { name: boton, exact: true }).click(); await p.waitForTimeout(900);
+  const v = await ventanaAut(p).count(), t = v ? await leerTexto(ventanaAut(p)) : "", vieja = await p.getByRole("button", { name: /Sí, pasar/ }).count(), pasarSin = v ? await ventanaAut(p).getByRole("button", { name: PASAR }).isDisabled() : null;
+  ok(id, v === 1 && vieja === 0 && /¿Cómo autorizó el cliente P-1108\?/.test(t) && hacia.test(t) && pasarSin === true && escritoEn(s, "orders", "PATCH").length === 0,
+    `ventana ${v} · «¿Pasar…?» ${vieja} · sin responder, «Registrar» ${pasarSin === true ? "apagado" : "prendido o no está"} · ${escritoEn(s, "orders", "PATCH").length} PATCH · «${t.slice(0, 120)}»`);
 });
 for (const [id, accion, by, dice, marca, otra] of [["ses-211-lo-guardado-sin-prueba-se-ve", LINEA_AUT + " · 🎨 Diseño → 💿 CTP", "preprensa", /Sin prueba de color.{0,40}Noemí|Noemí.{0,40}Sin prueba de color/, "Autorizó", "Prueba"], ["ses-212-lo-guardado-con-prueba-se-ve", "✅ Prueba aprobada", "secretaria", /Con prueba de color.{0,40}Lupita|Lupita.{0,40}Con prueba de color/, "Prueba", "Autorizó"]]) await caso(id, async ({ p, s }) => {
   const pn = "P-1109", cuando = haceH(2);
@@ -3048,9 +3076,10 @@ await caso("ses-213-se-movio-con-la-ventana-abierta-no-registra", async ({ p, s 
   s.filas = enDiseno("P-1110"); s.ordenesSeMueven = true;
   const dlg = await abrirOrden(p, s, "P-1110");
   await autorizar(p, dlg);
+  await responder(p);   // ya respondida, a un clic de registrar
   s.filas = { ...s.filas, orders: s.filas.orders.map(o => ({ ...o, stage: "ctp" })) };
   await p.waitForTimeout(22000);   // la recarga de cada 20 s
-  const t = await texto(p), siPuede = await p.getByRole("button", { name: /Sí, pasar a CTP/ }).count();
+  const t = await texto(p), siPuede = await p.getByRole("button", { name: PASAR }).count();
   ok("ses-213-se-movio-con-la-ventana-abierta-no-registra", siPuede === 0 && /no se registró nada/i.test(t) && escritoEn(s, "orders", "PATCH").length === 0, `botón ${siPuede} · ${escritoEn(s, "orders", "PATCH").length} PATCH · «${(t.match(/.{60}registró.{20}/) || [""])[0]}»`);
 });
 // duplicar no pasa por la forma: la copia no hereda la fecha de hace meses
@@ -3140,24 +3169,34 @@ await caso("ses-223-ctrl-enter-no-autoriza-solo", async ({ p, s }) => {
   const t = await texto(p), v = await ventanaAut(p).count(), n = escritoEn(s, "orders", "PATCH").length;
   ok("ses-223-ctrl-enter-no-autoriza-solo", v === 0 && n === 0 && /¿Pasar P-1120 a «Prueba/.test(t), `ventana ${v} · ${n} PATCH · «${(t.match(/¿Pasar.{0,50}/) || [""])[0]}»`);
 });
+// v10.84.193 — todo con el teclado, como quien no suelta el teclado: la primera respuesta ya tiene el foco, Espacio la elige, Tab a quién, Tab a por dónde, y el
+//   Tab nunca se sale de la ventana; «Todavía no» con Enter no escribe nada
 await caso("ses-224-con-el-teclado", async ({ p, s }) => {
   s.filas = enDiseno("P-1121"); s.ordenesSeMueven = true;
   const dlg = await abrirOrden(p, s, "P-1121");
   await autorizar(p, dlg);
-  const nombre = () => p.evaluate(() => (document.activeElement?.textContent || "").trim());
-  const a = await nombre(); await p.keyboard.press("Tab"); const b = await nombre(); await p.keyboard.press("Tab"); const c = await nombre(); await p.keyboard.press("Tab"); const d = await nombre();
-  await p.keyboard.press("Enter"); await p.waitForTimeout(500);   // otra vez en «Todavía no»
-  const n = escritoEn(s, "orders", "PATCH").length, v = await ventanaAut(p).count();
-  ok("ses-224-con-el-teclado", a === "Todavía no" && /pasar a CTP/.test(b) && /sin CTP/.test(c) && d === "Todavía no" && n === 0 && v === 0, `${a} → ${b} → ${c} → ${d} · ${n} PATCH · ventana ${v}`);
+  const foco = () => p.evaluate(() => { const a = document.activeElement; return { tipo: a?.type || a?.tagName, nombre: (a?.labels?.[0]?.textContent || a?.textContent || a?.getAttribute?.("aria-label") || "").trim().replace(/\s+/g, " ").slice(0, 40), dentro: !!a?.closest('[role="dialog"]')?.matches('[aria-labelledby]') && /Cómo autorizó/.test(a.closest('[role="dialog"]').textContent) }; });
+  const a = await foco();
+  await p.keyboard.press("Space"); await p.keyboard.press("Tab"); const b = await foco();
+  await p.keyboard.type("Ana Pérez"); await p.keyboard.press("Tab"); const c = await foco();
+  await p.keyboard.press("Space");
+  const recorrido = [];
+  for (let i = 0; i < 12; i++) { await p.keyboard.press("Tab"); const f = await foco(); recorrido.push(f); if (/^Registrar y pasar/.test(f.nombre)) break; }
+  const llego = /^Registrar y pasar/.test(recorrido[recorrido.length - 1]?.nombre || ""), siempreDentro = [a, b, c, ...recorrido].every(f => f.dentro);
+  if (llego) { await p.keyboard.press("Enter"); await esperarQue(() => escritoEn(s, "order_timeline").length > 0, 6000); }
+  const tl = escritoEn(s, "order_timeline")[0]?.cuerpo?.action || "";
+  ok("ses-224-con-el-teclado", a.tipo === "radio" && /^Aprobó la prueba/.test(a.nombre) && b.tipo === "text" && c.tipo === "radio" && /^WhatsApp/.test(c.nombre) && llego && siempreDentro && tl === LINEA_APROBO + " · Ana Pérez por WhatsApp" + A_CTP,
+    `${[a, b, c, ...recorrido].map(f => f.tipo + ":" + f.nombre + (f.dentro ? "" : " (FUERA)")).join(" → ")} · «${tl}»`);
 });
 await caso("ses-225-al-autorizar-el-detalle-ya-lo-dice", async ({ p, s }) => {
   s.filas = enDiseno("P-1122"); s.ordenesSeMueven = true;
   const dlg = await abrirOrden(p, s, "P-1122");
   await autorizar(p, dlg);
-  await ventanaAut(p).getByRole("button", { name: /Sí, pasar a CTP/ }).click();
+  await responder(p);
+  await pasar(p);
   await esperarQue(() => escritoEn(s, "order_comments").length > 0, 6000); await p.waitForTimeout(500);
   const t = await leerTexto(dlg), boton = await dlg.getByRole("button", { name: BOTON_AUT }).count(), todo = await texto(p);
-  ok("ses-225-al-autorizar-el-detalle-ya-lo-dice", /Sin prueba de color/.test(t) && /Noemí/.test(t) && boton === 0 && /Quedó la autorización del cliente/.test(todo), `«${(t.match(/Cliente autorizó.{0,70}/) || [t.slice(0, 100)])[0]}» · botón ${boton}`);
+  ok("ses-225-al-autorizar-el-detalle-ya-lo-dice", /Sin ver prueba · Lic\. Ramírez por correo/.test(t) && /Noemí/.test(t) && boton === 0 && /Quedó la autorización del cliente/.test(todo), `«${(t.match(/Cliente autorizó.{0,90}/) || [t.slice(0, 100)])[0]}» · botón ${boton}`);
 });
 await caso("ses-226-cambiar-la-fecha-le-quita-lo-de-estandar", async ({ p, s }) => {
   s.filas = { orders: [ordenK("P-1123", { stage: "ctp", created_at: haceH(90), due_date: "2026-11-06", delivery_calculated_at: haceH(90), validated_by_production: true, validated_by_preprensa: true })], order_timeline: [] };
@@ -3177,15 +3216,17 @@ for (const [id, vp] of [["ses-227a-a-1366", { width: 1366, height: 768 }], ["ses
   await aTodas(p, s, "noemi");
   const f = fichaDe(p, "P-1124"); await f.scrollIntoViewIfNeeded();
   const r = await f.evaluate(c => { const cr = c.getBoundingClientRect(); return [...c.querySelectorAll("button")].filter(b => /Prueba de Color|Cliente autorizó|Directo a CTP|Sin CTP/.test(b.textContent)).map(b => { const x = b.getBoundingClientRect(), e = document.elementFromPoint(x.left + x.width / 2, x.top + x.height / 2); return { t: b.textContent.trim().slice(0, 14), dentro: x.left >= cr.left - 1 && x.right <= cr.right + 1, seVe: !!e && (e === b || b.contains(e)) }; }); });
-  ok(id + "-los-botones-de-la-ficha-se-ven-enteros", r.length === 4 && r.every(x => x.dentro && x.seVe), JSON.stringify(r));
+  // v10.84.193 — tres: «Prueba de Color», «Directo a CTP» y «Sin CTP, Lista» (el suelto de la 189 se fue)
+  ok(id + "-los-botones-de-la-ficha-se-ven-enteros", r.length === 3 && !r.some(x => /^Cliente autor/.test(x.t)) && r.every(x => x.dentro && x.seVe), JSON.stringify(r));
 }, { viewport: vp });
 await caso("ses-228-datos-raros-en-la-ventana-y-en-el-aviso", async ({ p, s }) => {
   const raro = "María-José Ñúñez 🎉 Benachrichtigungseinstellungen عربي <script>alert(1)</script>";
   s.filas = enDiseno("P-1125", { client: raro, client_company: raro, product_type: "IMG_20250914_183022_HDR_portrait_edited_edited.HEIC" }); s.ordenesSeMueven = true;
   const dlg = await abrirOrden(p, s, "P-1125");
   await autorizar(p, dlg);
+  await responder(p, { como: "aprobo", quien: raro, canal: "WhatsApp" });
   const caja = await ventanaAut(p).boundingBox();
-  await ventanaAut(p).getByRole("button", { name: /Sí, pasar a CTP/ }).click();
+  await pasar(p);
   await esperarQue(() => escritoEn(s, "order_comments").length > 0, 6000); await p.waitForTimeout(500);
   const r = await p.evaluate(() => ({ ancho: document.documentElement.scrollWidth, ventana: innerWidth, script: [...document.querySelectorAll("script")].some(x => /alert\(1\)/.test(x.textContent)) }));
   ok("ses-228-datos-raros-en-la-ventana-y-en-el-aviso", !!caja && caja.x >= 0 && caja.x + caja.width <= 1366 && r.ancho <= r.ventana && !r.script, JSON.stringify({ caja, ...r }));
@@ -3200,6 +3241,211 @@ await caso("ses-229-la-web-sigue-calculando-al-validar", async ({ p, s }) => {
   await esperarQue(() => escritoEn(s, "orders", "PATCH").length > 0, 6000);
   const u = escritoEn(s, "orders", "PATCH")[0]?.cuerpo;
   ok("ses-229-la-web-sigue-calculando-al-validar", u?.due_date === "2026-11-24" && !!u?.delivery_calculated_at, JSON.stringify(u));
+});
+
+// ════════════════════════ v10.84.193: salir de Diseño pregunta cómo autorizó el cliente (ISO 9001, Marcelo 27-nov) ════════════════════════
+// Lo medido el 27-nov: desde el 9-nov, 3 de 76 salidas de Diseño dejaron registro; «Directo a CTP» (36) y «Sin CTP, Lista» (37) no registraban nada, y 44 de
+//   75 eran del mismo cliente y el mismo producto que una orden anterior (reimpresiones). Lo que debería pasar: la pregunta, en un clic, y el renglón de la
+//   bitácora que lo dice (quién del cliente y por dónde, o de cuál P- es la reimpresión), a nombre de quien la pasó. Vuelta 1: escritas antes del código
+//   (SESION_PARTE=5, desde ses-400; las de la 189 que cuidan lo mismo por la puerta nueva siguen en la parte 3).
+const ANTERIORES = () => [
+  ordenK("P-1301", { stage: "delivered", delivered_at: haceH(880), created_at: haceH(900), invoice_folio: "F-1301" }),                           // el mismo producto: la primera
+  ordenK("P-1302", { stage: "delivered", delivered_at: haceH(480), created_at: haceH(500), product_type: "Volantes", invoice_folio: "F-1302" }),   // más nueva, otro producto
+  ordenK("P-1303", { stage: "delivered", delivered_at: haceH(380), created_at: haceH(400), client: "IMPRESOS DEL BAJÍO", client_company: "IMPRESOS DEL BAJÍO", client_id: "c2", invoice_folio: "F-1303" }),   // otro cliente
+  ordenK("P-1304", { stage: "cancelled", cancelled_at: haceH(290), created_at: haceH(300) }),                                                      // cancelada
+  ordenK("P-1305", { stage: "draft", created_at: haceH(5) }),                                                                                       // más nueva que la de Diseño
+];
+const conAnteriores = (pn, ant = ANTERIORES()) => { const f = enDiseno(pn); return { ...f, orders: [...f.orders, ...ant] }; };
+const opcionesDe = p => ventanaAut(p).getByRole("radiogroup", { name: /De cuál orden/ }).getByRole("radio").evaluateAll(l => l.map(r => ((r.labels && r.labels[0] && r.labels[0].textContent) || r.getAttribute("aria-label") || "").trim().replace(/\s+/g, " ")));
+const pasarApagado = p => ventanaAut(p).getByRole("button", { name: PASAR }).isDisabled();
+for (const [id, canal, frase] of [["ses-400-aprobo-la-prueba-por-whatsapp", "WhatsApp", "por WhatsApp"], ["ses-401-aprobo-la-prueba-por-correo", "Correo", "por correo"], ["ses-402-aprobo-la-prueba-por-telefono", "Teléfono", "por teléfono"], ["ses-403-en-persona-se-dice-bien", "En persona", "en persona"]]) await caso(id, async ({ p, s }) => {
+  s.filas = enDiseno("P-1400"); s.ordenesSeMueven = true;
+  const dlg = await abrirOrden(p, s, "P-1400");
+  await autorizar(p, dlg);
+  await responder(p, { como: "aprobo", quien: "Ana Pérez", canal });
+  const t0 = Date.now();
+  await pasar(p);
+  await esperarQue(() => escritoEn(s, "order_comments").length > 0, 6000); await p.waitForTimeout(300);
+  const dice = LINEA_APROBO + " · Ana Pérez " + frase;
+  const u = escritoEn(s, "orders", "PATCH")[0]?.cuerpo, tl = escritoEn(s, "order_timeline")[0]?.cuerpo, com = escritoEn(s, "order_comments")[0]?.cuerpo;
+  ok(id, u?.stage === "ctp" && Date.parse(u?.proof_approved) >= t0 - 60000 && tl?.action === dice + A_CTP && tl?.by_user === "preprensa" && tl?.to_stage === "ctp" && com?.text === dice && com?.by_user === "sistema",
+    `${JSON.stringify(u)} · «${tl?.action}» por ${tl?.by_user} · comentario «${com?.text}» de ${com?.by_user}`);
+});
+await caso("ses-404-reimpresion-de-una-anterior-del-cliente", async ({ p, s }) => {
+  s.filas = conAnteriores("P-1400"); s.ordenesSeMueven = true;
+  const dlg = await abrirOrden(p, s, "P-1400");
+  await autorizar(p, dlg);
+  await ventanaAut(p).getByRole("radio", { name: COMO.reimpresion }).check(); await p.waitForTimeout(300);
+  const ofrece = await opcionesDe(p).catch(() => []);
+  await responder(p, { como: "reimpresion", de: "P-1301" });
+  await pasar(p);
+  await esperarQue(() => escritoEn(s, "order_timeline").length > 0, 6000); await p.waitForTimeout(300);
+  const u = escritoEn(s, "orders", "PATCH")[0]?.cuerpo, tl = escritoEn(s, "order_timeline")[0]?.cuerpo, com = escritoEn(s, "order_comments")[0]?.cuerpo;
+  // del mismo cliente, antes que ella y sin cancelar; primero las del mismo producto
+  ok("ses-404-reimpresion-de-una-anterior-del-cliente", ofrece.length === 2 && /^P-1301 /.test(ofrece[0]) && /Formatos/.test(ofrece[0]) && /^P-1302 /.test(ofrece[1]) && u?.stage === "ctp" && !!u?.proof_approved && tl?.action === LINEA_REIMP + "P-1301" + A_CTP && com?.text === LINEA_REIMP + "P-1301",
+    `ofrece ${JSON.stringify(ofrece)} · ${JSON.stringify(u)} · «${tl?.action}» · «${com?.text}»`);
+});
+await caso("ses-405-reimpresion-escribiendo-el-numero", async ({ p, s }) => {
+  s.filas = conAnteriores("P-1400"); s.ordenesSeMueven = true;
+  const dlg = await abrirOrden(p, s, "P-1400");
+  await autorizar(p, dlg);
+  await responder(p, { como: "reimpresion", otra: " p-1302 " });
+  await pasar(p);
+  await esperarQue(() => escritoEn(s, "order_timeline").length > 0, 6000);
+  const tl = escritoEn(s, "order_timeline")[0]?.cuerpo;
+  ok("ses-405-reimpresion-escribiendo-el-numero", tl?.action === LINEA_REIMP + "P-1302" + A_CTP, `«${tl?.action}»`);
+});
+await caso("ses-406-una-que-no-existe-o-ella-misma-no-deja", async ({ p, s }) => {
+  s.filas = conAnteriores("P-1400"); s.ordenesSeMueven = true;
+  const dlg = await abrirOrden(p, s, "P-1400");
+  await autorizar(p, dlg);
+  await responder(p, { como: "reimpresion", otra: "P-9999" });
+  const a = await leerTexto(ventanaAut(p)), da = await pasarApagado(p);
+  await ventanaAut(p).getByLabel(/Otra orden/).fill("P-1400"); await p.waitForTimeout(250);
+  const b = await leerTexto(ventanaAut(p)), db = await pasarApagado(p);
+  ok("ses-406-una-que-no-existe-o-ella-misma-no-deja", /No encuentro P-9999/.test(a) && da && /Es esta misma orden/.test(b) && db && escritoEn(s, "orders", "PATCH").length === 0,
+    `«${(a.match(/No encuentro.{0,40}/) || ["(no lo dice)"])[0]}» ${da ? "apagado" : "PRENDIDO"} · «${(b.match(/misma orden.{0,30}/) || ["(no lo dice)"])[0]}» ${db ? "apagado" : "PRENDIDO"}`);
+});
+for (const [id, num, dice] of [["ses-407-de-otro-cliente-avisa-y-deja", "P-1303", /P-1303 es de otro cliente: IMPRESOS DEL BAJÍO/], ["ses-408-una-cancelada-avisa-y-deja", "P-1304", /P-1304 se canceló/]]) await caso(id, async ({ p, s }) => {
+  s.filas = conAnteriores("P-1400"); s.ordenesSeMueven = true;
+  const dlg = await abrirOrden(p, s, "P-1400");
+  await autorizar(p, dlg);
+  await responder(p, { como: "reimpresion", otra: num });
+  const t = await leerTexto(ventanaAut(p)), apagado = await pasarApagado(p);
+  if (!apagado) await pasar(p);
+  await esperarQue(() => escritoEn(s, "order_timeline").length > 0, 6000);
+  const tl = escritoEn(s, "order_timeline")[0]?.cuerpo;
+  ok(id, dice.test(t) && !apagado && tl?.action === LINEA_REIMP + num + A_CTP, `«${(t.match(new RegExp(num + ".{0,50}")) || ["(no avisa)"])[0]}» · ${apagado ? "apagado" : "prendido"} · «${tl?.action}»`);
+});
+await caso("ses-409-sin-ordenes-anteriores-lo-dice", async ({ p, s }) => {
+  s.filas = enDiseno("P-1400"); s.ordenesSeMueven = true;
+  const dlg = await abrirOrden(p, s, "P-1400");
+  await autorizar(p, dlg);
+  await ventanaAut(p).getByRole("radio", { name: COMO.reimpresion }).check(); await p.waitForTimeout(300);
+  const t = await leerTexto(ventanaAut(p)), campo = await ventanaAut(p).getByLabel(/Otra orden/).count();
+  ok("ses-409-sin-ordenes-anteriores-lo-dice", /No hay órdenes anteriores de este cliente/.test(t) && campo === 1, `«${t.slice(0, 220)}» · campo ${campo}`);
+});
+await caso("ses-410-mil-anteriores-ofrece-cinco-y-cabe", async ({ p, s }) => {
+  const mil = Array.from({ length: 1000 }, (_, i) => ordenK("P-" + (2000 + i), { stage: "delivered", delivered_at: haceH(50 + i), created_at: haceH(60 + i), product_type: i % 3 ? "Volantes" : "Formatos", invoice_folio: "F-" + (5000 + i) }));
+  s.filas = conAnteriores("P-1400", mil); s.ordenesSeMueven = true;
+  const dlg = await abrirOrden(p, s, "P-1400");
+  await autorizar(p, dlg);
+  const t0 = Date.now();
+  await ventanaAut(p).getByRole("radio", { name: COMO.reimpresion }).check();
+  const ofrece = await opcionesDe(p).catch(() => []), ms = Date.now() - t0, caja = await ventanaAut(p).boundingBox();
+  // las del mismo producto (Formatos: P-2000, P-2003, P-2006…), de la más nueva a la más vieja
+  ok("ses-410-mil-anteriores-ofrece-cinco-y-cabe", ofrece.length === 5 && ["P-2000", "P-2003", "P-2006", "P-2009", "P-2012"].every((n, i) => ofrece[i]?.startsWith(n + " ")) && ms < 2500 && !!caja && caja.y >= 0 && caja.y + caja.height <= 768,
+    `${ms} ms · ${JSON.stringify(ofrece.map(x => x.slice(0, 26)))} · caja ${JSON.stringify(caja)}`);
+});
+await caso("ses-411-sin-respuesta-completa-no-deja-pasar", async ({ p, s }) => {
+  s.filas = enDiseno("P-1400"); s.ordenesSeMueven = true;
+  const dlg = await abrirOrden(p, s, "P-1400");
+  await autorizar(p, dlg);
+  const v = ventanaAut(p), r = [];
+  r.push(await pasarApagado(p));                                                     // nada elegido
+  await v.getByRole("radio", { name: COMO.aprobo }).check(); await p.waitForTimeout(150); r.push(await pasarApagado(p));   // sin quién
+  await v.getByLabel(/Quién del cliente/).fill("   "); await p.waitForTimeout(150); r.push(await pasarApagado(p));      // sólo espacios
+  await v.getByLabel(/Quién del cliente/).fill("A"); await p.waitForTimeout(150); r.push(await pasarApagado(p));        // una letra
+  await v.getByLabel(/Quién del cliente/).fill("Ana"); await p.waitForTimeout(150); r.push(await pasarApagado(p));      // sin por dónde
+  const falta = await leerTexto(v);
+  await v.getByRole("radio", { name: /^WhatsApp$/ }).check(); await p.waitForTimeout(150); r.push(!(await pasarApagado(p)));   // completa: prendido
+  ok("ses-411-sin-respuesta-completa-no-deja-pasar", r.every(Boolean) && /Falta.{0,30}por dónde/i.test(falta) && escritoEn(s, "orders", "PATCH").length === 0, `${r.join()} · «${(falta.match(/Falta.{0,60}/) || ["(no dice qué falta)"])[0]}»`);
+});
+await caso("ses-412-esc-con-algo-escrito-pregunta", async ({ p, s }) => {
+  s.filas = enDiseno("P-1400"); s.ordenesSeMueven = true;
+  const dlg = await abrirOrden(p, s, "P-1400");
+  await autorizar(p, dlg);
+  await responder(p, { como: "aprobo", quien: "Ana Pérez", canal: "WhatsApp" });   // el foco queda en «WhatsApp» (una casilla: Esc ahí sí cuenta)
+  await p.keyboard.press("Escape"); await p.waitForTimeout(300);
+  const pregunta = await ventanaAut(p).getByRole("alert").count(), sigue = await ventanaAut(p).count();
+  await ventanaAut(p).getByRole("button", { name: /Seguir aquí/ }).click(); await p.waitForTimeout(200);
+  const nombre = await ventanaAut(p).getByLabel(/Quién del cliente/).inputValue();
+  await ventanaAut(p).getByRole("radio", { name: /^WhatsApp$/ }).focus(); await p.keyboard.press("Escape"); await p.waitForTimeout(300);
+  await ventanaAut(p).getByRole("button", { name: /Salir sin registrar/ }).click(); await p.waitForTimeout(400);
+  const cerro = (await ventanaAut(p).count()) === 0, detalle = await dlg.count();
+  const n = s.peticiones.filter(x => x.m !== "GET" && x.m !== "HEAD" && /orders|order_timeline|order_comments/.test(x.ruta) && !/rpc/.test(x.ruta)).length;
+  ok("ses-412-esc-con-algo-escrito-pregunta", pregunta === 1 && sigue === 1 && nombre === "Ana Pérez" && cerro && detalle >= 1 && n === 0, `pregunta ${pregunta} · sigue ${sigue} · «${nombre}» · cerró ${cerro} · detalle ${detalle} · escrituras ${n}`);
+});
+await caso("ses-413-clic-fuera-con-algo-escrito-pregunta", async ({ p, s }) => {
+  s.filas = enDiseno("P-1400"); s.ordenesSeMueven = true;
+  const dlg = await abrirOrden(p, s, "P-1400");
+  await autorizar(p, dlg);
+  await p.mouse.click(8, 8); await p.waitForTimeout(300);   // sin nada elegido: se cierra
+  const vacia = (await ventanaAut(p).count()) === 0;
+  await autorizar(p, dlg);
+  await responder(p, { como: "reimpresion", otra: "P-1301" });
+  await p.mouse.click(8, 8); await p.waitForTimeout(300);
+  const pregunta = await ventanaAut(p).getByRole("alert").count();
+  await ventanaAut(p).getByRole("button", { name: /Salir sin registrar/ }).click(); await p.waitForTimeout(400);
+  const cerro = (await ventanaAut(p).count()) === 0, n = escritoEn(s, "orders", "PATCH").length + escritoEn(s, "order_timeline").length;
+  ok("ses-413-clic-fuera-con-algo-escrito-pregunta", vacia && pregunta === 1 && cerro && n === 0, `sin nada se cerró ${vacia} · pregunta ${pregunta} · cerró ${cerro} · escrituras ${n}`);
+});
+for (const [id, primero, despues, debe] of [["ses-414a-de-reimpresion-a-aprobo-no-arrastra", { como: "reimpresion", otra: "P-1301" }, { como: "aprobo", quien: "Ana Pérez", canal: "WhatsApp" }, LINEA_APROBO + " · Ana Pérez por WhatsApp" + A_CTP],
+  ["ses-414b-de-aprobo-a-reimpresion-no-arrastra", { como: "aprobo", quien: "Ana Pérez", canal: "WhatsApp" }, { como: "reimpresion", otra: "P-1301" }, LINEA_REIMP + "P-1301" + A_CTP]]) await caso(id, async ({ p, s }) => {
+  s.filas = conAnteriores("P-1400"); s.ordenesSeMueven = true;
+  const dlg = await abrirOrden(p, s, "P-1400");
+  await autorizar(p, dlg);
+  await responder(p, primero); await responder(p, despues);
+  await pasar(p);
+  await esperarQue(() => escritoEn(s, "order_timeline").length > 0, 6000); await p.waitForTimeout(300);
+  const tl = escritoEn(s, "order_timeline")[0]?.cuerpo, com = escritoEn(s, "order_comments")[0]?.cuerpo;
+  ok(id, tl?.action === debe && com?.text === debe.replace(A_CTP, ""), `«${tl?.action}» · «${com?.text}»`);
+});
+await caso("ses-415-lo-guardado-se-ve-en-la-ficha-y-en-el-detalle", async ({ p, s }) => {
+  const enCtp = (pn, accion) => ({ o: ordenK(pn, { stage: "ctp", created_at: haceH(30), validated_by_production: true, validated_by_preprensa: true, proof_approved: haceH(2) }), t: [EV187(pn, 30, "draft", "secretaria", "📋 Orden creada"), EV187(pn, 2, "ctp", "preprensa", accion)] });
+  const c = [enCtp("P-1410", LINEA_APROBO + " · Ana Pérez por WhatsApp" + A_CTP), enCtp("P-1411", LINEA_SIN + " · Lic. Ramírez por correo" + A_CTP), enCtp("P-1412", LINEA_REIMP + "P-1301" + A_CTP)];
+  s.filas = { orders: c.map(x => x.o), order_timeline: c.flatMap(x => x.t) };
+  await aTodas(p, s, "marcelo");
+  const f = [await fichaConEtiquetas(p, "P-1410"), await fichaConEtiquetas(p, "P-1411"), await fichaConEtiquetas(p, "P-1412")];
+  const palabra = (t, w) => new RegExp("(^|\\s)" + w + "(\\s|$)").test(t);
+  const det = [];
+  for (const pn of ["P-1410", "P-1411", "P-1412"]) { const fi = fichaDe(p, pn); await fi.focus(); await p.keyboard.press("Enter"); const d = p.getByRole("dialog").first(); await d.waitFor({ timeout: 8000 }); await p.waitForTimeout(400); det.push((await leerTexto(d)).match(/Cliente autorizó.{0,90}/)?.[0] || "(sin el renglón)"); await p.keyboard.press("Escape"); await p.waitForTimeout(400); }
+  ok("ses-415-lo-guardado-se-ve-en-la-ficha-y-en-el-detalle", palabra(f[0], "Aprobó") && !palabra(f[0], "Prueba") && palabra(f[1], "Autorizó") && palabra(f[2], "Reimpresión")
+    && /Aprobó la prueba · Ana Pérez por WhatsApp · .+ · Noemí/.test(det[0]) && /Sin ver prueba · Lic\. Ramírez por correo · .+ · Noemí/.test(det[1]) && /Reimpresión sin cambios de P-1301 · .+ · Noemí/.test(det[2]),
+    `fichas ${f.map(x => x.slice(0, 90)).join(" | ")} · detalles ${det.join(" | ")}`);
+});
+await caso("ses-416-quien-con-datos-raros-se-guarda-limpio", async ({ p, s }) => {
+  s.filas = enDiseno("P-1400"); s.ordenesSeMueven = true;
+  const dlg = await abrirOrden(p, s, "P-1400");
+  await autorizar(p, dlg);
+  await responder(p, { como: "aprobo", quien: "  María-José Ñúñez · → 🎉 عربي <b>x</b>\tsegunda  ", canal: "WhatsApp" });
+  await pasar(p);
+  await esperarQue(() => escritoEn(s, "order_timeline").length > 0, 6000); await p.waitForTimeout(500);
+  const tl = escritoEn(s, "order_timeline")[0]?.cuerpo?.action || "", t = await leerTexto(dlg);
+  const negritas = await p.evaluate(() => [...document.querySelectorAll('[role="dialog"] b')].some(b => b.textContent === "x"));
+  // sin «·» ni «→» dentro del nombre (el renglón se lee por ellos), sin tabuladores ni espacios de más
+  ok("ses-416-quien-con-datos-raros-se-guarda-limpio", tl === LINEA_APROBO + " · María-José Ñúñez 🎉 عربي <b>x</b> segunda por WhatsApp" + A_CTP && /María-José Ñúñez 🎉 عربي <b>x<\/b> segunda por WhatsApp/.test(t) && !negritas, `«${tl}» · negritas ${negritas}`);
+});
+await caso("ses-417-un-nombre-larguisimo-se-corta-a-60", async ({ p, s }) => {
+  s.filas = enDiseno("P-1400"); s.ordenesSeMueven = true;
+  const dlg = await abrirOrden(p, s, "P-1400");
+  await autorizar(p, dlg);
+  await responder(p, { como: "sin", quien: "Benachrichtigungseinstellungen".repeat(4), canal: "Correo" });
+  await pasar(p);
+  await esperarQue(() => escritoEn(s, "order_timeline").length > 0, 6000); await p.waitForTimeout(500);
+  const tl = escritoEn(s, "order_timeline")[0]?.cuerpo?.action || "", nombre = (tl.match(/^✅ Cliente autorizó sin ver prueba · (.+) por correo · /) || [])[1] || "";
+  const r = await p.evaluate(() => ({ ancho: document.documentElement.scrollWidth, ventana: innerWidth, sale: [...document.querySelectorAll('[role="dialog"]')].some(d => d.scrollWidth > d.clientWidth + 1) }));
+  ok("ses-417-un-nombre-larguisimo-se-corta-a-60", nombre.length > 0 && nombre.length <= 60 && r.ancho <= r.ventana && !r.sale, `${nombre.length} letras · ${JSON.stringify(r)}`);
+});
+for (const [id, vp] of [["ses-418a-a-1366", { width: 1366, height: 768 }], ["ses-418b-a-1920", { width: 1920, height: 1080 }]]) await caso(id + "-la-pregunta-cabe-con-lo-mas-largo", async ({ p, s }) => {
+  const ocho = Array.from({ length: 8 }, (_, i) => ordenK("P-" + (1310 + i), { stage: "delivered", delivered_at: haceH(200 + i), created_at: haceH(210 + i), product_type: "Formatos de salida con folio consecutivo y copia al carbón", invoice_folio: "F-" + (1310 + i) }));
+  s.filas = conAnteriores("P-1400", [...ANTERIORES(), ...ocho]); s.ordenesSeMueven = true;
+  const dlg = await abrirOrden(p, s, "P-1400");
+  await autorizar(p, dlg);
+  await responder(p, { como: "reimpresion", otra: "P-1303" });   // con la lista y el aviso de otro cliente: lo más alto que se pone
+  const caja = await ventanaAut(p).boundingBox();
+  const r = await ventanaAut(p).evaluate(d => { const b = [...d.querySelectorAll("button")].find(x => /^Registrar y pasar/.test(x.textContent.trim())); if (!b) return null; const x = b.getBoundingClientRect(), e = document.elementFromPoint(x.left + x.width / 2, x.top + x.height / 2); return { seVe: !!e && (e === b || b.contains(e)), deLado: d.scrollWidth > d.clientWidth + 1 }; });
+  ok(id + "-la-pregunta-cabe-con-lo-mas-largo", !!caja && caja.x >= 0 && caja.y >= 0 && caja.x + caja.width <= vp.width && caja.y + caja.height <= vp.height && !!r && r.seVe && !r.deLado, JSON.stringify({ caja, ...r }));
+}, { viewport: vp });
+await caso("ses-419-direccion-desde-la-ficha-sin-ctp", async ({ p, s }) => {
+  s.filas = enDiseno("P-1400"); s.ordenesSeMueven = true;
+  await aTodas(p, s, "marcelo");
+  await autorizar(p, fichaDe(p, "P-1400"), "Sin CTP, Lista");
+  await responder(p, { como: "sin", quien: "Ana", canal: "Teléfono" });
+  await pasar(p);
+  await esperarQue(() => escritoEn(s, "order_timeline").length > 0, 6000);
+  const u = escritoEn(s, "orders", "PATCH")[0]?.cuerpo, tl = escritoEn(s, "order_timeline")[0]?.cuerpo;
+  ok("ses-419-direccion-desde-la-ficha-sin-ctp", u?.stage === "ready" && !!u?.proof_approved && tl?.action === LINEA_SIN + " · Ana por teléfono" + A_LISTA && tl?.by_user === "admin", `${JSON.stringify(u)} · «${tl?.action}» por ${tl?.by_user}`);
 });
 
 // ════════════════════════ v10.84.190: el perfil por la cuenta, no por el nombre (paso 2 de una sola cuenta) ════════════════════════

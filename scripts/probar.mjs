@@ -91,6 +91,8 @@ const TANDAS = [
   { nombre: "sesion-3", romper: "tests/romper/sesion.mjs", env: { SESION_PARTE: "3" } },
   // v10.84.190 — y en cuatro: la cuenta (una sola cuenta nombre@sygma.mx), desde ses-300, en su carpeta y su puerto (el 5473), para no alargar las otras.
   { nombre: "sesion-4", romper: "tests/romper/sesion.mjs", env: { SESION_PARTE: "4" } },
+  // v10.84.193 — y en cinco: salir de Diseño pregunta cómo autorizó el cliente (ISO 9001), desde ses-400, en su carpeta y su puerto (el 5474)
+  { nombre: "sesion-5", romper: "tests/romper/sesion.mjs", env: { SESION_PARTE: "5" } },
   // las puertas de cancelar: la orden, la orden con folio, una parte y el plan matriz (v10.84.73, la critique de la noche del 12-oct);
   // el banco extrae las cuatro ventanas con extraer.mjs y simula lo que hace App al confirmar
   { nombre: "cancelar", gen: "tests/banco/gen-cancelar.mjs", romper: "tests/romper/cancelar.mjs", puerto: 5187 },

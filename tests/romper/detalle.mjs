@@ -1609,27 +1609,32 @@ await caso("det-251-a-1920-tampoco", "caso=tiemposrojo&rol=produccion", async p 
 const BOTON_AUT = /Cliente autorizó sin prueba/;
 const aDiseno = p => p.evaluate(() => window.__cambiar({ stage: "design", current_machine: null }));
 const LINEA_AUT = { action: "✅ Cliente autorizó sin prueba de color · 🎨 Diseño → 💿 CTP", date: "2026-11-06T16:00:00Z", by: "preprensa", to: "ctp" };
-for (const [id, rol] of [["det-252-noemi", "preprensa"], ["det-253-direccion", "admin"]]) await caso(id + "-ve-el-boton-en-diseno", "caso=alertas&rol=" + rol, async p => {
+// v10.84.193 — Marcelo, 27-nov: «Directo a CTP» y «Sin CTP, Lista» preguntan cómo autorizó el cliente (la pregunta es de App, encima del detalle); el botón suelto
+//   «Cliente autorizó sin prueba» se fue: es una de las tres respuestas. Estas cuidan lo mismo que cuidaban, con los tres botones de hoy
+const SALEN = /^(Directo a CTP|Sin CTP, Lista)/;
+for (const [id, rol] of [["det-252-noemi", "preprensa"], ["det-253-direccion", "admin"]]) await caso(id + "-ve-los-tres-en-diseno", "caso=alertas&rol=" + rol, async p => {
   await aDiseno(p); await espera(p, 400);
   const nombres = await dlg(p).getByRole("button").evaluateAll(l => l.map(b => (b.textContent || "").trim()));
-  const i = n => nombres.findIndex(x => x.startsWith(n)), aut = i("Cliente autorizó sin prueba");
-  ok(id + "-ve-el-boton-en-diseno", i("Prueba de Color") >= 0 && aut > i("Prueba de Color") && i("Directo a CTP") > aut && i("Sin CTP, Lista") > i("Directo a CTP"), nombres.filter(x => /Prueba|autorizó|CTP/.test(x)).join(" | "));
+  const i = n => nombres.findIndex(x => x.startsWith(n));
+  ok(id + "-ve-los-tres-en-diseno", i("Prueba de Color") >= 0 && i("Directo a CTP") > i("Prueba de Color") && i("Sin CTP, Lista") > i("Directo a CTP") && i("Cliente autorizó sin prueba") < 0, nombres.filter(x => /Prueba|autorizó|CTP/.test(x)).join(" | "));
 });
 for (const [rol, etapa] of [["produccion", "design"], ["german", "design"], ["karla", "design"], ["secretaria", "design"], ["vendedor", "design"], ["preprensa", "ctp"], ["admin", "ctp"], ["preprensa", "proof_client"], ["preprensa", "draft"], ["admin", "ready"]]) await caso(`det-254-${rol}-en-${etapa}-no-lo-tiene`, "caso=alertas&rol=" + rol, async p => {
   await p.evaluate(e => window.__cambiar({ stage: e, current_machine: null }), etapa); await espera(p, 400);
-  const n = await dlg(p).getByRole("button", { name: BOTON_AUT }).count();
-  ok(`det-254-${rol}-en-${etapa}-no-lo-tiene`, n === 0, `${n} botones`);
+  const n = await dlg(p).getByRole("button", { name: BOTON_AUT }).count(), m = await dlg(p).getByRole("button", { name: SALEN }).count();
+  ok(`det-254-${rol}-en-${etapa}-no-lo-tiene`, n === 0 && m === 0, `${n} sueltos · ${m} de salir de Diseño`);
 });
 await caso("det-254-flujos-en-diseno-solo-pre-prensa-y-direccion", "flujos=1", async p => {
   const t = k => p.locator(`[data-k="${k}"]`).innerText({ timeout: 3000 }).catch(() => "(no está)");
   const si = await Promise.all(["design|preprensa", "design|admin"].map(t)), no = await Promise.all(["design|produccion", "design|german", "design|karla", "design|secretaria", "design|vendedor", "ctp|preprensa", "ctp|admin", "proof_client|preprensa", "proof_client|admin", "draft|preprensa", "draft|admin", "ready|admin"].map(t));
-  ok("det-254-flujos-en-diseno-solo-pre-prensa-y-direccion", si.every(x => BOTON_AUT.test(x)) && !no.some(x => BOTON_AUT.test(x)) && !no.includes("(no está)"), `sí: ${si.map(x => BOTON_AUT.test(x)).join()} · no: ${no.map(x => BOTON_AUT.test(x)).join()}`);
+  const sale = x => /Directo a CTP/.test(x) && /Sin CTP, Lista/.test(x);
+  ok("det-254-flujos-en-diseno-solo-pre-prensa-y-direccion", si.every(x => sale(x) && !BOTON_AUT.test(x)) && !no.some(x => /Directo a CTP|Sin CTP, Lista/.test(x) || BOTON_AUT.test(x)) && !no.includes("(no está)"), `sí: ${si.map(sale).join()} · no: ${no.map(x => /Directo a CTP|Sin CTP, Lista/.test(x)).join()}`);
 });
-await caso("det-255-el-boton-pregunta-en-app-y-el-detalle-se-queda", "caso=alertas&rol=preprensa", async p => {
+for (const [id, boton, arg] of [["det-255-directo-a-ctp-pregunta-en-app-y-el-detalle-se-queda", "Directo a CTP", "ctp"], ["det-267-sin-ctp-lista-pregunta-en-app-y-el-detalle-se-queda", "Sin CTP, Lista", "ready"]]) await caso(id, "caso=alertas&rol=preprensa", async p => {
   await aDiseno(p); await espera(p, 400);
-  await dlg(p).getByRole("button", { name: BOTON_AUT }).click(); await espera(p, 800);
-  const l = await log(p), abierto = await p.locator('[role="dialog"]').count();
-  ok("det-255-el-boton-pregunta-en-app-y-el-detalle-se-queda", /accion:autorizar_sin_prueba/.test(l) && !/accion:advance/.test(l) && abierto >= 1, `${(l.match(/accion:\S+/g) || []).join()} · diálogos ${abierto}`);
+  await dlg(p).getByRole("button", { name: boton, exact: true }).click(); await espera(p, 800);
+  const l = await log(p), abierto = await p.locator('[role="dialog"]').count(), t = await textoDlg(p);
+  // no pregunta dos veces: la pregunta de «¿Pasar P-… a …?» del detalle no sale; la de App dice cómo autorizó el cliente
+  ok(id, new RegExp("accion:salir_de_diseno " + arg).test(l) && !/accion:advance/.test(l) && abierto >= 1 && !/¿Pasar .* a «/.test(t), `${(l.match(/accion:\S+( \S+)?/g) || []).join()} · diálogos ${abierto}`);
 });
 await caso("det-256-el-detalle-dice-quien-y-cuando", "caso=alertas&rol=karla", async p => {
   await p.evaluate(x => window.__cambiar({ stage: "ctp", current_machine: null, proof_approved: x.date, timeline: [x] }), LINEA_AUT); await espera(p, 400);
@@ -1680,14 +1685,34 @@ await caso("det-262-lo-principal-sigue-siendo-prueba-de-color", "caso=alertas&ro
 });
 await caso("det-263-en-pausa-se-porta-como-los-otros-dos", "caso=alertas&rol=preprensa", async p => {
   await p.evaluate(() => window.__cambiar({ stage: "design", current_machine: null, snooze_reason: "El cliente enviará corrección", snooze_stage: "design", snoozed_by: "preprensa", snooze_kind: "awaiting_client" })); await espera(p, 400);
-  const a = await dlg(p).getByRole("button", { name: BOTON_AUT }).count(), b = await dlg(p).getByRole("button", { name: "Directo a CTP" }).count();
-  ok("det-263-en-pausa-se-porta-como-los-otros-dos", a === b, `autorizó ${a} · Directo a CTP ${b}`);
+  const a = await dlg(p).getByRole("button", { name: "Sin CTP, Lista", exact: true }).count(), b = await dlg(p).getByRole("button", { name: "Directo a CTP", exact: true }).count(), c = await dlg(p).getByRole("button", { name: BOTON_AUT }).count();
+  ok("det-263-en-pausa-se-porta-como-los-otros-dos", a === b && c === 0, `Sin CTP ${a} · Directo a CTP ${b} · suelto ${c}`);
 });
-for (const [id, vp] of [["det-264a-a-1366", { width: 1366, height: 768 }], ["det-264b-a-1920", { width: 1920, height: 1080 }], ["det-264c-a-360", { width: 360, height: 740 }]]) await caso(id + "-los-cuatro-botones-caben", "caso=alertas&rol=preprensa", async p => {
+for (const [id, vp] of [["det-264a-a-1366", { width: 1366, height: 768 }], ["det-264b-a-1920", { width: 1920, height: 1080 }], ["det-264c-a-360", { width: 360, height: 740 }]]) await caso(id + "-los-tres-botones-caben", "caso=alertas&rol=preprensa", async p => {
   await aDiseno(p); await espera(p, 500);
   const r = await dlg(p).evaluate(d => { const c = d.getBoundingClientRect(); return [...d.querySelectorAll("button")].filter(b => /Prueba de Color|Cliente autorizó|Directo a CTP|Sin CTP/.test(b.textContent)).map(b => { const x = b.getBoundingClientRect(); return { t: b.textContent.trim().slice(0, 16), dentro: x.left >= c.left - 1 && x.right <= c.right + 1, alto: Math.round(x.height), corte: b.scrollWidth > b.clientWidth + 1 }; }); });
-  ok(id + "-los-cuatro-botones-caben", r.length === 4 && r.every(x => x.dentro && !x.corte), JSON.stringify(r));
+  ok(id + "-los-tres-botones-caben", r.length === 3 && !r.some(x => /^Cliente autor/.test(x.t)) && r.every(x => x.dentro && !x.corte), JSON.stringify(r));
 }, vp);
+// ── v10.84.193 — lo que se guarda al salir de Diseño, como se lee en el detalle (Karla, Dirección, quien sea): cómo, quién del cliente, por dónde, cuándo y quién lo registró ──
+const RENGLON = (action, date = "2026-11-27T16:00:00Z") => ({ action, date, by: "preprensa", to: "ctp" });
+for (const [id, accion, dice] of [
+  ["det-268-aprobo-la-prueba", "✅ Cliente aprobó la prueba · Ana Pérez por WhatsApp · 🎨 Diseño → 💿 CTP", /Cliente autorizó\s+Aprobó la prueba · Ana Pérez por WhatsApp · 27-nov[^·]* · Noemí/],
+  ["det-269-sin-ver-prueba", "✅ Cliente autorizó sin ver prueba · Lic. Ramírez por correo · 🎨 Diseño → 💿 CTP", /Cliente autorizó\s+Sin ver prueba · Lic\. Ramírez por correo · 27-nov[^·]* · Noemí/],
+  ["det-270-reimpresion", "✅ Reimpresión sin cambios de P-1301 · 🎨 Diseño → 💿 CTP", /Cliente autorizó\s+Reimpresión sin cambios de P-1301 · 27-nov[^·]* · Noemí/],
+  ["det-271-en-persona", "✅ Cliente aprobó la prueba · Don Beto en persona · 🎨 Diseño → ✅ Lista para imprimir", /Cliente autorizó\s+Aprobó la prueba · Don Beto en persona · 27-nov[^·]* · Noemí/],
+  // un «por» dentro del nombre no se confunde con el de por dónde
+  ["det-272-un-por-dentro-del-nombre", "✅ Cliente aprobó la prueba · Ana por parte de compras por correo · 🎨 Diseño → 💿 CTP", /Aprobó la prueba · Ana por parte de compras por correo · 27-nov/],
+]) await caso(id, "caso=alertas&rol=karla", async p => {
+  await p.evaluate(x => window.__cambiar({ stage: "ctp", current_machine: null, proof_approved: x.date, timeline: [x] }), RENGLON(accion)); await espera(p, 400);
+  const t = (await dlg(p).innerText()).replace(/\s+/g, " ");
+  ok(id, dice.test(t) && !/undefined|null/.test((t.match(/Cliente autorizó.{0,100}/i) || [""])[0]), (t.match(/Cliente autorizó.{0,100}/i) || [t.slice(0, 140)])[0]);
+});
+// de las de la 189 (9-nov) a la de hoy: manda la última, y una regresada a Diseño ya no está autorizada
+await caso("det-273-la-ultima-manda-tambien-con-las-nuevas", "caso=alertas&rol=karla", async p => {
+  await p.evaluate(x => window.__cambiar({ stage: "ctp", current_machine: null, proof_approved: "2026-11-27T17:00:00Z", timeline: x }), [RENGLON("✅ Cliente autorizó sin prueba de color · 🎨 Diseño → 💿 CTP", "2026-11-09T16:00:00Z"), { action: "↩️ CTP → 🎨 Diseño", date: "2026-11-20T16:00:00Z", by: "german", to: "design" }, RENGLON("✅ Reimpresión sin cambios de P-1301 · 🎨 Diseño → 💿 CTP", "2026-11-27T17:00:00Z")]); await espera(p, 400);
+  const t = (await dlg(p).innerText()).replace(/\s+/g, " ");
+  ok("det-273-la-ultima-manda-tambien-con-las-nuevas", /Reimpresión sin cambios de P-1301/.test(t) && !/Sin prueba de color/.test(t), (t.match(/Cliente autorizó.{0,90}/i) || [""])[0]);
+});
 
 await browser.close();
 for (const r of res) console.log(r);
