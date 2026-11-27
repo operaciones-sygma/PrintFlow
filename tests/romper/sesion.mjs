@@ -3670,6 +3670,61 @@ for (const [id, vp] of [["ses-445a-a-1366", { width: 1366, height: 768 }], ["ses
   const caja = await v.boundingBox(), r = await v.evaluate(d => { const b = [...d.querySelectorAll("button")].find(x => x.textContent.trim() === "Guardar"); if (!b) return null; const x = b.getBoundingClientRect(), e = document.elementFromPoint(x.left + x.width / 2, x.top + x.height / 2); return { seVe: !!e && (e === b || b.contains(e)) }; });
   ok(id + "-atenderla-cabe", !!caja && caja.y >= 0 && caja.y + caja.height <= vp.height && caja.x + caja.width <= vp.width && !!r && r.seVe, JSON.stringify({ caja, ...r }));
 }, { viewport: vp });
+// ── v10.84.194, vuelta 2: por donde no se diseñó (escritas después del código: cada una con su sabotaje) ──
+await caso("ses-447-vaciar-la-causa-la-regresa-a-por-atender", async ({ p, s }) => {
+  s.filas = conNC([NCF("NC-0001", { es_no_conformidad: true, causa: "RGB", que_se_hizo: "Se corrigió" })]); devuelveLoGuardado(s);
+  await aNC(p, s);
+  await abrirNC(p, "NC-0001");
+  await ventanaNC(p, "NC-0001").getByLabel("Causa", { exact: true }).fill("   ");
+  await ventanaNC(p, "NC-0001").getByRole("button", { name: "Guardar", exact: true }).click();
+  await esperarQue(() => escritoEn(s, "no_conformidades", "PATCH").length > 0, 6000); await p.waitForTimeout(400);
+  const u = escritoEn(s, "no_conformidades", "PATCH")[0]?.cuerpo, t = await texto(p);
+  // sólo espacios es vaciarla: va null (no «   »), y la lista la regresa a «Por atender»
+  ok("ses-447-vaciar-la-causa-la-regresa-a-por-atender", JSON.stringify(u) === JSON.stringify({ causa: null }) && /NC-0001.{0,160}Por atender/.test(t), `${JSON.stringify(u)} · «${(t.match(/NC-0001.{0,120}/) || [""])[0]}»`);
+});
+await caso("ses-448-cerrarla-la-pasa-a-cerradas", async ({ p, s }) => {
+  s.filas = conNC([NCF("NC-0001", { es_no_conformidad: true, causa: "RGB", que_se_hizo: "Se corrigió el perfil" }), NCF("NC-0005", { origen: "queja", clave: null, es_no_conformidad: true })]); devuelveLoGuardado(s);
+  await aNC(p, s);
+  const antes = await p.getByRole("tab").evaluateAll(l => l.map(b => b.textContent.trim()).join());
+  await abrirNC(p, "NC-0001");
+  await ventanaNC(p, "NC-0001").getByRole("radio", { name: /^Sí$/ }).check();
+  await ventanaNC(p, "NC-0001").getByRole("button", { name: "Guardar", exact: true }).click();
+  await esperarQue(() => escritoEn(s, "no_conformidades", "PATCH").length > 0, 6000); await p.waitForTimeout(500);
+  const despues = await p.getByRole("tab").evaluateAll(l => l.map(b => b.textContent.trim()).join()), enAbiertas = await p.getByRole("button", { name: /^NC-0001/ }).count();
+  ok("ses-448-cerrarla-la-pasa-a-cerradas", antes === "Abiertas (2),Cerradas (0),No eran (0),Todas (2)" && despues === "Abiertas (1),Cerradas (1),No eran (0),Todas (2)" && enAbiertas === 0, `${antes} → ${despues} · en abiertas ${enAbiertas}`);
+});
+await caso("ses-449-la-lectura-lenta-no-dice-que-no-hay", async ({ p, s }) => {
+  s.filas = conNC(); s.retraso.no_conformidades = 3500;
+  await aNC(p, s);
+  const durante = await texto(p);
+  await p.getByText(/^NC-0001/).first().waitFor({ timeout: 10000 }).catch(() => {});
+  const luego = await texto(p);
+  ok("ses-449-la-lectura-lenta-no-dice-que-no-hay", /Leyendo/.test(durante) && !/No hay no conformidades/.test(durante) && !/Abiertas \(0\)/.test(durante) && /NC-0001/.test(luego), `durante «${(durante.match(/No conformidades.{0,120}/g) || [""]).pop()}»`);
+});
+await caso("ses-450-la-base-no-guarda-y-lo-escrito-se-queda", async ({ p, s }) => {
+  s.filas = conNC(); s.escrituraFalla = "no_conformidades";
+  await aNC(p, s);
+  await abrirNC(p, "NC-0001");
+  const v = ventanaNC(p, "NC-0001");
+  await v.getByRole("radio", { name: /^Sí, salió mal/ }).check();
+  await v.getByLabel("Causa", { exact: true }).fill("El archivo venía en RGB");
+  await v.getByRole("button", { name: "Guardar", exact: true }).click(); await p.waitForTimeout(1500);
+  const t = await leerTexto(v).catch(() => ""), sigue = await ventanaNC(p, "NC-0001").count(), causa = sigue ? await v.getByLabel("Causa", { exact: true }).inputValue() : "";
+  ok("ses-450-la-base-no-guarda-y-lo-escrito-se-queda", sigue === 1 && causa === "El archivo venía en RGB" && /No se guardó/.test(t), `ventana ${sigue} · «${causa}» · «${(t.match(/No se guardó.{0,60}/) || [""])[0]}»`);
+});
+await caso("ses-451-la-orden-escrita-sin-p", async ({ p, s }) => {
+  s.filas = conNC(); devuelveLoGuardado(s);
+  await aNC(p, s, "lupita");
+  await p.getByRole("button", { name: /Anotar una queja/ }).click(); await ventanaAnotar(p).waitFor({ timeout: 6000 });
+  const v = ventanaAnotar(p);
+  await v.getByLabel(/De qué orden/).fill("1400");
+  await v.getByRole("radio", { name: /^En persona$/ }).check();
+  await v.getByLabel(/Qué pasó/).fill("Vino a reclamar en mostrador");
+  await v.getByRole("button", { name: "Anotar", exact: true }).click();
+  await esperarQue(() => escritoEn(s, "no_conformidades").length > 0, 6000);
+  const c = escritoEn(s, "no_conformidades")[0]?.cuerpo;
+  ok("ses-451-la-orden-escrita-sin-p", c?.order_id === "OP-P-1400" && c?.canal === "persona" && c?.cliente === "LIC. ORLANDO CASAS", JSON.stringify(c));
+});
 await caso("ses-446-el-historial-dice-quien-y-que", async ({ p, s }) => {
   s.filas = conNC([NCF("NC-0001", { es_no_conformidad: true, causa: "RGB", historial: [{ en: haceH(3), por: "admin", cambios: { es_no_conformidad: [null, true], causa: [null, "RGB"] } }], cambiada_en: haceH(3), cambiada_por: "admin" })]);
   await aNC(p, s);
