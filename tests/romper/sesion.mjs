@@ -86,6 +86,7 @@ function simulada() {
     escrituraFalla: null, // v10.84.150 — una tabla cuyas escrituras (PATCH, POST) contestan 503: la base que no guarda
     ordenesSeMueven: false, // v10.84.172 — un PATCH a una orden contesta su id (sin esto, vacío: «cambió de etapa en otra sesión»)
     validar: null,     // v10.84.175 — { hechas: Set }: como la base de verdad, recuerda lo validado: el UPDATE que lleva su condición y ya estaba no toca nada (contesta [] sin error)
+    contesta: {},      // v10.84.194 — { tabla: (método, cuerpo, url) => filas }: lo que contesta un POST o un PATCH a esa tabla (por omisión, [])
   };
 }
 const b64u = o => Buffer.from(JSON.stringify(o)).toString("base64url");
@@ -225,6 +226,7 @@ async function rutear(ctx, s) {
         if (col) s.validar.hechas.add(id + col);
         return J(200, yaEstaba && conCondicion ? [] : [{ id }]);
       }
+      { const t = ruta.slice("/rest/v1/".length); if ((m === "POST" || m === "PATCH") && typeof s.contesta[t] === "function") return J(200, s.contesta[t](m, cuerpo, url)); }   // v10.84.194
       return J(200, ruta.startsWith("/rest/v1/rpc/") ? null : []);
     }
     if (ruta.startsWith("/functions/v1/")) return J(200, {});
@@ -3492,6 +3494,186 @@ await caso("ses-424-datos-raros-en-la-lista-y-el-aviso-no-se-salen", async ({ p,
   const r = await ventanaAut(p).evaluate(d => { const sale = [...d.querySelectorAll("*")].filter(x => !/^(INPUT|TEXTAREA|SELECT)$/.test(x.tagName) && x.scrollWidth > x.clientWidth + 2).map(x => x.tagName + ":" + (x.textContent || "").slice(0, 24) + " " + x.scrollWidth + ">" + x.clientWidth); return { deLado: d.scrollWidth > d.clientWidth + 1, sale: sale.slice(0, 4) }; });
   const t = await leerTexto(ventanaAut(p));
   ok("ses-424-datos-raros-en-la-lista-y-el-aviso-no-se-salen", !r.deLado && r.sale.length === 0 && /es de otro cliente/.test(t) && /P-1330 /.test(t), JSON.stringify(r));
+});
+
+// ════════════════════════ v10.84.194: «No conformidades» (ISO 9001 8.7 y 10.2, Marcelo 27-nov) ════════════════════════
+// Lo que debería vivir quien la atiende: abrir la lista y que la base agregue lo nuevo; ver qué está abierto; decir si es no conformidad (o por qué no), la causa, qué se
+//   hizo y si funcionó, sin pisar lo que otro guardó; anotar una queja de WhatsApp. Sin lectura no dice «no hay» (regla 12). La tabla, simulada (s.filas y s.contesta).
+const NCF = (folio, x = {}) => ({ id: "nc-" + folio, folio, origen: "regreso", clave: "regreso:" + folio, order_id: "OP-P-1400", ocurrio_en: haceH(20), que_paso: "P-1400: ↩️ Regresada de 💿 CTP → 🎨 Diseño · Razón: ERROR DE DISEÑO", cliente: "LIC. ORLANDO CASAS", canal: null, es_no_conformidad: null, por_que_no: null, causa: null, que_se_hizo: null, funciono: null, historial: [], creada_en: haceH(20), creada_por: "sistema", cambiada_en: null, cambiada_por: null, ...x });
+const TRES_NC = () => [NCF("NC-0001"), NCF("NC-0002", { origen: "queja", clave: null, que_paso: "El rojo salió naranja", canal: "whatsapp", es_no_conformidad: true, causa: "Perfil RGB", que_se_hizo: "Se reimprimió", funciono: true, creada_por: "secretaria" }), NCF("NC-0003", { es_no_conformidad: false, por_que_no: "Ya había placas" })];
+const conNC = (filas = TRES_NC()) => ({ orders: [ordenK("P-1400", { stage: "ctp", created_at: haceH(30), validated_by_production: true, validated_by_preprensa: true })], order_timeline: [], no_conformidades: filas });
+const aNC = async (p, s, quien = "noemi") => { await abrirYEntrar(p, s, quien); await esperarMenu(p, /^No conformidades$/); await despertar(p); await p.locator('button[title="No conformidades"]').first().click(); await p.waitForTimeout(900); };
+const ventanaNC = (p, folio) => p.getByRole("dialog", { name: new RegExp("^" + folio) });
+const abrirNC = async (p, folio) => { await p.getByRole("button", { name: new RegExp("^" + folio) }).first().click(); await ventanaNC(p, folio).waitFor({ timeout: 6000 }); await p.waitForTimeout(300); };
+const guardarApagado = (p, folio) => ventanaNC(p, folio).getByRole("button", { name: "Guardar", exact: true }).isDisabled();
+const ventanaAnotar = p => p.getByRole("dialog", { name: "Anotar una no conformidad" });
+const devuelveLoGuardado = s => { s.contesta.no_conformidades = (m, cuerpo, url) => { if (m === "POST") return [{ ...NCF("NC-0004"), id: "nc-nueva", clave: null, ...cuerpo, folio: "NC-0004", creada_por: "preprensa", es_no_conformidad: true }]; const id = (url.searchParams.get("id") || "").replace(/^eq\./, ""); const f = (s.filas.no_conformidades || []).find(x => x.id === id); return f ? [{ ...f, ...cuerpo, cambiada_en: new Date().toISOString(), cambiada_por: "preprensa" }] : []; }; };
+for (const [quien, ve] of [["noemi", true], ["marcelo", true], ["karla", true], ["lupita", true], ["gerardo", true], ["german", true], ["genaro", true], ["bodega", false]]) await caso(`ses-430-${quien}-${ve ? "ve" : "no-ve"}-no-conformidades`, async ({ p, s }) => {
+  s.filas = conNC();
+  await abrirYEntrar(p, s, quien); await despertar(p);
+  const menu = await entradasDelMenu(p);
+  ok(`ses-430-${quien}-${ve ? "ve" : "no-ve"}-no-conformidades`, menu.includes("No conformidades") === ve, menu.join(" | "));
+});
+await caso("ses-431-al-abrir-pide-lo-nuevo-y-ensena-lo-abierto", async ({ p, s }) => {
+  s.filas = conNC(); s.rpcRespuestas.nc_detectar = 0;
+  await aNC(p, s);
+  const pidio = s.peticiones.filter(x => /rpc\/nc_detectar|\/rest\/v1\/no_conformidades/.test(x.ruta)).map(x => x.m + " " + x.ruta.replace("/rest/v1/", ""));
+  const t = await texto(p), tabs = await p.getByRole("tab").evaluateAll(l => l.map(b => b.textContent.trim()));
+  ok("ses-431-al-abrir-pide-lo-nuevo-y-ensena-lo-abierto", pidio[0] === "POST rpc/nc_detectar" && pidio.includes("GET no_conformidades") && tabs.join() === "Abiertas (1),Cerradas (1),No eran (1),Todas (3)" && /NC-0001/.test(t) && !/NC-0002/.test(t) && /Por revisar/.test(t),
+    `${pidio.join(", ")} · ${tabs.join(", ")}`);
+});
+await caso("ses-432-sin-lectura-no-dice-que-no-hay", async ({ p, s }) => {
+  s.filas = { ...conNC(), no_conformidades: "falla" };
+  await aNC(p, s);
+  const t = await texto(p), reintentar = await p.getByRole("button", { name: "Reintentar" }).count();
+  ok("ses-432-sin-lectura-no-dice-que-no-hay", /No se pudieron leer las no conformidades/.test(t) && reintentar >= 1 && !/No hay no conformidades/.test(t) && !/Abiertas \(0\)/.test(t), `«${(t.match(/No se pudieron.{0,80}/) || [t.slice(0, 120)])[0]}» · reintentar ${reintentar}`);
+});
+await caso("ses-433-si-la-deteccion-falla-lo-dice-y-ensena-lo-registrado", async ({ p, s }) => {
+  s.filas = conNC(); s.rpcFalla = "nc_detectar";
+  await aNC(p, s);
+  const t = await texto(p);
+  ok("ses-433-si-la-deteccion-falla-lo-dice-y-ensena-lo-registrado", /No se pudo revisar si hay nuevas/.test(t) && /NC-0001/.test(t), (t.match(/No se pudo revisar.{0,80}/) || [t.slice(0, 120)])[0]);
+});
+await caso("ses-434-atenderla-guarda-solo-lo-que-cambio", async ({ p, s }) => {
+  s.filas = conNC(); devuelveLoGuardado(s);
+  await aNC(p, s);
+  await abrirNC(p, "NC-0001");
+  const v = ventanaNC(p, "NC-0001");
+  await v.getByRole("radio", { name: /^Sí, salió mal/ }).check();
+  await v.getByLabel("Causa", { exact: true }).fill("El archivo venía en RGB");
+  await v.getByLabel("Qué se hizo", { exact: true }).fill("Se corrigió el perfil");
+  await v.getByRole("button", { name: "Guardar", exact: true }).click();
+  await esperarQue(() => escritoEn(s, "no_conformidades", "PATCH").length > 0, 6000); await p.waitForTimeout(500);
+  const u = escritoEn(s, "no_conformidades", "PATCH")[0], t = await texto(p);
+  ok("ses-434-atenderla-guarda-solo-lo-que-cambio", JSON.stringify(u?.cuerpo) === JSON.stringify({ es_no_conformidad: true, causa: "El archivo venía en RGB", que_se_hizo: "Se corrigió el perfil" }) && /id=eq\.nc-NC-0001/.test(u?.qs) && /cambiada_en=is\.null/.test(u?.qs) && /Quedó NC-0001/.test(t) && (await ventanaNC(p, "NC-0001").count()) === 0,
+    `${JSON.stringify(u?.cuerpo)} ${u?.qs} · «${(t.match(/Quedó NC.{0,40}/) || [""])[0]}»`);
+});
+await caso("ses-435-no-era-pide-su-porque", async ({ p, s }) => {
+  s.filas = conNC(); devuelveLoGuardado(s);
+  await aNC(p, s);
+  await abrirNC(p, "NC-0001");
+  const v = ventanaNC(p, "NC-0001");
+  await v.getByRole("radio", { name: /^No era/ }).check(); await p.waitForTimeout(150);
+  const antes = await guardarApagado(p, "NC-0001"), falta = await leerTexto(v);
+  await v.getByLabel(/Por qué no es no conformidad/).fill("Ya había placas del trabajo anterior"); await p.waitForTimeout(150);
+  const despues = await guardarApagado(p, "NC-0001");
+  await v.getByRole("button", { name: "Guardar", exact: true }).click();
+  await esperarQue(() => escritoEn(s, "no_conformidades", "PATCH").length > 0, 6000);
+  const u = escritoEn(s, "no_conformidades", "PATCH")[0]?.cuerpo;
+  ok("ses-435-no-era-pide-su-porque", antes && /Falta: el porqué/.test(falta) && !despues && JSON.stringify(u) === JSON.stringify({ es_no_conformidad: false, por_que_no: "Ya había placas del trabajo anterior" }), `${antes},${despues} · ${JSON.stringify(u)}`);
+});
+await caso("ses-436-funciono-sin-decir-que-se-hizo-no-deja", async ({ p, s }) => {
+  s.filas = conNC([NCF("NC-0001", { es_no_conformidad: true, causa: "Perfil RGB" })]); devuelveLoGuardado(s);
+  await aNC(p, s);
+  await abrirNC(p, "NC-0001");
+  const v = ventanaNC(p, "NC-0001");
+  await v.getByRole("radio", { name: /^Sí$/ }).check(); await p.waitForTimeout(150);
+  const apagado = await guardarApagado(p, "NC-0001"), t = await leerTexto(v);
+  ok("ses-436-funciono-sin-decir-que-se-hizo-no-deja", apagado && /Falta: qué se hizo/.test(t) && escritoEn(s, "no_conformidades", "PATCH").length === 0, `${apagado} · «${(t.match(/Falta.{0,60}/) || [""])[0]}»`);
+});
+await caso("ses-437-si-otro-la-cambio-no-pisa", async ({ p, s }) => {
+  s.filas = conNC(); s.contesta.no_conformidades = () => [];   // el UPDATE con su condición no encuentra la fila: alguien más guardó
+  await aNC(p, s);
+  await abrirNC(p, "NC-0001");
+  const v = ventanaNC(p, "NC-0001");
+  await v.getByRole("radio", { name: /^Sí, salió mal/ }).check();
+  await v.getByLabel("Causa", { exact: true }).fill("Otra causa");
+  const lecturas0 = s.peticiones.filter(x => x.m === "GET" && /\/no_conformidades$/.test(x.ruta)).length;
+  await v.getByRole("button", { name: "Guardar", exact: true }).click(); await p.waitForTimeout(1200);
+  const t = await leerTexto(v).catch(() => ""), lecturas1 = s.peticiones.filter(x => x.m === "GET" && /\/no_conformidades$/.test(x.ruta)).length;
+  ok("ses-437-si-otro-la-cambio-no-pisa", /Alguien más la cambió/.test(t) && (await ventanaNC(p, "NC-0001").count()) === 1 && lecturas1 > lecturas0, `«${(t.match(/Alguien más.{0,60}/) || [t.slice(0, 80)])[0]}» · lecturas ${lecturas0}→${lecturas1}`);
+});
+await caso("ses-438-anotar-una-queja-de-whatsapp", async ({ p, s }) => {
+  s.filas = conNC(); devuelveLoGuardado(s);
+  await aNC(p, s, "lupita");
+  await p.getByRole("button", { name: /Anotar una queja/ }).click(); await ventanaAnotar(p).waitFor({ timeout: 6000 });
+  const v = ventanaAnotar(p);
+  await v.getByLabel(/De qué orden/).fill("p-1400"); await p.waitForTimeout(150);
+  const sugerido = await v.getByLabel("Cliente", { exact: true }).getAttribute("placeholder");
+  await v.getByRole("radio", { name: /^WhatsApp$/ }).check();
+  await v.getByLabel(/Qué pasó/).fill("El rojo salió naranja");
+  await v.getByRole("button", { name: "Anotar", exact: true }).click();
+  await esperarQue(() => escritoEn(s, "no_conformidades").length > 0, 6000); await p.waitForTimeout(500);
+  const c = escritoEn(s, "no_conformidades")[0]?.cuerpo, t = await texto(p);
+  ok("ses-438-anotar-una-queja-de-whatsapp", sugerido === "LIC. ORLANDO CASAS" && JSON.stringify(c) === JSON.stringify({ origen: "queja", que_paso: "El rojo salió naranja", cliente: "LIC. ORLANDO CASAS", canal: "whatsapp", order_id: "OP-P-1400" }) && /Quedó anotada NC-0004/.test(t) && /NC-0004/.test(t),
+    `«${sugerido}» · ${JSON.stringify(c)}`);
+});
+await caso("ses-439-anotar-lo-que-falta-no-deja", async ({ p, s }) => {
+  s.filas = conNC(); devuelveLoGuardado(s);
+  await aNC(p, s, "karla");
+  await p.getByRole("button", { name: /Anotar una queja/ }).click(); await ventanaAnotar(p).waitFor({ timeout: 6000 });
+  const v = ventanaAnotar(p), apagado = () => v.getByRole("button", { name: "Anotar", exact: true }).isDisabled();
+  await v.getByLabel(/Qué pasó/).fill("Llegó incompleto"); await p.waitForTimeout(150);
+  const sinCanal = await apagado();
+  await v.getByLabel(/De qué orden/).fill("P-9999"); await p.waitForTimeout(150);
+  const t = await leerTexto(v), conNumeroMalo = await apagado();
+  await v.getByLabel(/De qué orden/).fill(""); await v.getByRole("radio", { name: /^Otra/ }).check(); await p.waitForTimeout(150);
+  const otraSinCanal = !(await apagado());
+  ok("ses-439-anotar-lo-que-falta-no-deja", sinCanal && conNumeroMalo && /No encuentro P-9999/.test(t) && otraSinCanal && escritoEn(s, "no_conformidades").length === 0, `${sinCanal},${conNumeroMalo},${otraSinCanal}`);
+});
+await caso("ses-440-doble-clic-en-anotar-una-sola-vez", async ({ p, s }) => {
+  s.filas = conNC(); devuelveLoGuardado(s);
+  await aNC(p, s, "lupita");
+  await p.getByRole("button", { name: /Anotar una queja/ }).click(); await ventanaAnotar(p).waitFor({ timeout: 6000 });
+  const v = ventanaAnotar(p);
+  await v.getByRole("radio", { name: /^Teléfono$/ }).check();
+  await v.getByLabel(/Qué pasó/).fill("Faltaron 200 piezas");
+  await v.getByRole("button", { name: "Anotar", exact: true }).dblclick(); await p.waitForTimeout(1500);
+  ok("ses-440-doble-clic-en-anotar-una-sola-vez", escritoEn(s, "no_conformidades").length === 1, `${escritoEn(s, "no_conformidades").length} POST`);
+});
+await caso("ses-441-esc-con-algo-escrito-pregunta", async ({ p, s }) => {
+  s.filas = conNC(); devuelveLoGuardado(s);
+  await aNC(p, s, "lupita");
+  await p.getByRole("button", { name: /Anotar una queja/ }).click(); await ventanaAnotar(p).waitFor({ timeout: 6000 });
+  const v = ventanaAnotar(p);
+  await v.getByLabel(/Qué pasó/).fill("Algo pasó"); await v.getByRole("radio", { name: /^Correo$/ }).check();   // el foco en una casilla: Esc cuenta
+  await p.keyboard.press("Escape"); await p.waitForTimeout(300);
+  const pregunta = await v.getByRole("alert").count();
+  await v.getByRole("button", { name: "Salir sin anotar" }).click(); await p.waitForTimeout(300);
+  ok("ses-441-esc-con-algo-escrito-pregunta", pregunta === 1 && (await ventanaAnotar(p).count()) === 0 && escritoEn(s, "no_conformidades").length === 0, `pregunta ${pregunta}`);
+});
+await caso("ses-442-german-la-ve-y-no-la-atiende", async ({ p, s }) => {
+  s.filas = conNC();
+  await aNC(p, s, "german");
+  const anotar = await p.getByRole("button", { name: /Anotar una queja/ }).count();
+  await abrirNC(p, "NC-0001");
+  const v = ventanaNC(p, "NC-0001"), guardar = await v.getByRole("button", { name: "Guardar", exact: true }).count(), t = await leerTexto(v);
+  ok("ses-442-german-la-ve-y-no-la-atiende", anotar === 0 && guardar === 0 && /La atienden Dirección/.test(t), `anotar ${anotar} · guardar ${guardar}`);
+});
+await caso("ses-443-ver-la-orden-abre-su-detalle", async ({ p, s }) => {
+  s.filas = conNC();
+  await aNC(p, s);
+  await abrirNC(p, "NC-0001");
+  await ventanaNC(p, "NC-0001").getByRole("button", { name: /^Ver P-1400/ }).click(); await p.waitForTimeout(900);
+  const d = await p.getByRole("dialog").first().textContent().catch(() => "");
+  ok("ses-443-ver-la-orden-abre-su-detalle", /P-1400/.test(d) && (await ventanaNC(p, "NC-0001").count()) === 0, (d || "").slice(0, 100));
+});
+await caso("ses-444-datos-raros-no-se-salen", async ({ p, s }) => {
+  const raro = "Benachrichtigungseinstellungen".repeat(6) + " 🎉 عربي <script>alert(1)</script>";
+  s.filas = conNC([NCF("NC-0001", { que_paso: raro, cliente: raro })]);
+  await aNC(p, s);
+  const lista = await p.evaluate(() => [...document.querySelectorAll("main *, [role=tablist] ~ div *")].filter(x => x.scrollWidth > x.clientWidth + 2 && !/^(INPUT|TEXTAREA)$/.test(x.tagName) && /NC-0001|Benach/.test(x.textContent || "")).length);
+  await abrirNC(p, "NC-0001");
+  const r = await ventanaNC(p, "NC-0001").evaluate(d => ({ sale: [...d.querySelectorAll("*")].filter(x => x.scrollWidth > x.clientWidth + 2 && !/^(INPUT|TEXTAREA)$/.test(x.tagName)).length, script: [...document.querySelectorAll("script")].some(x => /alert\(1\)/.test(x.textContent)) }));
+  ok("ses-444-datos-raros-no-se-salen", lista === 0 && r.sale === 0 && !r.script, JSON.stringify({ lista, ...r }));
+});
+for (const [id, vp] of [["ses-445a-a-1366", { width: 1366, height: 768 }], ["ses-445b-a-1920", { width: 1920, height: 1080 }]]) await caso(id + "-atenderla-cabe", async ({ p, s }) => {
+  s.filas = conNC([NCF("NC-0001", { historial: Array.from({ length: 12 }, (_, i) => ({ en: haceH(10 - i / 2), por: "admin", cambios: { causa: [null, "Causa número " + i] } })) })]);
+  await aNC(p, s);
+  await abrirNC(p, "NC-0001");
+  const v = ventanaNC(p, "NC-0001");
+  await v.getByRole("radio", { name: /^Sí, salió mal/ }).check();
+  const caja = await v.boundingBox(), r = await v.evaluate(d => { const b = [...d.querySelectorAll("button")].find(x => x.textContent.trim() === "Guardar"); if (!b) return null; const x = b.getBoundingClientRect(), e = document.elementFromPoint(x.left + x.width / 2, x.top + x.height / 2); return { seVe: !!e && (e === b || b.contains(e)) }; });
+  ok(id + "-atenderla-cabe", !!caja && caja.y >= 0 && caja.y + caja.height <= vp.height && caja.x + caja.width <= vp.width && !!r && r.seVe, JSON.stringify({ caja, ...r }));
+}, { viewport: vp });
+await caso("ses-446-el-historial-dice-quien-y-que", async ({ p, s }) => {
+  s.filas = conNC([NCF("NC-0001", { es_no_conformidad: true, causa: "RGB", historial: [{ en: haceH(3), por: "admin", cambios: { es_no_conformidad: [null, true], causa: [null, "RGB"] } }], cambiada_en: haceH(3), cambiada_por: "admin" })]);
+  await aNC(p, s);
+  await abrirNC(p, "NC-0001");
+  const v = ventanaNC(p, "NC-0001");
+  await v.getByText(/^Historial \(1\)/).click(); await p.waitForTimeout(200);
+  const t = await leerTexto(v);
+  ok("ses-446-el-historial-dice-quien-y-que", /Marcelo: ¿Es no conformidad\? «Sí» · Causa «RGB»/.test(t), (t.match(/Historial.{0,120}/) || [t.slice(0, 120)])[0]);
 });
 
 // ════════════════════════ v10.84.190: el perfil por la cuenta, no por el nombre (paso 2 de una sola cuenta) ════════════════════════
