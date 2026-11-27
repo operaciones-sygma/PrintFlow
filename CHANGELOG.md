@@ -72,6 +72,10 @@ Marcelo, 27-nov: «Lista en PrintFlow» — «No conformidades» que se llena so
 
 **Qué NO se tocó.** Las órdenes y su bitácora (las no conformidades sólo las leen); lo que hace PrintFlow con una devolución o un regreso. La pantalla de los indicadores del mes va en la v10.84.195 (los meses se guardan solos desde ya).
 
+**En producción.** 27-nov 12:12, READY `dpl_7DGWa8c8MWekFFjiq3uCRr1RhH96` (e3b7f7b; la pantalla, 0fdb4f6 y 053b2e6; la base, 193b6de y 02f2201). Candado 3602 de 3602 (36 nuevas), de a 4, 1414 s, con una inestable revisada: det-98 (el Pantone del detalle, que la 194 no toca), `ERR_NO_BUFFER_SPACE` al abrir la página con el evento 4231 de Tcpip a las 11:51:42 (puertos agotados de la PC). Revisado sin escribir: los dos dominios sirven el mismo `index-gmMGpE-7.js` con la pantalla nueva.
+
+**Vuelta atrás.** La app: promover `dpl_B3vNuNf3QxM1fLz8vhe9stELDRjL` (e5fd197: la 193) o `git revert` de 0fdb4f6 y 053b2e6 (sin la pantalla, la base no estorba: nadie la lee y el trabajo de cada noche sigue detectando). La base: `docs/migrations/v10.84.195_indicadores_del_mes_vuelta_atras.sql` y luego `v10.84.194_no_conformidades_vuelta_atras.sql` (se pierde lo anotado: bajarlo antes), con el OK de Marcelo y el VOY a Central.
+
 **Para Marcelo.**
 - Las 10 detectadas esperan que alguien diga si son no conformidad: los dos regresos parecen de ruta («Es impresión digital», «Maquila»).
 - Hablar con Lupita y los vendedores: las quejas de WhatsApp se anotan aquí.
