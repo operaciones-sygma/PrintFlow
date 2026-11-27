@@ -20099,34 +20099,43 @@ function AnotarNoConformidad({orders,onAnotada,onClose}){
 // La evidencia de la revisión por la dirección. Cada noche la base guarda el mes que cerró (public.indicadores_mes, desde noviembre de 2026; el primero, el 1-dic)
 //   con lo medido y las metas de ese día; aquí Dirección lo ve contra sus metas y escribe su revisión y lo que decide (la base sella quién y cuándo; lo medido no
 //   cambia). El mes en curso se ve «hasta hoy» (indicadores_del_mes_en_curso, que revisa que sea Dirección), sin guardarse. Regla 12: sin lectura no dice nada falso.
+// v10.84.195 — (vuelta 2) un mes guardado sin una cifra (el cálculo cambió después, o la llave no vino) dice «Sin dato» y no compara: antes decía «0 · ✓ Cumple»,
+//   «Sin entregas con fecha» o «No se registró merma», que es inventar. `nombre`, por si las metas guardadas con el mes no traen ese renglón.
+const SIN_DATO="Sin dato";
 const INDICADORES_DEL_MES=[
-  {clave:"entrega_a_tiempo",valor:v=>v?.entrega_a_tiempo?.con_fecha?v.entrega_a_tiempo.pct:null,dice:v=>{const e=v?.entrega_a_tiempo||{};return e.con_fecha?e.pct+"% ("+e.a_tiempo+" de "+e.con_fecha+" con fecha"+(e.sin_fecha?"; "+e.sin_fecha+" sin fecha, no cuentan":"")+")":"Sin entregas con fecha"+(e.sin_fecha?" ("+e.sin_fecha+" sin fecha)":"")}},
-  {clave:"regresos_por_falla",valor:v=>v?.regresos_por_falla?.n??0,dice:v=>{const r=v?.regresos_por_falla||{};return (r.n??0)+(r.por_revisar?" · "+r.por_revisar+" por revisar en «No conformidades»":"")+(r.no_eran?" · "+r.no_eran+" no eran":"")}},
-  {clave:"devoluciones",valor:v=>v?.devoluciones?.n??0,dice:v=>String(v?.devoluciones?.n??0)},
-  {clave:"quejas",valor:v=>v?.quejas?.n??0,dice:v=>String(v?.quejas?.n??0)},
-  {clave:"merma",valor:()=>null,dice:v=>{const m=v?.merma||{};return m.renglones?m.renglones+(m.renglones===1?" registro en ":" registros en ")+m.ordenes+(m.ordenes===1?" orden":" órdenes")+" · "+Number(m.piezas||0).toLocaleString("es-MX")+" piezas, "+Number(m.pliegos||0).toLocaleString("es-MX")+" pliegos":"No se registró merma"}},
+  {clave:"entrega_a_tiempo",nombre:"Entrega a tiempo",valor:v=>v?.entrega_a_tiempo?.con_fecha?v.entrega_a_tiempo.pct??null:null,dice:v=>{const e=v?.entrega_a_tiempo;if(!e)return SIN_DATO;return e.con_fecha?e.pct+"% ("+e.a_tiempo+" de "+e.con_fecha+" con fecha"+(e.sin_fecha?"; "+e.sin_fecha+" sin fecha, no cuentan":"")+")":"Sin entregas con fecha"+(e.sin_fecha?" ("+e.sin_fecha+" sin fecha)":"")}},
+  {clave:"regresos_por_falla",nombre:"Regresos de etapa por falla",valor:v=>v?.regresos_por_falla?.n??null,dice:v=>{const r=v?.regresos_por_falla;if(!r||r.n==null)return SIN_DATO;return r.n+(r.por_revisar?" · "+r.por_revisar+" por revisar en «No conformidades»":"")+(r.no_eran?" · "+r.no_eran+" no eran":"")}},
+  {clave:"devoluciones",nombre:"Devoluciones",valor:v=>v?.devoluciones?.n??null,dice:v=>v?.devoluciones?.n==null?SIN_DATO:String(v.devoluciones.n)},
+  {clave:"quejas",nombre:"Quejas del cliente",valor:v=>v?.quejas?.n??null,dice:v=>v?.quejas?.n==null?SIN_DATO:String(v.quejas.n)},
+  {clave:"merma",nombre:"Merma",valor:()=>null,dice:v=>{const m=v?.merma;if(!m)return SIN_DATO;return m.renglones?m.renglones+(m.renglones===1?" registro en ":" registros en ")+m.ordenes+(m.ordenes===1?" orden":" órdenes")+" · "+Number(m.piezas||0).toLocaleString("es-MX")+" piezas, "+Number(m.pliegos||0).toLocaleString("es-MX")+" pliegos":"No se registró merma"}},
 ];
 const cumpleMeta=(meta,valor)=>{if(!meta||meta.umbral==null||!meta.sentido||valor==null)return null;const u=Number(meta.umbral),x=Number(valor);if(isNaN(u)||isNaN(x))return null;return meta.sentido==="al_menos"?x>=u:x<=u};
 const nombreDelMes=mes=>{const d=new Date(String(mes).slice(0,7)+"-15T12:00:00");return isNaN(d)?String(mes):d.toLocaleDateString("es-MX",{month:"long",year:"numeric"})};
+// v10.84.195 — (vuelta 2) los meses cerrados que ya debían estar guardados y no están: indicadores_guardar arranca en noviembre de 2026 y corre cada noche a las
+//   00:20 de México (06:20 UTC; México ya no cambia de horario: UTC−6), con una hora de holgura; la cuenta va en hora de México aunque el navegador esté en otra
+//   (Marcelo viaja). Sin esto, el día que el trabajo no corriera, la pantalla seguiría diciendo «se guarda solo el 1 de diciembre».
+const mesesQueFaltan=(meses,ahora=Date.now())=>{const lim=new Date(ahora-7*3600000),hasta=lim.getUTCFullYear()*12+lim.getUTCMonth()-1,hay=new Set((meses||[]).map(m=>String(m.mes).slice(0,7))),r=[];for(let k=2026*12+10;k<=hasta;k++){const c=Math.floor(k/12)+"-"+String(k%12+1).padStart(2,"0");if(!hay.has(c))r.push(c)}return r};
 function TablaDelMes({valores,metas}){
   const porClave=new Map((metas||[]).map(m=>[m.clave,m]));
-  const nc=valores?.no_conformidades||{},dis=valores?.diseno||{};
+  const nc=valores?.no_conformidades,dis=valores?.diseno;   // v10.84.195 — (vuelta 2) sin su llave, el renglón de abajo no dice «0»
+  const pie=[nc&&"No conformidades del mes: "+(nc.del_mes??0)+" ("+(nc.abiertas??0)+" abiertas, "+(nc.cerradas??0)+" cerradas"+(nc.no_eran?", "+nc.no_eran+" no eran":"")+")",dis&&"Salidas de Diseño a CTP o Lista: "+(dis.salidas??0)+", con la autorización del cliente registrada "+(dis.con_autorizacion??0)].filter(Boolean);
   const celda={padding:"7px 8px",borderBottom:"0.5px solid "+C.bd,fontSize:12,verticalAlign:"top",overflowWrap:"anywhere"};
   return <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",tableLayout:"fixed",minWidth:560}}>
     <thead><tr>{["Indicador","Meta","Lo medido","¿Cumple?"].map((h,i)=><th key={h} style={{...celda,textAlign:"left",fontSize:10,fontWeight:700,color:C.t2,textTransform:"uppercase",width:i===3?96:i===0?"22%":undefined}}>{h}</th>)}</tr></thead>
     <tbody>{INDICADORES_DEL_MES.map(ind=>{const m=porClave.get(ind.clave),c=cumpleMeta(m,ind.valor(valores));return <tr key={ind.clave}>
-      <td style={{...celda,fontWeight:700}}>{m?.nombre||ind.clave}</td><td style={{...celda,color:C.t2}}>{m?.meta||"—"}</td><td style={celda}>{ind.dice(valores)}</td>
+      <td style={{...celda,fontWeight:700}}>{m?.nombre||ind.nombre}</td><td style={{...celda,color:C.t2}}>{m?.meta||"—"}</td><td style={celda}>{ind.dice(valores)}</td>
       <td style={{...celda,fontWeight:700,color:c===true?C.okInk:c===false?C.dnInk:C.t2}}>{c===true?"✓ Cumple":c===false?"✗ No cumple":"—"}</td></tr>})}</tbody>
   </table>
-  <p style={{fontSize:12,color:C.t2,margin:"8px 0 0",lineHeight:1.5,overflowWrap:"anywhere"}}>No conformidades del mes: {nc.del_mes??0} ({nc.abiertas??0} abiertas, {nc.cerradas??0} cerradas{nc.no_eran?", "+nc.no_eran+" no eran":""}). Salidas de Diseño a CTP o Lista: {dis.salidas??0}, con la autorización del cliente registrada {dis.con_autorizacion??0}.</p></div>;
+  {pie.length>0&&<p style={{fontSize:12,color:C.t2,margin:"8px 0 0",lineHeight:1.5,overflowWrap:"anywhere"}}>{pie.join(". ")}.</p>}</div>;
 }
-function RevisionDelMes({mes,onGuardada}){
+function RevisionDelMes({mes,onGuardada,onSucio}){
   const [revision,setRevision]=useState(mes.revision||"");
   const [acciones,setAcciones]=useState(mes.acciones||"");
   const [saving,setSaving]=useState(false);
   const [err,setErr]=useState("");
   const enviando=useRef(false);
   const sucio=revision.trim()!==(mes.revision||"")||acciones.trim()!==(mes.acciones||"");
+  useEffect(()=>{onSucio&&onSucio(mes.mes,sucio);return()=>{onSucio&&onSucio(mes.mes,false)}},[sucio,mes.mes,onSucio]);   // v10.84.195 — (vuelta 2) para preguntar al salir
   const guardar=async()=>{
     if(!sucio||enviando.current)return;enviando.current=true;setSaving(true);setErr("");
     try{const {data,error}=await supabase.from("indicadores_mes").update({revision:revision.trim()||null,acciones:acciones.trim()||null}).eq("mes",mes.mes).select("*");
@@ -20153,6 +20162,18 @@ function IndicadoresDelMesVista({showToast}){
   const [metasHoy,setMetasHoy]=useState(null);
   const [lectura,setLectura]=useState({cargando:true,fallo:null,falloEnCurso:null});
   const turno=useRef(0);
+  // v10.84.195 — (vuelta 2) salir por el menú, la paleta o la N con una revisión escrita sin guardar pregunta (FORMA_ABIERTA, como la forma de la orden y
+  //   «Planta»), y cerrar la pestaña también; antes se perdía callada.
+  const sucios=useRef(new Set());
+  const [preguntaSalir,setPreguntaSalir]=useState(null);
+  const marcarSucio=useCallback((mes,si)=>{if(si)sucios.current.add(mes);else sucios.current.delete(mes)},[]);
+  useEffect(()=>{
+    const preguntar=seguir=>{if(!sucios.current.size)return false;setPreguntaSalir({seguir,meses:[...sucios.current]});return true};
+    FORMA_ABIERTA.preguntar=preguntar;
+    const alCerrar=e=>{if(sucios.current.size){e.preventDefault();e.returnValue=""}};
+    window.addEventListener("beforeunload",alCerrar);
+    return()=>{if(FORMA_ABIERTA.preguntar===preguntar)FORMA_ABIERTA.preguntar=null;window.removeEventListener("beforeunload",alCerrar)};
+  },[]);
   const leer=useCallback(async()=>{
     const yo=++turno.current;
     setLectura(l=>({...l,cargando:true,fallo:null,falloEnCurso:null}));
@@ -20164,6 +20185,8 @@ function IndicadoresDelMesVista({showToast}){
     if(!mt.error)setMetasHoy(mt.data||[]);
   },[]);
   useEffect(()=>{leer()},[leer]);
+  const faltan=useMemo(()=>meses?mesesQueFaltan(meses):[],[meses]);   // v10.84.195 — (vuelta 2) el mes que el trabajo de la noche no guardó se dice
+  // v10.84.195 — (vuelta 2) el mes en curso sin las metas de hoy se quedaba en «Leyendo…» aunque la lectura ya había acabado (y fallado)
   const tarjeta={background:C.bg,border:"1px solid "+C.bd,borderRadius:14,padding:"14px 16px",marginBottom:14,minWidth:0};
   return <div style={{maxWidth:1100,margin:"0 auto"}}>
     <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:6}}>
@@ -20173,17 +20196,19 @@ function IndicadoresDelMesVista({showToast}){
     <p style={{fontSize:12,color:C.t2,margin:"0 0 12px",lineHeight:1.45}}>Cada mes que cierra se guarda solo (el día 1 a las 00:20) con lo medido y las metas de ese día: ya no cambia. Aquí se revisa contra las metas y se anota lo que se decide (la revisión por la dirección).</p>
     {lectura.fallo&&<div role="alert" style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",padding:"10px 12px",borderRadius:10,background:C.sf,border:"1px solid "+C.bd,fontSize:12,margin:"0 0 12px"}}><span style={{flex:"1 1 200px",color:C.dnInk,fontWeight:600}}>No se pudieron leer los indicadores: {lectura.fallo}.{meses?" Lo que ves es de la lectura anterior.":""}</span><button onClick={leer} style={{...bt(C.ac),fontSize:12,padding:"6px 12px"}}>Reintentar</button></div>}
     {!meses&&!lectura.fallo&&<p style={{fontSize:12,color:C.t2}}>Leyendo…</p>}
+    {faltan.length>0&&<div role="alert" style={{padding:"10px 12px",borderRadius:10,background:C.sf,border:"1px solid "+C.bd,fontSize:12,color:C.dnInk,fontWeight:600,lineHeight:1.45,margin:"0 0 12px",overflowWrap:"anywhere"}}>Falta {faltan.map(nombreDelMes).join(", ")}: {faltan.length===1?"debió guardarse":"debieron guardarse"} solo el día 1 a las 00:20. Hay que revisar en la base el trabajo de cada noche («printflow-indicadores-mes»).</div>}
     <section aria-label="El mes en curso" style={tarjeta}>
       <h3 style={{fontSize:14,fontWeight:800,margin:"0 0 8px"}}>{enCurso?.mes?nombreDelMes(enCurso.mes):"El mes en curso"} · hasta hoy (todavía no se guarda)</h3>
-      {lectura.falloEnCurso?<p role="status" style={{fontSize:12,color:C.wnInk,fontWeight:600,margin:0}}>No se pudo leer el mes en curso: {lectura.falloEnCurso}.</p>:enCurso&&metasHoy?<TablaDelMes valores={enCurso} metas={metasHoy}/>:<p style={{fontSize:12,color:C.t2,margin:0}}>Leyendo…</p>}
+      {lectura.falloEnCurso?<p role="status" style={{fontSize:12,color:C.wnInk,fontWeight:600,margin:0}}>No se pudo leer el mes en curso: {lectura.falloEnCurso}.</p>:enCurso&&metasHoy?<TablaDelMes valores={enCurso} metas={metasHoy}/>:lectura.cargando?<p style={{fontSize:12,color:C.t2,margin:0}}>Leyendo…</p>:<p role="status" style={{fontSize:12,color:C.wnInk,fontWeight:600,margin:0}}>{!metasHoy?"No se pudieron leer las metas de hoy: sin ellas no se compara el mes en curso.":"La base no contestó el mes en curso."}</p>}
     </section>
-    {meses&&!meses.length&&<p style={{fontSize:13,color:C.t2,padding:"6px 0"}}>Todavía no se guarda ningún mes: el primero, noviembre, se guarda solo el 1 de diciembre a las 00:20.</p>}
+    {meses&&!meses.length&&!faltan.length&&<p style={{fontSize:13,color:C.t2,padding:"6px 0"}}>Todavía no se guarda ningún mes: el primero, noviembre, se guarda solo el 1 de diciembre a las 00:20.</p>}
     {(meses||[]).map(m=><section key={m.mes} aria-label={"Indicadores de "+nombreDelMes(m.mes)} style={tarjeta}>
       <h3 style={{fontSize:14,fontWeight:800,margin:"0 0 2px"}}>{nombreDelMes(m.mes)}</h3>
       <div style={{fontSize:11,color:C.t2,marginBottom:8}}>Guardado el {fDT(m.guardado_en)} ({m.guardado_por}) · con las metas de ese día</div>
       <TablaDelMes valores={m.valores} metas={m.metas}/>
-      <RevisionDelMes key={m.mes+(m.revisado_en||"")} mes={m} onGuardada={g=>{setMeses(p=>(p||[]).map(x=>x.mes===g.mes?g:x));showToast&&showToast("Quedó la revisión de "+nombreDelMes(g.mes))}}/>
+      <RevisionDelMes key={m.mes+(m.revisado_en||"")} mes={m} onSucio={marcarSucio} onGuardada={g=>{setMeses(p=>(p||[]).map(x=>x.mes===g.mes?g:x));showToast&&showToast("Quedó la revisión de "+nombreDelMes(g.mes))}}/>
     </section>)}
+    {preguntaSalir&&<ConfirmModal title={"¿Salir sin guardar la revisión"+(preguntaSalir.meses.length===1?" de "+nombreDelMes(preguntaSalir.meses[0]):"")+"?"} message="Lo que escribiste se pierde." confirmLabel="Salir sin guardar" confirmColor={C.dnInk} cancelLabel="Seguir escribiendo" zIndex={2100} onConfirm={()=>{const ir=preguntaSalir.seguir;sucios.current.clear();setPreguntaSalir(null);ir()}} onClose={()=>setPreguntaSalir(null)}/>}
   </div>;
 }
 function CancelacionesView({orders, role, onCancelOrders, onDetail}){
