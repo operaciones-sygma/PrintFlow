@@ -12,6 +12,46 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.195 — «Indicadores del mes» (la evidencia para la ISO 9001, 3 de 3: la revisión por la dirección) — 27-nov-2026
+
+Marcelo, 27-nov: «Sí, cada mes»: el reporte de indicadores del día 1 contra sus metas («las recomendadas», con entrega a tiempo 85%), como evidencia de la revisión por la dirección (ISO 9001 6.2, 9.1.3 y 9.3). La base ya estaba desde la mañana (`v10_84_195_indicadores_del_mes` y `v10_84_195b_permisos_de_mas`, en la entrada de la 194): cada noche a las 00:20 guarda el mes que cerró, con lo medido y las metas de ese día. El primero, noviembre, se guarda el 1-dic.
+
+**Qué se cambió en la app.**
+- **«Indicadores del mes»**, sólo para Dirección, en el menú y en la base: `metas_calidad` e `indicadores_mes` sólo los lee `admin` (`IndicadoresDelMesVista`). Cada mes guardado se compara contra las metas guardadas con él, no contra las de hoy:
+  - entrega a tiempo, con cuántas de cuántas; las que no tienen fecha no cuentan;
+  - regresos por falla, y los que siguen por revisar en «No conformidades»;
+  - devoluciones y quejas;
+  - merma: por ahora, que se registre.
+
+  Abajo van las no conformidades del mes y las salidas de Diseño con la autorización registrada (la 193).
+- **El mes en curso, «hasta hoy»** (`indicadores_del_mes_en_curso`), sin guardarse.
+- **La revisión de Dirección:** qué se concluye y lo que se decide hacer. La base sella quién y cuándo, y lo medido no cambia.
+- **Sin una lectura buena no dice nada falso** (regla 12): ni «ningún mes» ni «Leyendo…» cuando ya no está leyendo. A un mes guardado sin una cifra le pone «Sin dato» y no lo compara.
+- **Si el trabajo de cada noche no guarda un mes, lo dice** («Falta noviembre de 2026…»). La hora es la de México y hay una hora de holgura.
+- **Salir por el menú, la paleta o la N con la revisión escrita sin guardar pregunta**, como la forma de la orden y «Planta». Cerrar la pestaña también.
+
+**Cómo se probó** (`sesion-5`: la app real con la base simulada; ses-460 a ses-479).
+- **Vuelta 1** (15 casos, contra la primera versión): pasaron los 15. Para saber si de verdad detectan, se hicieron 15 sabotajes en la copia aparte. Con todos puestos caen las 20 que debían: las 15 de la vuelta 1 y las 5 de la vuelta 2 que también pasaron a la primera. Dos se corrigieron:
+  - ses-469 no podía fallar: todo lo raro iba en las cajas de texto, que la prueba no mide. Ahora también va en la meta.
+  - ses-465 iba a fallar sola desde el 1-dic, porque dependía del día en que corre. Ahora va con el reloj fijo.
+- **Vuelta 2** (10 casos, por donde no se diseñó): el doble clic al guardar con la base lenta; la base que no guarda o que no devuelve la fila; las metas que no llegan; un mes guardado sin una cifra; salir por el menú con la revisión escrita; volver a leer con algo escrito; el mes que el trabajo de la noche no guardó, y el 1-dic antes de la una. Contra la primera versión fallaban 5, todas de la app:
+  - sin las metas, se quedaba en «Leyendo…»;
+  - inventaba «0 · ✓ Cumple»;
+  - perdía la revisión escrita sin preguntar;
+  - no decía que faltaba un mes (dos casos).
+
+  Con el arreglo, 25 de 25. La base simulada tiene una perilla nueva: `retrasoEscritura`.
+- `probar-alcance.sh`: sin fugas. El candado completo corre al subir.
+
+**Qué NO se tocó.**
+- La base: la de la mañana se queda como está.
+- Las órdenes, «No conformidades» y lo que guarda el trabajo de cada noche.
+- `FORMA_ABIERTA`, que comparten la forma de la orden y «Planta», sólo se usa: la vista se registra al abrir y se quita al cerrar si sigue siendo la suya.
+
+**Para Marcelo.**
+- El 1-dic a las 00:20 se guarda noviembre. Ese día abre «Indicadores del mes» y escribe la revisión: esa página es la evidencia de la revisión por la dirección.
+- La merma todavía no tiene meta en número. Por ahora la meta es que se registre; cuando haya 3 meses de datos se pone su porcentaje.
+
 ## Pruebas: la segunda oportunidad de lo que ni empezó, la misma de las cuatro apps — 27-nov-2026 (sólo pruebas, la app no cambia)
 
 > **EN PRODUCCIÓN el 27-nov a las 10:30** (`8a19e93`, READY `dpl_BMGSaword7cRVkPcWbXiFpKjLDdx`).
