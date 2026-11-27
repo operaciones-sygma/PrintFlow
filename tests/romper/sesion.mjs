@@ -489,7 +489,7 @@ await caso("ses-06-abrir-cuenta-desactivada", async ({ p, s }) => {
   const e = await esperarEntrada(p);
   await esperarQue(() => s.salidas.length > 0, 5000);
   const t = await texto(p);
-  // v10.84.PASO5 — desde el 29-nov la cuenta de antes sin perfil lee «Ya no se entra con esta cuenta…» y cómo se entra ahora (ses-355): también es decir por qué
+  // v10.84.196 — desde el 29-nov la cuenta de antes sin perfil lee «Ya no se entra con esta cuenta…» y cómo se entra ahora (ses-355): también es decir por qué
   ok("ses-06-abrir-cuenta-desactivada", e === "login" && s.salidas.length >= 1 && soloLocales(s) && /desactivad|ya no existe|no está activ|Ya no se entra con esta cuenta/i.test(t),
     `una cuenta sin perfil activo sale sólo de aquí (salidas: ${s.salidas.join(" ") || "ninguna"}) y la pantalla de entrar dice por qué: «${t.slice(0, 140)}» (${e})`);
 });
@@ -4274,7 +4274,7 @@ await caso("ses-341-rol-de-otra-app-con-correo", async ({ p, s }) => {
   ok("ses-341-rol-de-otra-app-con-correo", e === "login" && /no tiene acceso a PrintFlow/i.test(t) && soloLocales(s), `${e}; salidas ${s.salidas.join(" ") || "ninguna"}; «${t.slice(0, 120)}»`);
 });
 
-// ════════════════════════ v10.84.PASO5: lo que dice la pantalla de entrar desde el 29-nov (paso 5 de una sola cuenta; docs/una-sola-cuenta/paso5_pantallas.md) ════════════════════════
+// ════════════════════════ v10.84.196: lo que dice la pantalla de entrar desde el 29-nov (paso 5 de una sola cuenta; docs/una-sola-cuenta/paso5_pantallas.md) ════════════════════════
 // Ese domingo los usuarios de siempre (nombre@padillahnos.local) dejan de existir en Auth: la app no rechaza el nombre (la cuenta de pruebas lo sigue usando), pero lo que
 // se lee dice cómo se entra ahora, con el correo de esa persona: secretaria es Lupita y admin es Marcelo. Lo raro no inventa un correo.
 const COMO_SE_ENTRA = c => new RegExp("Ahora se entra con tu correo completo: " + c.replace(/[.@]/g, m => "\\" + m));
