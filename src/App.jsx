@@ -85,7 +85,7 @@ const C={bg:"#fcfdfe",canvas:"#f0f3f7",card:"#fcfdfe",sf:"#eff2f6",bd:"#e4e8ee",
 // (etapa/producto) · meta=metadato (agente/fechas/badges) · micro=tags ultra-densos. Se migra incremental, como BADGE_TONES.
 const F={title:15,label:13,body:11,meta:10,micro:9};
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
-const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon,devoluciones:ArrowUUpLeftIcon,cancelaciones:XCircleIcon,espera:BellSlashIcon,plano:BlueprintIcon};
+const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon,devoluciones:ArrowUUpLeftIcon,cancelaciones:XCircleIcon,espera:BellSlashIcon,plano:BlueprintIcon,no_conformidades:WarningOctagonIcon};   // v10.84.194
 // v10.73.48 — AUTH F2-full (frontend auth-only): se RETIRA el fallback legacy — el login es SOLO signInWithPassword y el
 //   restore SOLO desde la sesión Supabase Auth (una sesión pre-F1 sin JWT cae a login y re-autentica una vez, misma
 //   contraseña). Esto elimina toda sesión sin JWT → habilita en BD rechazar anon en verify_actor_role (todas las ~37 RPCs
@@ -19891,6 +19891,210 @@ function ConfirmarCancelacionEnLote({objs, orders, motivo, role, saldoPorOrden, 
     </div>
   </section>;
 }
+// ─── v10.84.194 — «NO CONFORMIDADES» (Marcelo, 27-nov; ISO 9001 8.7 y 10.2) ──────────────────────────────────────────────────────────────
+// El registro de lo que salió mal y qué se hizo. Se llena solo con las devoluciones, los regresos de etapa con su razón y las entregas tarde (los detecta la base,
+//   public.nc_detectar(), al abrir la lista y cada noche, desde el 1-nov-2026) y a mano con las quejas que llegan por WhatsApp. Cada una con su causa, qué se hizo
+//   y si funcionó. Lo detectado nace «por revisar»: un regreso puede ser sólo de ruta («ya hay placas») y se marca «no era», con su porqué. Lo que cambia queda en su
+//   historial (lo pone la base, con quién y cuándo). Tabla public.no_conformidades (docs/migrations/v10.84.194_no_conformidades.sql).
+// Regla 12: sin una lectura buena no dice «no hay»; si la detección falla, se dice y se enseña lo ya registrado.
+const ORIGEN_NC={devolucion:"Devolución",regreso:"Regreso de etapa",entrega_tarde:"Entrega tarde",queja:"Queja del cliente",otra:"Otra"};
+const ATIENDEN_NC=["admin","produccion","preprensa","secretaria","karla"];
+const VEN_NC=[...ATIENDEN_NC,"german","vendedor","visor"];
+// en qué va cada una: una sola regla para la lista, los filtros y el reporte del mes
+const estadoNC=nc=>nc.es_no_conformidad===false?"no_era":nc.es_no_conformidad==null?"por_revisar":!String(nc.causa||"").trim()||!String(nc.que_se_hizo||"").trim()?"por_atender":nc.funciono==null?"falta_ver":nc.funciono===false?"no_funciono":"cerrada";
+const ESTADO_NC={por_revisar:"Por revisar",por_atender:"Por atender",falta_ver:"Falta ver si funcionó",no_funciono:"No funcionó: hace falta otra acción",cerrada:"Cerrada",no_era:"No era no conformidad"};
+const ncAbierta=nc=>!["cerrada","no_era"].includes(estadoNC(nc));
+const CAMPOS_NC={es_no_conformidad:"¿Es no conformidad?",por_que_no:"Por qué no",causa:"Causa",que_se_hizo:"Qué se hizo",funciono:"¿Funcionó?",que_paso:"Qué pasó",cliente:"Cliente",canal:"Por dónde"};
+const valorNC=(k,v)=>v==null?"—":typeof v==="boolean"?(v?"Sí":"No"):k==="canal"?(CANALES_DEL_CLIENTE.find(c=>c.id===v)?.l||v):String(v);
+function NoConformidadesVista({role,orders,onDetail,showToast}){
+  const [filas,setFilas]=useState(null);   // null: todavía sin una lectura buena (regla 12)
+  const [lectura,setLectura]=useState({cargando:true,fallo:null,deteccion:null});
+  const [filtro,setFiltro]=useState("abiertas");
+  const [abiertaId,setAbiertaId]=useState(null);
+  const [anotar,setAnotar]=useState(false);
+  const puede=ATIENDEN_NC.includes(role);
+  const turno=useRef(0);
+  const leer=useCallback(async()=>{
+    const yo=++turno.current;
+    setLectura(l=>({...l,cargando:true,fallo:null}));
+    const det=await supabase.rpc("nc_detectar");   // lo nuevo de las devoluciones, los regresos y las entregas tarde (idempotente)
+    const {data,error}=await todasLasFilas(()=>supabase.from("no_conformidades").select("*").order("ocurrio_en",{ascending:false}).order("id"));
+    if(yo!==turno.current)return;   // la respuesta vieja no pisa a la nueva
+    if(error){setLectura({cargando:false,fallo:errorEnPalabras(error),deteccion:det.error?errorEnPalabras(det.error):null});return}
+    setFilas(data||[]);setLectura({cargando:false,fallo:null,deteccion:det.error?errorEnPalabras(det.error):null});
+  },[]);
+  useEffect(()=>{leer()},[leer]);
+  const porId=useMemo(()=>new Map((orders||[]).map(o=>[o.id,o])),[orders]);
+  const cuenta=useMemo(()=>{const c={abiertas:0,cerradas:0,no_era:0,todas:0};for(const nc of filas||[]){c.todas++;const e=estadoNC(nc);if(e==="cerrada")c.cerradas++;else if(e==="no_era")c.no_era++;else c.abiertas++}return c},[filas]);
+  const vistas=useMemo(()=>(filas||[]).filter(nc=>{const e=estadoNC(nc);return filtro==="todas"||(filtro==="abiertas"?ncAbierta(nc):filtro==="cerradas"?e==="cerrada":e==="no_era")}),[filas,filtro]);
+  const abierta=abiertaId?(filas||[]).find(x=>x.id===abiertaId):null;
+  const guardado=nc=>{setFilas(p=>(p||[]).map(x=>x.id===nc.id?nc:x));};
+  const tono={por_revisar:C.wnInk,por_atender:C.wnInk,falta_ver:tintaAA(C.ac),no_funciono:C.dnInk,cerrada:C.okInk,no_era:C.t2};
+  return <div style={{maxWidth:1100,margin:"0 auto"}}>
+    <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:6}}>
+      <h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:0,flex:"1 1 auto"}}>No conformidades</h2>
+      {puede&&<button onClick={()=>setAnotar(true)} style={{...bt(C.ac),fontSize:12,padding:"8px 14px"}}><PlusIcon size={13} weight="bold"/>Anotar una queja</button>}
+      <button onClick={leer} disabled={lectura.cargando} style={{...bt(C.sf,C.t2),fontSize:12,padding:"8px 14px",border:"0.5px solid "+C.bd}}>{lectura.cargando?"Leyendo…":"Volver a leer"}</button>
+    </div>
+    <p style={{fontSize:12,color:C.t2,margin:"0 0 12px",lineHeight:1.45}}>Las devoluciones, los regresos de etapa y las entregas tarde entran solos (desde el 1-nov-2026); las quejas del cliente se anotan aquí. Cada una con su causa, qué se hizo y si funcionó.</p>
+    {lectura.deteccion&&filas&&<div role="status" style={{fontSize:12,color:C.wnInk,margin:"0 0 10px",fontWeight:600}}>No se pudo revisar si hay nuevas ({lectura.deteccion}): lo que ves es lo ya registrado.</div>}
+    {lectura.fallo&&<div role="alert" style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",padding:"10px 12px",borderRadius:10,background:C.sf,border:"1px solid "+C.bd,fontSize:12,margin:"0 0 12px"}}><span style={{flex:"1 1 200px",color:C.dnInk,fontWeight:600}}>No se pudieron leer las no conformidades: {lectura.fallo}.{filas?" Lo que ves es de la lectura anterior.":""}</span><button onClick={leer} style={{...bt(C.ac),fontSize:12,padding:"6px 12px"}}>Reintentar</button></div>}
+    {filas&&<div role="tablist" aria-label="Cuáles" style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
+      {[["abiertas","Abiertas"],["cerradas","Cerradas"],["no_era","No eran"],["todas","Todas"]].map(([k,l])=><button key={k} role="tab" aria-selected={filtro===k} onClick={()=>setFiltro(k)} style={{fontSize:12,fontWeight:600,padding:"6px 12px",borderRadius:20,cursor:"pointer",border:"1.5px solid "+(filtro===k?C.ac:C.bd),background:filtro===k?C.ac+"0e":C.bg,color:filtro===k?C.ac:C.tx}}>{l} ({cuenta[k]})</button>)}
+    </div>}
+    {!filas&&!lectura.fallo&&<p style={{fontSize:12,color:C.t2}}>Leyendo…</p>}
+    {filas&&!vistas.length&&<p style={{fontSize:13,color:C.t2,padding:"16px 0"}}>{filtro==="abiertas"?"No hay no conformidades abiertas.":"No hay ninguna aquí."}</p>}
+    <div style={{display:"flex",flexDirection:"column",gap:8}}>
+      {vistas.map(nc=>{const o=nc.order_id?porId.get(nc.order_id):null,e=estadoNC(nc);return <button key={nc.id} onClick={()=>setAbiertaId(nc.id)} style={{textAlign:"left",background:C.bg,border:"1px solid "+C.bd,borderRadius:12,padding:"10px 12px",cursor:"pointer",display:"flex",flexDirection:"column",gap:4,minWidth:0,overflowWrap:"anywhere",fontFamily:"inherit",color:C.tx}}>
+        <span style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"baseline",fontSize:12}}><b>{nc.folio}</b><span style={{color:C.t2}}>{ORIGEN_NC[nc.origen]||nc.origen}</span>{o?.production_number&&<span>{o.production_number}</span>}{nc.cliente&&<span style={{color:C.t2}}>{nc.cliente}</span>}<span style={{color:C.t2}}>{fD(nc.ocurrio_en)}</span><span style={{marginLeft:"auto",fontWeight:700,color:tono[e]}}>{ESTADO_NC[e]}</span></span>
+        <span style={{fontSize:13}}>{nc.que_paso}</span>
+      </button>})}
+    </div>
+    {abierta&&<AtenderNoConformidad key={abierta.id+(abierta.cambiada_en||"")} nc={abierta} orden={abierta.order_id?porId.get(abierta.order_id):null} puede={puede} onGuardado={nc=>{guardado(nc);showToast&&showToast("Quedó "+nc.folio+" · "+ESTADO_NC[estadoNC(nc)])}} onOtraVez={leer} onDetail={onDetail} onClose={()=>setAbiertaId(null)}/>}
+    {anotar&&<AnotarNoConformidad orders={orders} onAnotada={nc=>{setFilas(p=>[nc,...(p||[])]);setFiltro("abiertas");setAnotar(false);showToast&&showToast("Quedó anotada "+nc.folio)}} onClose={()=>setAnotar(false)}/>}
+  </div>;
+}
+// atenderla: ¿es no conformidad?, la causa, qué se hizo y si funcionó. Guarda sólo lo que cambió y sólo si nadie más la cambió desde que se abrió (cambiada_en)
+function AtenderNoConformidad({nc,orden,puede,onGuardado,onOtraVez,onDetail,onClose}){
+  const [esNC,setEsNC]=useState(nc.es_no_conformidad);
+  const [porQueNo,setPorQueNo]=useState(nc.por_que_no||"");
+  const [causa,setCausa]=useState(nc.causa||"");
+  const [hizo,setHizo]=useState(nc.que_se_hizo||"");
+  const [funciono,setFunciono]=useState(nc.funciono);
+  const [saving,setSaving]=useState(false);
+  const [err,setErr]=useState("");
+  const [preguntaSalir,setPreguntaSalir]=useState(false);
+  const enviando=useRef(false),primero=useRef(null);
+  const cambios={};
+  if(esNC!==nc.es_no_conformidad)cambios.es_no_conformidad=esNC;
+  const pq=porQueNo.trim(),ca=causa.trim(),hz=hizo.trim();
+  if(pq!==(nc.por_que_no||""))cambios.por_que_no=pq||null;
+  if(ca!==(nc.causa||""))cambios.causa=ca||null;
+  if(hz!==(nc.que_se_hizo||""))cambios.que_se_hizo=hz||null;
+  if(funciono!==nc.funciono)cambios.funciono=funciono;
+  const sucio=Object.keys(cambios).length>0;
+  const falta=esNC===false&&pq.length<5?"el porqué de que no es no conformidad (5 letras o más)":funciono!=null&&hz.length<3?"qué se hizo, antes de decir si funcionó":null;
+  const salir=()=>{if(saving)return;if(sucio&&!preguntaSalir){setPreguntaSalir(true);return}onClose()};
+  useEscClose(salir);
+  useDevolverFoco();
+  useLayoutEffect(()=>{primero.current?.focus({preventScroll:true})},[]);
+  const guardar=async()=>{
+    if(!sucio||falta||enviando.current)return;enviando.current=true;setSaving(true);setErr("");
+    try{
+      let q=supabase.from("no_conformidades").update(cambios).eq("id",nc.id);
+      q=nc.cambiada_en?q.eq("cambiada_en",nc.cambiada_en):q.is("cambiada_en",null);   // nadie la cambió desde que se abrió
+      const {data,error}=await q.select("*");
+      if(error){setErr("No se guardó: "+errorEnPalabras(error)+".");return}
+      if(!data||!data.length){setErr("Alguien más la cambió mientras la tenías abierta: no se guardó. Ciérrala y vuelve a abrirla para ver lo de ahora.");onOtraVez&&onOtraVez();return}
+      onGuardado(data[0]);onClose();
+    }finally{enviando.current=false;setSaving(false)}
+  };
+  const etiqueta={display:"block",fontSize:11,fontWeight:700,color:C.t2,margin:"10px 0 6px"};
+  const area={...inp,fontSize:12,minHeight:56,resize:"vertical",width:"100%",boxSizing:"border-box"};
+  const opcion=(sel)=>({display:"inline-flex",alignItems:"center",gap:6,padding:"6px 10px",borderRadius:9,border:"1.5px solid "+(sel?C.ac:C.bd),background:sel?C.ac+"0e":C.bg,cursor:puede?"pointer":"default",fontSize:12});
+  const historial=Array.isArray(nc.historial)?nc.historial:[];
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:16}} onClick={salir}>
+    <div onClick={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="nc-titulo" onKeyDown={atraparTab} style={{background:C.bg,borderRadius:20,maxWidth:620,width:"100%",maxHeight:"calc(100vh - 32px)",display:"flex",flexDirection:"column",overflow:"hidden",boxSizing:"border-box"}}>
+      <div style={{padding:"20px 22px 8px",overflowY:"auto",overflowX:"hidden",minHeight:0}}>
+        <h3 id="nc-titulo" style={{fontSize:16,fontWeight:800,margin:"0 0 2px",overflowWrap:"anywhere"}}>{nc.folio} · {ORIGEN_NC[nc.origen]||nc.origen}</h3>
+        <div style={{fontSize:12,color:C.t2,marginBottom:8}}>{ESTADO_NC[estadoNC(nc)]} · {fDT(nc.ocurrio_en)}{nc.cliente?" · "+nc.cliente:""}{nc.canal?" · llegó "+(CANALES_DEL_CLIENTE.find(c=>c.id===nc.canal)?.frase||nc.canal):""}{nc.creada_por?" · la anotó "+(AUTHOR_NAME[nc.creada_por]||nc.creada_por):""}</div>
+        <p style={{fontSize:13,margin:"0 0 6px",overflowWrap:"anywhere"}}>{nc.que_paso}</p>
+        {orden&&onDetail&&<button onClick={()=>{onClose();onDetail(orden)}} style={{...bt(C.sf,C.ac),fontSize:12,padding:"5px 10px",border:"0.5px solid "+C.bd}}>Ver {orden.production_number||"la orden"}</button>}
+        {!puede&&<p style={{fontSize:12,color:C.t2,marginTop:10}}>La atienden Dirección, Producción, Pre-prensa, Lupita y Karla.</p>}
+        <fieldset disabled={!puede||saving} style={{border:0,padding:0,margin:0,minWidth:0}}>
+          {(nc.origen!=="queja"&&nc.origen!=="otra")&&<><div id="nc-es" style={etiqueta}>¿Es no conformidad?</div>
+            <div role="radiogroup" aria-labelledby="nc-es" style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+              <label style={opcion(esNC===true)}><input ref={primero} type="radio" name="nc-es" checked={esNC===true} onChange={()=>{setEsNC(true);setPreguntaSalir(false)}}/>Sí, salió mal</label>
+              <label style={opcion(esNC===false)}><input type="radio" name="nc-es" checked={esNC===false} onChange={()=>{setEsNC(false);setPreguntaSalir(false)}}/>No era (fue de ruta, un cambio del cliente…)</label>
+            </div></>}
+          {esNC===false&&<><label htmlFor="nc-porque" style={etiqueta}>¿Por qué no es no conformidad?</label><textarea id="nc-porque" value={porQueNo} maxLength={1000} onChange={e=>{setPorQueNo(e.target.value);setPreguntaSalir(false)}} placeholder="Ej.: ya había placas; el cliente pidió el cambio" style={area}/></>}
+          {esNC!==false&&<>
+            <label htmlFor="nc-causa" style={etiqueta}>Causa</label><textarea id="nc-causa" ref={nc.origen==="queja"||nc.origen==="otra"?primero:undefined} value={causa} maxLength={2000} onChange={e=>{setCausa(e.target.value);setPreguntaSalir(false)}} placeholder="Por qué pasó" style={area}/>
+            <label htmlFor="nc-hizo" style={etiqueta}>Qué se hizo</label><textarea id="nc-hizo" value={hizo} maxLength={2000} onChange={e=>{setHizo(e.target.value);setPreguntaSalir(false)}} placeholder="Lo que se corrigió y lo que se cambió para que no vuelva a pasar" style={area}/>
+            <div id="nc-funciono" style={etiqueta}>¿Funcionó?</div>
+            <div role="radiogroup" aria-labelledby="nc-funciono" style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+              {[[null,"Todavía no se sabe"],[true,"Sí"],[false,"No: hace falta otra acción"]].map(([v,l])=><label key={String(v)} style={opcion(funciono===v)}><input type="radio" name="nc-funciono" checked={funciono===v} onChange={()=>{setFunciono(v);setPreguntaSalir(false)}}/>{l}</label>)}
+            </div></>}
+        </fieldset>
+        {historial.length>0&&<details style={{marginTop:12,fontSize:12}}><summary style={{cursor:"pointer",color:C.t2,fontWeight:600}}>Historial ({historial.length})</summary>
+          <ul style={{margin:"6px 0 0",paddingLeft:18,display:"flex",flexDirection:"column",gap:4}}>{historial.slice().reverse().map((h,i)=><li key={i} style={{overflowWrap:"anywhere"}}>{fDT(h.en)} · {AUTHOR_NAME[h.por]||h.por}: {Object.entries(h.cambios||{}).map(([k,v])=>(CAMPOS_NC[k]||k)+" «"+valorNC(k,v?.[1])+"»").join(" · ")}</li>)}</ul></details>}
+        {preguntaSalir&&<div role="alert" style={{display:"flex",alignItems:"center",flexWrap:"wrap",gap:8,margin:"12px 0 4px",padding:"10px 12px",borderRadius:10,background:C.sf,border:"1px solid "+C.bd,fontSize:12}}>
+          <span style={{flex:"1 1 200px"}}>¿Salir sin guardar lo que escribiste?</span>
+          <button onClick={()=>setPreguntaSalir(false)} style={{...bt(C.ac),fontSize:12,padding:"6px 12px"}}>Seguir aquí</button>
+          <button onClick={onClose} style={{...bt(C.bg,C.tx),fontSize:12,padding:"6px 12px",border:"1px solid "+C.bdSt}}>Salir sin guardar</button>
+        </div>}
+      </div>
+      <div style={{padding:"10px 22px 16px",borderTop:"0.5px solid "+C.bd,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+        <div aria-live="polite" style={{flex:"1 1 200px",fontSize:12,minWidth:0,color:err?C.dnInk:C.t2,fontWeight:err?600:400,overflowWrap:"anywhere"}}>{err||(falta&&puede?"Falta: "+falta+".":"")}</div>
+        <button onClick={onClose} disabled={saving} style={{...bt(C.sf,C.t2),fontSize:12,padding:"8px 14px",border:"0.5px solid "+C.bd}}>{puede?"Cancelar":"Cerrar"}</button>
+        {puede&&<button onClick={guardar} disabled={!sucio||!!falta||saving} style={sucio&&!falta?{...bt(C.ac),fontSize:12,padding:"8px 14px",opacity:saving?.6:1}:{...bt(C.sf,C.t2),fontSize:12,padding:"8px 14px",border:"1px solid "+C.bd,cursor:"not-allowed"}}>{saving?"Guardando…":"Guardar"}</button>}
+      </div>
+    </div>
+  </div>;
+}
+// anotar a mano: una queja del cliente (por dónde llegó) u otra que vimos aquí; la orden es opcional (si se da, tiene que existir y pone al cliente)
+function AnotarNoConformidad({orders,onAnotada,onClose}){
+  const [origen,setOrigen]=useState("queja");
+  const [num,setNum]=useState("");
+  const [cliente,setCliente]=useState("");
+  const [canal,setCanal]=useState(null);
+  const [quePaso,setQuePaso]=useState("");
+  const [saving,setSaving]=useState(false);
+  const [err,setErr]=useState("");
+  const [preguntaSalir,setPreguntaSalir]=useState(false);
+  const enviando=useRef(false),primero=useRef(null);
+  const orden=useMemo(()=>{const t=num.trim();if(!t)return null;const m=/^(?:([PH])\s*-?\s*)?(\d{1,5})$/i.exec(t);if(!m)return {mal:"Escribe el número de la orden, como P-0743."};const n=(m[1]||"P").toUpperCase()+"-"+m[2].padStart(4,"0");const o=(orders||[]).find(x=>x&&x.production_number===n);return o?{o}:{mal:"No encuentro "+n+" en PrintFlow."}},[num,orders]);
+  const clienteFinal=(cliente.trim()||(orden?.o?(orden.o.client_company||orden.o.client||""):"")).slice(0,200);
+  const sucio=num.trim()||cliente.trim()||canal||quePaso.trim();
+  const falta=quePaso.trim().length<3?"qué pasó (3 letras o más)":origen==="queja"&&!canal?"por dónde llegó la queja":orden?.mal?"un número de orden que exista (o déjalo vacío)":null;
+  const salir=()=>{if(saving)return;if(sucio&&!preguntaSalir){setPreguntaSalir(true);return}onClose()};
+  useEscClose(salir);
+  useDevolverFoco();
+  useLayoutEffect(()=>{primero.current?.focus({preventScroll:true})},[]);
+  const guardar=async()=>{
+    if(falta||enviando.current)return;enviando.current=true;setSaving(true);setErr("");
+    try{
+      const fila={origen,que_paso:quePaso.trim().slice(0,2000),cliente:clienteFinal||null,canal:origen==="queja"?canal:null,order_id:orden?.o?.id||null};
+      const {data,error}=await supabase.from("no_conformidades").insert(fila).select("*");
+      if(error){setErr("No se anotó: "+errorEnPalabras(error)+".");return}
+      if(!data||!data.length){setErr("No se sabe si se anotó: vuelve a leer la lista antes de anotarla otra vez.");return}
+      onAnotada(data[0]);
+    }finally{enviando.current=false;setSaving(false)}
+  };
+  const etiqueta={display:"block",fontSize:11,fontWeight:700,color:C.t2,margin:"10px 0 6px"};
+  const opcion=(sel)=>({display:"inline-flex",alignItems:"center",gap:6,padding:"6px 10px",borderRadius:9,border:"1.5px solid "+(sel?C.ac:C.bd),background:sel?C.ac+"0e":C.bg,cursor:"pointer",fontSize:12});
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:16}} onClick={salir}>
+    <div onClick={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="nc-anotar-titulo" onKeyDown={atraparTab} style={{background:C.bg,borderRadius:20,maxWidth:560,width:"100%",maxHeight:"calc(100vh - 32px)",display:"flex",flexDirection:"column",overflow:"hidden",boxSizing:"border-box"}}>
+      <div style={{padding:"20px 22px 8px",overflowY:"auto",overflowX:"hidden",minHeight:0}}>
+        <h3 id="nc-anotar-titulo" style={{fontSize:16,fontWeight:800,margin:"0 0 4px"}}>Anotar una no conformidad</h3>
+        <div role="radiogroup" aria-label="¿Qué es?" style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>
+          <label style={opcion(origen==="queja")}><input ref={primero} type="radio" name="nc-origen" checked={origen==="queja"} onChange={()=>setOrigen("queja")}/>Queja del cliente</label>
+          <label style={opcion(origen==="otra")}><input type="radio" name="nc-origen" checked={origen==="otra"} onChange={()=>setOrigen("otra")}/>Otra (la vimos aquí)</label>
+        </div>
+        <label htmlFor="nc-num" style={etiqueta}>¿De qué orden? (si es de una)</label>
+        <input id="nc-num" type="text" value={num} maxLength={12} autoComplete="off" onChange={e=>{setNum(e.target.value);setPreguntaSalir(false)}} placeholder="P-0743" style={{...inp,fontSize:12,width:"100%",boxSizing:"border-box"}}/>
+        {orden?.mal&&<div style={{fontSize:12,color:C.dnInk,marginTop:6,fontWeight:600}}>{orden.mal}</div>}
+        {orden?.o&&<div style={{fontSize:12,color:C.t2,marginTop:6,overflowWrap:"anywhere"}}>{orden.o.production_number} · {orden.o.client_company||orden.o.client} · {orden.o.product_type}</div>}
+        <label htmlFor="nc-cliente" style={etiqueta}>Cliente</label>
+        <input id="nc-cliente" type="text" value={cliente} maxLength={200} autoComplete="off" onChange={e=>{setCliente(e.target.value);setPreguntaSalir(false)}} placeholder={orden?.o?(orden.o.client_company||orden.o.client||""):"El nombre del cliente"} style={{...inp,fontSize:12,width:"100%",boxSizing:"border-box"}}/>
+        {origen==="queja"&&<><div id="nc-canal" style={etiqueta}>¿Por dónde llegó?</div>
+          <div role="radiogroup" aria-labelledby="nc-canal" style={{display:"flex",gap:6,flexWrap:"wrap"}}>{CANALES_DEL_CLIENTE.map(c=><label key={c.id} style={opcion(canal===c.id)}><input type="radio" name="nc-canal" checked={canal===c.id} onChange={()=>{setCanal(c.id);setPreguntaSalir(false)}}/>{c.l}</label>)}</div></>}
+        <label htmlFor="nc-que" style={etiqueta}>¿Qué pasó?</label>
+        <textarea id="nc-que" value={quePaso} maxLength={2000} onChange={e=>{setQuePaso(e.target.value);setPreguntaSalir(false)}} placeholder="Lo que dijo el cliente, con sus palabras" style={{...inp,fontSize:12,minHeight:70,resize:"vertical",width:"100%",boxSizing:"border-box"}}/>
+        {preguntaSalir&&<div role="alert" style={{display:"flex",alignItems:"center",flexWrap:"wrap",gap:8,margin:"12px 0 4px",padding:"10px 12px",borderRadius:10,background:C.sf,border:"1px solid "+C.bd,fontSize:12}}>
+          <span style={{flex:"1 1 200px"}}>¿Salir sin anotarla?</span>
+          <button onClick={()=>setPreguntaSalir(false)} style={{...bt(C.ac),fontSize:12,padding:"6px 12px"}}>Seguir aquí</button>
+          <button onClick={onClose} style={{...bt(C.bg,C.tx),fontSize:12,padding:"6px 12px",border:"1px solid "+C.bdSt}}>Salir sin anotar</button>
+        </div>}
+      </div>
+      <div style={{padding:"10px 22px 16px",borderTop:"0.5px solid "+C.bd,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+        <div aria-live="polite" style={{flex:"1 1 200px",fontSize:12,minWidth:0,color:err?C.dnInk:C.t2,fontWeight:err?600:400,overflowWrap:"anywhere"}}>{err||(falta?"Falta: "+falta+".":"")}</div>
+        <button onClick={onClose} disabled={saving} style={{...bt(C.sf,C.t2),fontSize:12,padding:"8px 14px",border:"0.5px solid "+C.bd}}>Cancelar</button>
+        <button onClick={guardar} disabled={!!falta||saving} style={!falta?{...bt(C.ac),fontSize:12,padding:"8px 14px",opacity:saving?.6:1}:{...bt(C.sf,C.t2),fontSize:12,padding:"8px 14px",border:"1px solid "+C.bd,cursor:"not-allowed"}}>{saving?"Anotando…":"Anotar"}</button>
+      </div>
+    </div>
+  </div>;
+}
 function CancelacionesView({orders, role, onCancelOrders, onDetail}){
   const [sel,setSel]=useState(new Set());
   const [reason,setReason]=useState("");
@@ -24895,6 +25099,8 @@ export default function PrintFlow() {
   // Roles alineados con los RPCs: create_return = admin/secretaria/karla/preprensa; cancelar = admin/secretaria/karla.
   if(user==="admin"||user==="secretaria"||user==="karla"||user==="preprensa")navs.push({id:"devoluciones",g:"reg",l:"Devoluciones"});
   if(user==="admin"||user==="secretaria"||user==="karla")navs.push({id:"cancelaciones",g:"reg",l:"Cancelaciones"});
+  // v10.84.194 — «No conformidades» (ISO 9001): la ven los de PrintFlow menos Almacén (VEN_NC, como la base); la atienden Dirección, Producción, Pre-prensa, Lupita y Karla
+  if(VEN_NC.includes(user))navs.push({id:"no_conformidades",g:"reg",l:"No conformidades"});
   if(user==="preprensa"||user==="german")navs.push({id:"storage",g:"reg",l:"Archivos"});
   if(user==="german"||user==="admin")navs.push({id:"chemicals",g:"reg",l:"Químicos"});
 
@@ -25147,6 +25353,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         {view==="audit"&&(user==="admin"||user==="karla")&&<div>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><ClipboardTextIcon size={18} weight="bold"/>Auditoría de Folios</h2><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}><FolderOpenIcon size={14} weight="bold"/>Cargar archivo histórico para auditoría</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Para ver folios anteriores a 30 días debes cargar el archivo completo</p></div>:<AuditoriaView orders={orders} purchaseOrders={purchaseOrders} onNavigateToOC={(ocId)=>{setPendingOCNavId(ocId);setView("oc")}} onNavigateToOrder={(id)=>{setDetailModalId(id);setView("pipeline")}}/>}</div>}
         {/* 🔁 v10.72.83 — Devoluciones (re-trabajo) y Cancelaciones */}
         {view==="devoluciones"&&(user==="admin"||user==="secretaria"||user==="karla"||user==="preprensa")&&<div>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><ArrowUUpLeftIcon size={18} weight="bold"/>Devoluciones</h2><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}><FolderOpenIcon size={14} weight="bold"/>Cargar archivo para registrar devoluciones</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Carga el historial completo para buscar la orden entregada a devolver y ver el historial</p></div>:<DevolucionesView orders={orders} role={user} userLogin={userLogin} onCreateReturn={doCreateReturn} onDetail={(id)=>setDetailModalId(id)}/>}</div>}
+        {/* v10.84.194 — «No conformidades» (ISO 9001): lee su tabla al abrir (y antes pide a la base lo nuevo); las órdenes, para su P- y para abrir su detalle */}
+        {view==="no_conformidades"&&VEN_NC.includes(user)&&<NoConformidadesVista role={user} orders={orders} showToast={showToast} onDetail={o=>handleAction(o.id,"detail")}/>}
         {view==="cancelaciones"&&(user==="admin"||user==="secretaria"||user==="karla")&&<div>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><XCircleIcon size={18} weight="bold"/>Cancelaciones</h2><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}><FolderOpenIcon size={14} weight="bold"/>Cargar archivo para gestionar cancelaciones</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Carga el historial completo para buscar la orden a cancelar y ver el historial</p></div>:<CancelacionesView orders={orders} role={user} onCancelOrders={doCancelOrders} onDetail={(id)=>setDetailModalId(id)}/>}</div>}
         {view==="oc"&&(isSec(user)||user==="admin"||user==="karla")&&<OrdenesCompraView onJalar={jalarASalidas} purchaseOrders={purchaseOrders} orders={orders} role={user} userLogin={userLogin} orderFilter={orderFilter} onAction={handleAction} onReload={reload} showToast={showToast} onCreateOC={createOC} onAddProduct={addProductToOC} onAddExisting={addExistingToOC} onAssignFolio={(oc,ocOrders)=>setFolioOCModal({oc,ocOrders,preAssigned:false})} onPreAssignFolio={(oc,ocOrders)=>setFolioOCModal({oc,ocOrders,preAssigned:true})} onMatrixPlan={(oc,ocOrders)=>setOcMatrixModal({oc,orders:ocOrders})} onCancelMatrixLine={(line,group,order,oc)=>setMatrixCancelModal({kind:"line",line,group,order,oc})} onCancelMatrixGroup={(group,oc)=>setMatrixCancelModal({kind:"group",group,oc})} pendingOCId={pendingOCNavId} onConsumedPendingOC={()=>setPendingOCNavId(null)} leido={!!lectura.ok}/>}
         {view==="storage"&&(user==="preprensa"||user==="german")&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px",textAlign:"center",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><FolderIcon size={18} weight="bold"/>Archivos de Producción</h2><StorageTab orders={viewOrders} onReload={reload}/></div>}
