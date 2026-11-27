@@ -58,7 +58,8 @@ const partes = [
   // v10.84.140 — lo atrasado: la ficha pregunta `vencidaAhora` (la lista que espera la factura del cliente no es «RETRASO»). Si el App.jsx la trae: el de
   //   antes no (la corrida doble). Sin esto el banco se quedaba en blanco y cada caso esperaba su tope (el candado de la 140 frenó por eso: «detalle» pasó de 12 min)
   //   v10.84.149 — y `vencidaAhora` pregunta `listaATiempo` (con `listaEn` y `finDeLaEntrega`): si el App.jsx las trae
-  ...["TEXTO_SIN_PRUEBA", "autorizacionDelCliente"].flatMap(n => opcional(L.some(l => l.startsWith("const " + n + "=")), () => line(new RegExp("^const " + n + "="), n))),   // v10.84.189
+  // v10.84.189; v10.84.193 — y lo que el detalle usa para decir cómo autorizó el cliente (las tres respuestas de la pregunta al salir de Diseño)
+  ...["TEXTO_SIN_PRUEBA", "TEXTO_APROBO_PRUEBA", "TEXTO_SIN_VER_PRUEBA", "TEXTO_REIMPRESION", "RE_QUIEN_Y_POR_DONDE", "RE_REIMPRESION", "autorizacionDelCliente", "comoAutorizo"].flatMap(n => opcional(L.some(l => l.startsWith("const " + n + "=")), () => line(new RegExp("^const " + n + "="), n))),
   ...opcional(L.some(l => l.startsWith("const vencidaAhora=")), () => [line(/^const ETAPAS_LISTA=/, "ETAPAS_LISTA"), line(/^const esperaAlCliente=/, "esperaAlCliente"),
     ...(L.some(l => l.startsWith("const listaATiempo=")) ? [line(/^const listaEn=/, "listaEn"), line(/^const finDeLaEntrega=/, "finDeLaEntrega"), line(/^const listaATiempo=/, "listaATiempo")] : []),
     // v10.84.186 — la cuenta del panel pregunta si se entregó a tiempo: lo entregado a tiempo no llega a rojo

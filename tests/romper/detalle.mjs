@@ -1696,12 +1696,15 @@ for (const [id, vp] of [["det-264a-a-1366", { width: 1366, height: 768 }], ["det
 // ── v10.84.193 — lo que se guarda al salir de Diseño, como se lee en el detalle (Karla, Dirección, quien sea): cómo, quién del cliente, por dónde, cuándo y quién lo registró ──
 const RENGLON = (action, date = "2026-11-27T16:00:00Z") => ({ action, date, by: "preprensa", to: "ctp" });
 for (const [id, accion, dice] of [
-  ["det-268-aprobo-la-prueba", "✅ Cliente aprobó la prueba · Ana Pérez por WhatsApp · 🎨 Diseño → 💿 CTP", /Cliente autorizó\s+Aprobó la prueba · Ana Pérez por WhatsApp · 27-nov[^·]* · Noemí/],
-  ["det-269-sin-ver-prueba", "✅ Cliente autorizó sin ver prueba · Lic. Ramírez por correo · 🎨 Diseño → 💿 CTP", /Cliente autorizó\s+Sin ver prueba · Lic\. Ramírez por correo · 27-nov[^·]* · Noemí/],
-  ["det-270-reimpresion", "✅ Reimpresión sin cambios de P-1301 · 🎨 Diseño → 💿 CTP", /Cliente autorizó\s+Reimpresión sin cambios de P-1301 · 27-nov[^·]* · Noemí/],
-  ["det-271-en-persona", "✅ Cliente aprobó la prueba · Don Beto en persona · 🎨 Diseño → ✅ Lista para imprimir", /Cliente autorizó\s+Aprobó la prueba · Don Beto en persona · 27-nov[^·]* · Noemí/],
+  ["det-268-aprobo-la-prueba", "✅ Cliente aprobó la prueba · Ana Pérez por WhatsApp · 🎨 Diseño → 💿 CTP", /Cliente autorizó\s+Aprobó la prueba · Ana Pérez por WhatsApp · 27-nov[^·]* · Noemí/i],
+  ["det-269-sin-ver-prueba", "✅ Cliente autorizó sin ver prueba · Lic. Ramírez por correo · 🎨 Diseño → 💿 CTP", /Cliente autorizó\s+Sin ver prueba · Lic\. Ramírez por correo · 27-nov[^·]* · Noemí/i],
+  ["det-270-reimpresion", "✅ Reimpresión sin cambios de P-1301 · 🎨 Diseño → 💿 CTP", /Cliente autorizó\s+Reimpresión sin cambios de P-1301 · 27-nov[^·]* · Noemí/i],
+  ["det-271-en-persona", "✅ Cliente aprobó la prueba · Don Beto en persona · 🎨 Diseño → ✅ Lista para imprimir", /Cliente autorizó\s+Aprobó la prueba · Don Beto en persona · 27-nov[^·]* · Noemí/i],
   // un «por» dentro del nombre no se confunde con el de por dónde
   ["det-272-un-por-dentro-del-nombre", "✅ Cliente aprobó la prueba · Ana por parte de compras por correo · 🎨 Diseño → 💿 CTP", /Aprobó la prueba · Ana por parte de compras por correo · 27-nov/],
+  // (vuelta 2) la reimpresión de una de las de antes del corte (H-…), y un renglón sin «por dónde» (escrito a mano en la base): no inventa ni dice «null»
+  ["det-274-reimpresion-de-una-h", "✅ Reimpresión sin cambios de H-3657 · 🎨 Diseño → 💿 CTP", /Cliente autorizó\s+Reimpresión sin cambios de H-3657 · 27-nov[^·]* · Noemí/i],
+  ["det-275-sin-por-donde-no-inventa", "✅ Cliente aprobó la prueba · Ana · 🎨 Diseño → 💿 CTP", /Cliente autorizó\s+Aprobó la prueba · 27-nov[^·]* · Noemí/i],
 ]) await caso(id, "caso=alertas&rol=karla", async p => {
   await p.evaluate(x => window.__cambiar({ stage: "ctp", current_machine: null, proof_approved: x.date, timeline: [x] }), RENGLON(accion)); await espera(p, 400);
   const t = (await dlg(p).innerText()).replace(/\s+/g, " ");

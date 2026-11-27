@@ -3370,6 +3370,7 @@ await caso("ses-413-clic-fuera-con-algo-escrito-pregunta", async ({ p, s }) => {
   s.filas = enDiseno("P-1400"); s.ordenesSeMueven = true;
   const dlg = await abrirOrden(p, s, "P-1400");
   await autorizar(p, dlg);
+  await p.waitForTimeout(400);   // (el escudo contra el doble clic dura 600 ms desde «Directo a CTP»: un clic antes no llega, a propósito)
   await p.mouse.click(8, 8); await p.waitForTimeout(300);   // sin nada elegido: se cierra
   const vacia = (await ventanaAut(p).count()) === 0;
   await autorizar(p, dlg);
@@ -3399,7 +3400,7 @@ await caso("ses-415-lo-guardado-se-ve-en-la-ficha-y-en-el-detalle", async ({ p, 
   const f = [await fichaConEtiquetas(p, "P-1410"), await fichaConEtiquetas(p, "P-1411"), await fichaConEtiquetas(p, "P-1412")];
   const palabra = (t, w) => new RegExp("(^|\\s)" + w + "(\\s|$)").test(t);
   const det = [];
-  for (const pn of ["P-1410", "P-1411", "P-1412"]) { const fi = fichaDe(p, pn); await fi.focus(); await p.keyboard.press("Enter"); const d = p.getByRole("dialog").first(); await d.waitFor({ timeout: 8000 }); await p.waitForTimeout(400); det.push((await leerTexto(d)).match(/Cliente autorizó.{0,90}/)?.[0] || "(sin el renglón)"); await p.keyboard.press("Escape"); await p.waitForTimeout(400); }
+  for (const pn of ["P-1410", "P-1411", "P-1412"]) { const fi = fichaDe(p, pn); await fi.focus(); await p.keyboard.press("Enter"); const d = p.getByRole("dialog").first(); await d.waitFor({ timeout: 8000 }); await p.waitForTimeout(400); det.push((await leerTexto(d)).match(/Cliente autorizó.{0,90}/i)?.[0] || "(sin el renglón)"); await p.keyboard.press("Escape"); await p.waitForTimeout(400); }
   ok("ses-415-lo-guardado-se-ve-en-la-ficha-y-en-el-detalle", palabra(f[0], "Aprobó") && !palabra(f[0], "Prueba") && palabra(f[1], "Autorizó") && palabra(f[2], "Reimpresión")
     && /Aprobó la prueba · Ana Pérez por WhatsApp · .+ · Noemí/.test(det[0]) && /Sin ver prueba · Lic\. Ramírez por correo · .+ · Noemí/.test(det[1]) && /Reimpresión sin cambios de P-1301 · .+ · Noemí/.test(det[2]),
     `fichas ${f.map(x => x.slice(0, 90)).join(" | ")} · detalles ${det.join(" | ")}`);
@@ -3446,6 +3447,50 @@ await caso("ses-419-direccion-desde-la-ficha-sin-ctp", async ({ p, s }) => {
   await esperarQue(() => escritoEn(s, "order_timeline").length > 0, 6000);
   const u = escritoEn(s, "orders", "PATCH")[0]?.cuerpo, tl = escritoEn(s, "order_timeline")[0]?.cuerpo;
   ok("ses-419-direccion-desde-la-ficha-sin-ctp", u?.stage === "ready" && !!u?.proof_approved && tl?.action === LINEA_SIN + " · Ana por teléfono" + A_LISTA && tl?.by_user === "admin", `${JSON.stringify(u)} · «${tl?.action}» por ${tl?.by_user}`);
+});
+// ── v10.84.193, vuelta 2: por donde no se diseñó (escritas después del código: cada una con su sabotaje) ──
+await caso("ses-420-el-numero-escrito-de-varias-formas", async ({ p, s }) => {
+  s.filas = conAnteriores("P-1400"); s.ordenesSeMueven = true;
+  const dlg = await abrirOrden(p, s, "P-1400");
+  await autorizar(p, dlg);
+  await ventanaAut(p).getByRole("radio", { name: COMO.reimpresion }).check();
+  const campo = ventanaAut(p).getByLabel(/Otra orden/), r = {};
+  for (const x of ["p1302", "1302", " P - 1302 ", "P--1302", "P-13O2"]) { await campo.fill(x); await p.waitForTimeout(150); r[x] = { apagado: await pasarApagado(p), dice: ((await leerTexto(ventanaAut(p))).match(/Escribe el número[^.]*\.|No encuentro[^.]*\./) || [""])[0] }; }
+  // sin guion, sólo el número o con espacios: es P-1302; con dos guiones o una O en vez de cero: que lo escriba bien
+  ok("ses-420-el-numero-escrito-de-varias-formas", !r["p1302"].apagado && !r["1302"].apagado && !r[" P - 1302 "].apagado && r["P--1302"].apagado && /Escribe el número/.test(r["P--1302"].dice) && r["P-13O2"].apagado && /Escribe el número/.test(r["P-13O2"].dice), JSON.stringify(r));
+});
+await caso("ses-421-sin-ficha-del-cliente-busca-por-el-nombre", async ({ p, s }) => {
+  const f = enDiseno("P-1400", { client_id: null, client: "VOGLIA DE MEXICO", client_company: "VOGLIA DE MEXICO" });
+  s.filas = { ...f, orders: [...f.orders,
+    ordenK("P-1320", { client_id: null, stage: "delivered", delivered_at: haceH(300), created_at: haceH(310), client: "voglia de mexico ", client_company: "voglia de mexico ", invoice_folio: "F-1320" }),
+    ordenK("P-1321", { client_id: null, stage: "delivered", delivered_at: haceH(200), created_at: haceH(210), client: "OTRA EMPRESA", client_company: "OTRA EMPRESA", invoice_folio: "F-1321" })] };
+  s.ordenesSeMueven = true;
+  const dlg = await abrirOrden(p, s, "P-1400");
+  await autorizar(p, dlg);
+  await ventanaAut(p).getByRole("radio", { name: COMO.reimpresion }).check(); await p.waitForTimeout(250);
+  const ofrece = await opcionesDe(p).catch(() => []);
+  // sin ficha, el mismo nombre (sin importar mayúsculas ni espacios) es el mismo cliente; otro nombre sin ficha, no
+  ok("ses-421-sin-ficha-del-cliente-busca-por-el-nombre", ofrece.length === 1 && /^P-1320 /.test(ofrece[0]), JSON.stringify(ofrece));
+});
+await caso("ses-422-doble-clic-en-directo-a-ctp-una-sola-pregunta", async ({ p, s }) => {
+  s.filas = enDiseno("P-1400"); s.ordenesSeMueven = true;
+  const dlg = await abrirOrden(p, s, "P-1400");
+  await dlg.getByRole("button", { name: "Directo a CTP", exact: true }).dblclick(); await p.waitForTimeout(900);
+  // el segundo clic no cierra la pregunta que abrió el primero (caería en su fondo) ni mueve nada
+  const n = await ventanaAut(p).count(), u = escritoEn(s, "orders", "PATCH").length;
+  ok("ses-422-doble-clic-en-directo-a-ctp-una-sola-pregunta", n === 1 && u === 0, `${n} preguntas · ${u} PATCH`);
+});
+await caso("ses-424-datos-raros-en-la-lista-y-el-aviso-no-se-salen", async ({ p, s }) => {
+  const largo = "Benachrichtigungseinstellungen".repeat(6);   // 180 letras sin un espacio (catálogo de break-ui)
+  const raras = [ordenK("P-1330", { stage: "delivered", delivered_at: haceH(300), created_at: haceH(310), product_type: "عربي 🎉 " + "Etiquetasautoadheribles".repeat(4), invoice_folio: "F-1330" }),
+    ordenK("P-1331", { stage: "delivered", delivered_at: haceH(200), created_at: haceH(210), client: largo, client_company: largo, client_id: "c9", invoice_folio: "F-1331" })];
+  s.filas = conAnteriores("P-1400", raras); s.ordenesSeMueven = true;
+  const dlg = await abrirOrden(p, s, "P-1400");
+  await autorizar(p, dlg);
+  await responder(p, { como: "reimpresion", otra: "P-1331" });   // el aviso de otro cliente con su nombre larguísimo, y la lista con el producto raro
+  const r = await ventanaAut(p).evaluate(d => { const c = d.getBoundingClientRect(); const fuera = [...d.querySelectorAll("*")].filter(x => { const b = x.getBoundingClientRect(); return b.width > 0 && b.right > c.right + 1; }).map(x => x.tagName + ":" + (x.textContent || "").slice(0, 24)); return { deLado: d.scrollWidth > d.clientWidth + 1, fuera: fuera.slice(0, 4) }; });
+  const t = await leerTexto(ventanaAut(p));
+  ok("ses-424-datos-raros-en-la-lista-y-el-aviso-no-se-salen", !r.deLado && r.fuera.length === 0 && /es de otro cliente/.test(t) && /P-1330 /.test(t), JSON.stringify(r));
 });
 
 // ════════════════════════ v10.84.190: el perfil por la cuenta, no por el nombre (paso 2 de una sola cuenta) ════════════════════════
