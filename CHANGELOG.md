@@ -49,6 +49,35 @@ de dinero distinta cada vez, y la 184 subió al cuarto intento.
 **Documentos:** `tests/LEEME.md` (el punto de los candados decía sólo `folio`, `oc`, `partes`, `cancelar` y `orden`; ahora va la lista entera y
 la tanda `no-empezo`) y la regla 21 del `CLAUDE.md`.
 
+## v10.84.194 — «No conformidades» (la evidencia para la ISO 9001, 2 de 3), y la base del reporte del mes — 27-nov-2026
+
+Marcelo, 27-nov: «Lista en PrintFlow» — «No conformidades» que se llena sola con las devoluciones, los regresos de etapa con su razón y las entregas tarde, y a mano con las quejas que llegan por WhatsApp; cada una con su causa, qué se hizo y si funcionó (8.7 y 10.2). Y «Sí, cada mes»: el reporte de indicadores del día 1 contra sus metas («las recomendadas», con entrega a tiempo 85%), para la revisión por la dirección (6.2, 9.1.3, 9.3). Medido ese día, sólo leyendo: 1 devolución en toda la historia (P-0060, 28-jun), 17 regresos con razón desde junio (varios sólo de ruta, como «ya hay placas»), la merma nunca registrada, nada de causa ni acción correctiva; en noviembre, 46 de 54 entregas a tiempo.
+
+**La base (tres migraciones, cada una con el OK escrito de Marcelo y por la API de administración, con el ENTRA de Central; el conector las rechazó con «declined»):**
+- **`v10_84_194_no_conformidades`** (10:31:41; ensayo contra producción OK en 63 ms): `public.no_conformidades` (folio NC-0001 sin huecos, con un contador que se deshace con la transacción: una secuencia se gastaba con cada intento que falla y con cada «ya estaba»; el historial de cada cambio lo pone la base; RLS: la ven los de PrintFlow menos Almacén, anotan y atienden Dirección, Producción, Pre-prensa, Lupita y Karla; sin DELETE) y `public.nc_detectar()` (desde el 1-nov-2026, lo detectado nace «por revisar»; cada noche a las 00:15 y al abrir la lista). Al aplicar: 10 (8 entregas tarde, 2 regresos).
+- **`v10_84_195_indicadores_del_mes`** (11:22:27; ensayo OK en 48 ms): `public.metas_calidad` (las 5 metas), `public.indicadores_mes` (la foto de cada mes cerrado: lo medido no cambia; la revisión de Dirección la sella la base) y su trabajo de cada noche (00:20: el primero que guarda, el 1-dic, noviembre). Noviembre hasta hoy: 85.5% a tiempo (47 de 55; 33 sin fecha), 0 devoluciones, 0 quejas, 0 merma, 10 no conformidades por revisar.
+- **`v10_84_195b_permisos_de_mas`** (11:36:12): Supabase le da EXECUTE a `authenticated` en toda función nueva aunque se revoque de public y anon. `indicadores_calcular` ya no la ejecuta una sesión; `nc_detectar` (la app la llama al abrir la lista, para que lo nuevo salga en seguida) revisa quién: los de PrintFlow que ven la lista o el sistema. Lo encontró la revisión sin escribir (la primera) y Central (la segunda).
+
+**Qué se cambió en la app.**
+- **«No conformidades»** en el menú para los que la ven: la lista (Abiertas, Cerradas, No eran, Todas, con su cuenta); al abrir le pide a la base lo nuevo; sin una lectura buena no dice «no hay» (regla 12) y si la detección falla lo dice.
+- **Atenderla:** ¿es no conformidad? (lo detectado; «no era» pide su porqué), la causa, qué se hizo y ¿funcionó? (sí, no, todavía no se sabe; «funcionó» pide qué se hizo). Guarda sólo lo que cambió y sólo si nadie más la cambió desde que se abrió (`cambiada_en`); sólo espacios es vaciarla. Su historial, con quién y qué. «Ver P-…» abre la orden.
+- **Anotar una queja** (o «otra», que vimos aquí): la orden si es de una (con o sin «P-»; si se da, pone al cliente), por dónde llegó y qué pasó.
+- Esc o el fondo con algo escrito preguntan antes de tirarlo; el doble clic anota una vez; lo largo se parte.
+
+**Cómo se probó.**
+- **Ensayos de la base:** locales en PGlite (la 194: 26 casos; la 195 con la 195b: 22) y contra producción en un DO que se deshace. El primer ensayo de la 194 cayó en el RLS por un error del ensayo (Noemí es `noemi`, no `preprensa`): se deshizo todo. La 195b, con `tests/romper/permisos.mjs --ensayar`: 20 de 20; sin ella caían justo los 2 casos nuevos de esos permisos.
+- **`permisos`**, 7 casos de la ISO, que el candado corre siempre: el visor corre la detección y no anota, el mes en curso sólo Dirección, una sesión no calcula un mes, una cuenta ajena no detecta, **anon no ejecuta `nc_detectar`** (la rama «sin sesión» es segura sólo por eso: lo pidió Central) y nadie cambia lo medido.
+- **La pantalla, vuelta 1** (ses-430 a ses-446, contra la primera versión): fallaban 11 de 25. Una era de la app (el nombre larguísimo se salía de la ventana); diez eran de la prueba, y se dicen: un ayudante del menú que sólo lee la cola de Karla (7), la bodega de Almacén que ni entra a PrintFlow, los reintentos de 7 s de una lectura con 503 y la cuenta de Dirección que se llama «Administrador».
+- **Vuelta 2** (ses-447 a ses-451: vaciar la causa, cerrarla la pasa de pestaña, la lectura lenta, la base que no guarda, la orden sin «P-»): 5 de 5, y con sus sabotajes caen las 5. `sesion-5` completa: 55 de 55.
+
+**Qué NO se tocó.** Las órdenes y su bitácora (las no conformidades sólo las leen); lo que hace PrintFlow con una devolución o un regreso. La pantalla de los indicadores del mes va en la v10.84.195 (los meses se guardan solos desde ya).
+
+**Para Marcelo.**
+- Las 10 detectadas esperan que alguien diga si son no conformidad: los dos regresos parecen de ruta («Es impresión digital», «Maquila»).
+- Hablar con Lupita y los vendedores: las quejas de WhatsApp se anotan aquí.
+
+---
+
 ## v10.84.193 — Salir de Diseño pregunta cómo autorizó el cliente (la evidencia para la ISO 9001, 1 de 3) — 27-nov-2026
 
 Marcelo, 27-nov, a «¿qué recomiendas hacer para tener evidencia para la ISO?»: «Que pregunte al salir» de Diseño (las otras dos, «No conformidades» y el reporte mensual de indicadores, van después). Medido ese día en la base, sólo leyendo: de unas 603 salidas de Diseño desde junio, 8 dejaron registro de que el cliente aprobó; desde el 9-nov, 3 de 76.
