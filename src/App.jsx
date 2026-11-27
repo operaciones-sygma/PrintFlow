@@ -85,7 +85,7 @@ const C={bg:"#fcfdfe",canvas:"#f0f3f7",card:"#fcfdfe",sf:"#eff2f6",bd:"#e4e8ee",
 // (etapa/producto) · meta=metadato (agente/fechas/badges) · micro=tags ultra-densos. Se migra incremental, como BADGE_TONES.
 const F={title:15,label:13,body:11,meta:10,micro:9};
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
-const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon,devoluciones:ArrowUUpLeftIcon,cancelaciones:XCircleIcon,espera:BellSlashIcon,plano:BlueprintIcon,no_conformidades:WarningOctagonIcon};   // v10.84.194
+const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon,devoluciones:ArrowUUpLeftIcon,cancelaciones:XCircleIcon,espera:BellSlashIcon,plano:BlueprintIcon,no_conformidades:WarningOctagonIcon,indicadores:TargetIcon};   // v10.84.194, v10.84.195
 // v10.73.48 — AUTH F2-full (frontend auth-only): se RETIRA el fallback legacy — el login es SOLO signInWithPassword y el
 //   restore SOLO desde la sesión Supabase Auth (una sesión pre-F1 sin JWT cae a login y re-autentica una vez, misma
 //   contraseña). Esto elimina toda sesión sin JWT → habilita en BD rechazar anon en verify_actor_role (todas las ~37 RPCs
@@ -20095,6 +20095,97 @@ function AnotarNoConformidad({orders,onAnotada,onClose}){
     </div>
   </div>;
 }
+// ─── v10.84.195 — «INDICADORES DEL MES» (Marcelo, 27-nov; ISO 9001 6.2, 9.1.3 y 9.3) ──────────────────────────────────────────────────────
+// La evidencia de la revisión por la dirección. Cada noche la base guarda el mes que cerró (public.indicadores_mes, desde noviembre de 2026; el primero, el 1-dic)
+//   con lo medido y las metas de ese día; aquí Dirección lo ve contra sus metas y escribe su revisión y lo que decide (la base sella quién y cuándo; lo medido no
+//   cambia). El mes en curso se ve «hasta hoy» (indicadores_del_mes_en_curso, que revisa que sea Dirección), sin guardarse. Regla 12: sin lectura no dice nada falso.
+const INDICADORES_DEL_MES=[
+  {clave:"entrega_a_tiempo",valor:v=>v?.entrega_a_tiempo?.con_fecha?v.entrega_a_tiempo.pct:null,dice:v=>{const e=v?.entrega_a_tiempo||{};return e.con_fecha?e.pct+"% ("+e.a_tiempo+" de "+e.con_fecha+" con fecha"+(e.sin_fecha?"; "+e.sin_fecha+" sin fecha, no cuentan":"")+")":"Sin entregas con fecha"+(e.sin_fecha?" ("+e.sin_fecha+" sin fecha)":"")}},
+  {clave:"regresos_por_falla",valor:v=>v?.regresos_por_falla?.n??0,dice:v=>{const r=v?.regresos_por_falla||{};return (r.n??0)+(r.por_revisar?" · "+r.por_revisar+" por revisar en «No conformidades»":"")+(r.no_eran?" · "+r.no_eran+" no eran":"")}},
+  {clave:"devoluciones",valor:v=>v?.devoluciones?.n??0,dice:v=>String(v?.devoluciones?.n??0)},
+  {clave:"quejas",valor:v=>v?.quejas?.n??0,dice:v=>String(v?.quejas?.n??0)},
+  {clave:"merma",valor:()=>null,dice:v=>{const m=v?.merma||{};return m.renglones?m.renglones+(m.renglones===1?" registro en ":" registros en ")+m.ordenes+(m.ordenes===1?" orden":" órdenes")+" · "+Number(m.piezas||0).toLocaleString("es-MX")+" piezas, "+Number(m.pliegos||0).toLocaleString("es-MX")+" pliegos":"No se registró merma"}},
+];
+const cumpleMeta=(meta,valor)=>{if(!meta||meta.umbral==null||!meta.sentido||valor==null)return null;const u=Number(meta.umbral),x=Number(valor);if(isNaN(u)||isNaN(x))return null;return meta.sentido==="al_menos"?x>=u:x<=u};
+const nombreDelMes=mes=>{const d=new Date(String(mes).slice(0,7)+"-15T12:00:00");return isNaN(d)?String(mes):d.toLocaleDateString("es-MX",{month:"long",year:"numeric"})};
+function TablaDelMes({valores,metas}){
+  const porClave=new Map((metas||[]).map(m=>[m.clave,m]));
+  const nc=valores?.no_conformidades||{},dis=valores?.diseno||{};
+  const celda={padding:"7px 8px",borderBottom:"0.5px solid "+C.bd,fontSize:12,verticalAlign:"top",overflowWrap:"anywhere"};
+  return <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",tableLayout:"fixed",minWidth:560}}>
+    <thead><tr>{["Indicador","Meta","Lo medido","¿Cumple?"].map((h,i)=><th key={h} style={{...celda,textAlign:"left",fontSize:10,fontWeight:700,color:C.t2,textTransform:"uppercase",width:i===3?96:i===0?"22%":undefined}}>{h}</th>)}</tr></thead>
+    <tbody>{INDICADORES_DEL_MES.map(ind=>{const m=porClave.get(ind.clave),c=cumpleMeta(m,ind.valor(valores));return <tr key={ind.clave}>
+      <td style={{...celda,fontWeight:700}}>{m?.nombre||ind.clave}</td><td style={{...celda,color:C.t2}}>{m?.meta||"—"}</td><td style={celda}>{ind.dice(valores)}</td>
+      <td style={{...celda,fontWeight:700,color:c===true?C.okInk:c===false?C.dnInk:C.t2}}>{c===true?"✓ Cumple":c===false?"✗ No cumple":"—"}</td></tr>})}</tbody>
+  </table>
+  <p style={{fontSize:12,color:C.t2,margin:"8px 0 0",lineHeight:1.5,overflowWrap:"anywhere"}}>No conformidades del mes: {nc.del_mes??0} ({nc.abiertas??0} abiertas, {nc.cerradas??0} cerradas{nc.no_eran?", "+nc.no_eran+" no eran":""}). Salidas de Diseño a CTP o Lista: {dis.salidas??0}, con la autorización del cliente registrada {dis.con_autorizacion??0}.</p></div>;
+}
+function RevisionDelMes({mes,onGuardada}){
+  const [revision,setRevision]=useState(mes.revision||"");
+  const [acciones,setAcciones]=useState(mes.acciones||"");
+  const [saving,setSaving]=useState(false);
+  const [err,setErr]=useState("");
+  const enviando=useRef(false);
+  const sucio=revision.trim()!==(mes.revision||"")||acciones.trim()!==(mes.acciones||"");
+  const guardar=async()=>{
+    if(!sucio||enviando.current)return;enviando.current=true;setSaving(true);setErr("");
+    try{const {data,error}=await supabase.from("indicadores_mes").update({revision:revision.trim()||null,acciones:acciones.trim()||null}).eq("mes",mes.mes).select("*");
+      if(error){setErr("No se guardó la revisión: "+errorEnPalabras(error)+".");return}
+      if(!data||!data.length){setErr("No se sabe si se guardó: vuelve a leer antes de escribirla otra vez.");return}
+      onGuardada(data[0]);
+    }finally{enviando.current=false;setSaving(false)}
+  };
+  const id="rev-"+String(mes.mes).slice(0,7),area={...inp,fontSize:12,minHeight:64,resize:"vertical",width:"100%",boxSizing:"border-box"};
+  return <div style={{marginTop:12}}>
+    <label htmlFor={id+"-r"} style={{display:"block",fontSize:11,fontWeight:700,color:C.t2,margin:"0 0 6px"}}>Revisión de Dirección: qué se concluye</label>
+    <textarea id={id+"-r"} value={revision} maxLength={4000} onChange={e=>setRevision(e.target.value)} placeholder="Ej.: 85% a tiempo, en la meta; los dos regresos fueron de ruta" style={area}/>
+    <label htmlFor={id+"-a"} style={{display:"block",fontSize:11,fontWeight:700,color:C.t2,margin:"10px 0 6px"}}>Lo que se decide hacer</label>
+    <textarea id={id+"-a"} value={acciones} maxLength={4000} onChange={e=>setAcciones(e.target.value)} placeholder="Ej.: revisar con Gerardo las entregas tarde de calendarios" style={area}/>
+    <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginTop:8}}>
+      <div aria-live="polite" style={{flex:"1 1 200px",fontSize:12,minWidth:0,color:err?C.dnInk:C.t2,fontWeight:err?600:400,overflowWrap:"anywhere"}}>{err||(mes.revisado_en?"Revisado por "+(AUTHOR_NAME[mes.revisado_por]||mes.revisado_por)+" · "+fDT(mes.revisado_en):"Sin revisar todavía")}</div>
+      <button onClick={guardar} disabled={!sucio||saving} style={sucio?{...bt(C.ac),fontSize:12,padding:"8px 14px",opacity:saving?.6:1}:{...bt(C.sf,C.t2),fontSize:12,padding:"8px 14px",border:"1px solid "+C.bd,cursor:"not-allowed"}}>{saving?"Guardando…":"Guardar la revisión"}</button>
+    </div>
+  </div>;
+}
+function IndicadoresDelMesVista({showToast}){
+  const [meses,setMeses]=useState(null);       // null: sin una lectura buena todavía
+  const [enCurso,setEnCurso]=useState(null);
+  const [metasHoy,setMetasHoy]=useState(null);
+  const [lectura,setLectura]=useState({cargando:true,fallo:null,falloEnCurso:null});
+  const turno=useRef(0);
+  const leer=useCallback(async()=>{
+    const yo=++turno.current;
+    setLectura(l=>({...l,cargando:true,fallo:null,falloEnCurso:null}));
+    const [m,c,mt]=await Promise.all([supabase.from("indicadores_mes").select("*").order("mes",{ascending:false}),supabase.rpc("indicadores_del_mes_en_curso"),supabase.from("metas_calidad").select("*").order("orden")]);
+    if(yo!==turno.current)return;
+    setLectura({cargando:false,fallo:m.error?errorEnPalabras(m.error):mt.error?errorEnPalabras(mt.error):null,falloEnCurso:c.error?errorEnPalabras(c.error):null});
+    if(!m.error)setMeses(m.data||[]);
+    if(!c.error)setEnCurso(c.data||null);
+    if(!mt.error)setMetasHoy(mt.data||[]);
+  },[]);
+  useEffect(()=>{leer()},[leer]);
+  const tarjeta={background:C.bg,border:"1px solid "+C.bd,borderRadius:14,padding:"14px 16px",marginBottom:14,minWidth:0};
+  return <div style={{maxWidth:1100,margin:"0 auto"}}>
+    <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:6}}>
+      <h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:0,flex:"1 1 auto"}}>Indicadores del mes</h2>
+      <button onClick={leer} disabled={lectura.cargando} style={{...bt(C.sf,C.t2),fontSize:12,padding:"8px 14px",border:"0.5px solid "+C.bd}}>{lectura.cargando?"Leyendo…":"Volver a leer"}</button>
+    </div>
+    <p style={{fontSize:12,color:C.t2,margin:"0 0 12px",lineHeight:1.45}}>Cada mes que cierra se guarda solo (el día 1 a las 00:20) con lo medido y las metas de ese día: ya no cambia. Aquí se revisa contra las metas y se anota lo que se decide (la revisión por la dirección).</p>
+    {lectura.fallo&&<div role="alert" style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",padding:"10px 12px",borderRadius:10,background:C.sf,border:"1px solid "+C.bd,fontSize:12,margin:"0 0 12px"}}><span style={{flex:"1 1 200px",color:C.dnInk,fontWeight:600}}>No se pudieron leer los indicadores: {lectura.fallo}.{meses?" Lo que ves es de la lectura anterior.":""}</span><button onClick={leer} style={{...bt(C.ac),fontSize:12,padding:"6px 12px"}}>Reintentar</button></div>}
+    {!meses&&!lectura.fallo&&<p style={{fontSize:12,color:C.t2}}>Leyendo…</p>}
+    <section aria-label="El mes en curso" style={tarjeta}>
+      <h3 style={{fontSize:14,fontWeight:800,margin:"0 0 8px"}}>{enCurso?.mes?nombreDelMes(enCurso.mes):"El mes en curso"} · hasta hoy (todavía no se guarda)</h3>
+      {lectura.falloEnCurso?<p role="status" style={{fontSize:12,color:C.wnInk,fontWeight:600,margin:0}}>No se pudo leer el mes en curso: {lectura.falloEnCurso}.</p>:enCurso&&metasHoy?<TablaDelMes valores={enCurso} metas={metasHoy}/>:<p style={{fontSize:12,color:C.t2,margin:0}}>Leyendo…</p>}
+    </section>
+    {meses&&!meses.length&&<p style={{fontSize:13,color:C.t2,padding:"6px 0"}}>Todavía no se guarda ningún mes: el primero, noviembre, se guarda solo el 1 de diciembre a las 00:20.</p>}
+    {(meses||[]).map(m=><section key={m.mes} aria-label={"Indicadores de "+nombreDelMes(m.mes)} style={tarjeta}>
+      <h3 style={{fontSize:14,fontWeight:800,margin:"0 0 2px"}}>{nombreDelMes(m.mes)}</h3>
+      <div style={{fontSize:11,color:C.t2,marginBottom:8}}>Guardado el {fDT(m.guardado_en)} ({m.guardado_por}) · con las metas de ese día</div>
+      <TablaDelMes valores={m.valores} metas={m.metas}/>
+      <RevisionDelMes key={m.mes+(m.revisado_en||"")} mes={m} onGuardada={g=>{setMeses(p=>(p||[]).map(x=>x.mes===g.mes?g:x));showToast&&showToast("Quedó la revisión de "+nombreDelMes(g.mes))}}/>
+    </section>)}
+  </div>;
+}
 function CancelacionesView({orders, role, onCancelOrders, onDetail}){
   const [sel,setSel]=useState(new Set());
   const [reason,setReason]=useState("");
@@ -25095,6 +25186,7 @@ export default function PrintFlow() {
   if(user==="admin")navs.push({id:"wip",g:"ctrl",l:"Dinero en Proceso"}); // v10.27.0
   if(user==="admin")navs.push({id:"health",g:"ctrl",l:"Salud Operativa"}); // v10.28.0
   if(user==="admin"||user==="karla")navs.push({id:"audit",g:"ctrl",l:"Auditoría"});
+  if(user==="admin")navs.push({id:"indicadores",g:"ctrl",l:"Indicadores del mes"});   // v10.84.195 — la revisión por la dirección (ISO 9001): sólo Dirección, como la base
   // v10.72.83 — Devoluciones (re-trabajo) y Cancelaciones: ventanas dedicadas con historial + búsqueda.
   // Roles alineados con los RPCs: create_return = admin/secretaria/karla/preprensa; cancelar = admin/secretaria/karla.
   if(user==="admin"||user==="secretaria"||user==="karla"||user==="preprensa")navs.push({id:"devoluciones",g:"reg",l:"Devoluciones"});
@@ -25355,6 +25447,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         {view==="devoluciones"&&(user==="admin"||user==="secretaria"||user==="karla"||user==="preprensa")&&<div>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><ArrowUUpLeftIcon size={18} weight="bold"/>Devoluciones</h2><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}><FolderOpenIcon size={14} weight="bold"/>Cargar archivo para registrar devoluciones</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Carga el historial completo para buscar la orden entregada a devolver y ver el historial</p></div>:<DevolucionesView orders={orders} role={user} userLogin={userLogin} onCreateReturn={doCreateReturn} onDetail={(id)=>setDetailModalId(id)}/>}</div>}
         {/* v10.84.194 — «No conformidades» (ISO 9001): lee su tabla al abrir (y antes pide a la base lo nuevo); las órdenes, para su P- y para abrir su detalle */}
         {view==="no_conformidades"&&VEN_NC.includes(user)&&<NoConformidadesVista role={user} orders={orders} showToast={showToast} onDetail={o=>handleAction(o.id,"detail")}/>}
+        {/* v10.84.195 — «Indicadores del mes» (ISO 9001): lo guardado de cada mes y el mes en curso, contra las metas; la revisión de Dirección */}
+        {view==="indicadores"&&user==="admin"&&<IndicadoresDelMesVista showToast={showToast}/>}
         {view==="cancelaciones"&&(user==="admin"||user==="secretaria"||user==="karla")&&<div>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><XCircleIcon size={18} weight="bold"/>Cancelaciones</h2><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}><FolderOpenIcon size={14} weight="bold"/>Cargar archivo para gestionar cancelaciones</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Carga el historial completo para buscar la orden a cancelar y ver el historial</p></div>:<CancelacionesView orders={orders} role={user} onCancelOrders={doCancelOrders} onDetail={(id)=>setDetailModalId(id)}/>}</div>}
         {view==="oc"&&(isSec(user)||user==="admin"||user==="karla")&&<OrdenesCompraView onJalar={jalarASalidas} purchaseOrders={purchaseOrders} orders={orders} role={user} userLogin={userLogin} orderFilter={orderFilter} onAction={handleAction} onReload={reload} showToast={showToast} onCreateOC={createOC} onAddProduct={addProductToOC} onAddExisting={addExistingToOC} onAssignFolio={(oc,ocOrders)=>setFolioOCModal({oc,ocOrders,preAssigned:false})} onPreAssignFolio={(oc,ocOrders)=>setFolioOCModal({oc,ocOrders,preAssigned:true})} onMatrixPlan={(oc,ocOrders)=>setOcMatrixModal({oc,orders:ocOrders})} onCancelMatrixLine={(line,group,order,oc)=>setMatrixCancelModal({kind:"line",line,group,order,oc})} onCancelMatrixGroup={(group,oc)=>setMatrixCancelModal({kind:"group",group,oc})} pendingOCId={pendingOCNavId} onConsumedPendingOC={()=>setPendingOCNavId(null)} leido={!!lectura.ok}/>}
         {view==="storage"&&(user==="preprensa"||user==="german")&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px",textAlign:"center",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><FolderIcon size={18} weight="bold"/>Archivos de Producción</h2><StorageTab orders={viewOrders} onReload={reload}/></div>}
