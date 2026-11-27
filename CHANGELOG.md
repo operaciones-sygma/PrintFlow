@@ -12,7 +12,34 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
-## v10.84.195 — «Indicadores del mes» (la evidencia para la ISO 9001, 3 de 3: la revisión por la dirección) — 27-nov-2026
+## v10.84.196 — Una sola cuenta, paso 5: lo que dice la pantalla de entrar desde el cambio de cuentas — 27-nov-2026
+
+Marcelo adelantó el cambio de cuentas del domingo 29 al viernes 27-nov (por Central). Desde esa noche cada quien entra con `nombre@sygma.mx`:
+- Arturo, Gerardo, Germán y Noemí, con la misma cuenta, que cambia de correo y conserva su contraseña (`pasar_correo`).
+- Karla, Genaro, Dulce, Lupita y Marcelo, con su cuenta de CobranzaFlow, a la que pasa su renglón de PrintFlow (`ligar`).
+
+El plan y la base, en `docs/una-sola-cuenta/LEEME.md`. Esta versión es lo que dice la pantalla, y sube después de la base.
+
+**Qué se cambió.**
+- **La casilla dice «Correo»**, con el ejemplo `Ej: gerardo@sygma.mx`. Antes decía «Usuario o correo» y «Ej: gerardo, o tu correo completo».
+- **El nombre a secas que Auth rechaza dice cómo se entra:** «Usuario o contraseña incorrectos. Ahora se entra con tu correo completo: gerardo@sygma.mx.»
+  - `secretaria` lleva a lupita@sygma.mx y `admin`, a marcelo@sygma.mx (`correoNuevoDe`).
+  - Lo que no parece un nombre dice `nombre@sygma.mx`: no inventa un correo.
+  - Con la contraseña mala, el aviso dice las dos cosas.
+- **La cuenta de antes, ya ligada**, lee «Ya no se entra con esta cuenta. Ahora se entra con tu correo completo: karla@sygma.mx. Si no te deja, pídele a Marcelo que la revise.» (`avisoCuentaDeAntes`). Es la cuenta cuya contraseña sirve pero que ya no tiene renglón.
+  - Lo mismo al abrir con su sesión guardada, y sale sólo de aquí (`scope:"local"`).
+  - Una cuenta de antes desactivada lee lo mismo: con `get_my_session` no se distinguen, y el «pídele a Marcelo» la cubre.
+- **El correo sin PrintFlow** (`AVISO_SIN_LIGAR`) ya no manda al «usuario de siempre». `AVISO_SIN_PERFIL` se quitó.
+- **No cambia** la base ni cómo se busca el perfil (`get_my_session`, v10.84.190). El nombre a secas sigue llevando a `nombre@padillahnos.local`: lo usa la cuenta de pruebas. Para la gente deja de existir porque su cuenta cambió de correo o se ligó.
+
+**Cómo se probó** (`sesion-4`: la app real con la base simulada; ses-350 a ses-359).
+- **7-nov, en la rama `cuenta-29nov`:**
+  - Vuelta 1, las pruebas solas contra la 191: fallaban las 16 nuevas, 50 de 66.
+  - Con el código: 66 de 66, y la tanda `sesion` entera, 313 de 314. Cayó ses-06, que pedía «desactivada»: era de la prueba y se corrigió. También aceptan el aviso nuevo ses-22, ses-305, ses-306 y ses-315.
+  - 9 sabotajes, uno por pieza: cada uno tumba la suya.
+- **27-nov:** rebasada encima de la 195 (8050090) sin choques; `v10.84.PASO5` pasó a `v10.84.196` en 8 renglones; `sesion-4`, 66 de 66.
+
+
 
 Marcelo, 27-nov: «Sí, cada mes»: el reporte de indicadores del día 1 contra sus metas («las recomendadas», con entrega a tiempo 85%), como evidencia de la revisión por la dirección (ISO 9001 6.2, 9.1.3 y 9.3). La base ya estaba desde la mañana (`v10_84_195_indicadores_del_mes` y `v10_84_195b_permisos_de_mas`, en la entrada de la 194): cada noche a las 00:20 guarda el mes que cerró, con lo medido y las metas de ese día. El primero, noviembre, se guarda el 1-dic.
 
