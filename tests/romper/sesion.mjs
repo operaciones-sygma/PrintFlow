@@ -87,6 +87,7 @@ function simulada() {
     ordenesSeMueven: false, // v10.84.172 — un PATCH a una orden contesta su id (sin esto, vacío: «cambió de etapa en otra sesión»)
     validar: null,     // v10.84.175 — { hechas: Set }: como la base de verdad, recuerda lo validado: el UPDATE que lleva su condición y ya estaba no toca nada (contesta [] sin error)
     contesta: {},      // v10.84.194 — { tabla: (método, cuerpo, url) => filas }: lo que contesta un POST o un PATCH a esa tabla (por omisión, [])
+    retrasoEscritura: {}, // v10.84.195 — { tabla: ms }: un POST o un PATCH a esa tabla tarda en contestar (lo que se aprieta otra vez mientras guarda)
   };
 }
 const b64u = o => Buffer.from(JSON.stringify(o)).toString("base64url");
@@ -226,6 +227,7 @@ async function rutear(ctx, s) {
         if (col) s.validar.hechas.add(id + col);
         return J(200, yaEstaba && conCondicion ? [] : [{ id }]);
       }
+      { const t = ruta.slice("/rest/v1/".length); if ((m === "POST" || m === "PATCH") && s.retrasoEscritura[t]) await new Promise(r => setTimeout(r, s.retrasoEscritura[t])); }   // v10.84.195
       { const t = ruta.slice("/rest/v1/".length); if ((m === "POST" || m === "PATCH") && typeof s.contesta[t] === "function") return J(200, s.contesta[t](m, cuerpo, url)); }   // v10.84.194
       return J(200, ruta.startsWith("/rest/v1/rpc/") ? null : []);
     }
@@ -3733,6 +3735,7 @@ const VALORES = (x = {}) => ({ mes: "2026-11", entrega_a_tiempo: { pct: 85.5, a_
 const MES_NOV = (x = {}) => ({ mes: "2026-11-01", valores: VALORES(), metas: METAS_C(), guardado_en: "2026-12-01T06:20:00Z", guardado_por: "cada noche", revision: null, acciones: null, revisado_por: null, revisado_en: null, ...x });
 const conInd = (meses = [MES_NOV()], enCurso = VALORES({ mes: "2026-12", quejas: { n: 0 }, regresos_por_falla: { n: 0, por_revisar: 0, no_eran: 0 } })) => ({ filas: { orders: [ordenK("P-1400", { stage: "ctp" })], order_timeline: [], indicadores_mes: meses, metas_calidad: METAS_C() }, enCurso });
 const aInd = async (p, s, quien = "marcelo") => { await abrirYEntrar(p, s, quien); await esperarMenu(p, /^Indicadores del mes$/); await despertar(p); await p.locator('button[title="Indicadores del mes"]').first().click(); await p.waitForTimeout(900); };
+const aIndEl = async (p, s, cuando) => { await abrirYEntrar(p, s, "marcelo"); await esperarMenu(p, /^Indicadores del mes$/); await despertar(p); await p.clock.setFixedTime(new Date(cuando)); await p.locator('button[title="Indicadores del mes"]').first().click(); await p.waitForTimeout(900); };
 const filaDe = (p, nombre, seccion) => p.getByRole("region", { name: seccion }).getByRole("row", { name: new RegExp("^" + nombre) }).first().innerText().then(t => t.replace(/\s+/g, " ")).catch(() => "(sin la fila)");
 for (const [quien, ve] of [["marcelo", true], ["karla", false], ["noemi", false], ["lupita", false], ["gerardo", false]]) await caso(`ses-460-${quien}-${ve ? "ve" : "no-ve"}-los-indicadores`, async ({ p, s }) => {
   const c = conInd(); s.filas = c.filas; s.rpcRespuestas.indicadores_del_mes_en_curso = c.enCurso;
@@ -3769,7 +3772,7 @@ await caso("ses-464-si-el-mes-en-curso-falla-lo-dice", async ({ p, s }) => {
 });
 await caso("ses-465-sin-meses-guardados-lo-dice", async ({ p, s }) => {
   const c = conInd([]); s.filas = c.filas; s.rpcRespuestas.indicadores_del_mes_en_curso = VALORES();
-  await aInd(p, s);
+  await aIndEl(p, s, "2026-11-27T12:00:00-06:00");   // (vuelta 2: el reloj fijo; sin él, desde el 1-dic la prueba dependería del día en que corre)
   const t = await texto(p);
   ok("ses-465-sin-meses-guardados-lo-dice", /Todavía no se guarda ningún mes: el primero, noviembre, se guarda solo el 1 de diciembre/.test(t), (t.match(/Todavía no.{0,90}/) || [t.slice(0, 120)])[0]);
 });
@@ -3801,11 +3804,106 @@ await caso("ses-468-cada-mes-con-las-metas-de-ese-dia", async ({ p, s }) => {
 });
 for (const [id, vp] of [["ses-469a-a-1366", { width: 1366, height: 768 }], ["ses-469b-a-1920", { width: 1920, height: 1080 }]]) await caso(id + "-con-datos-raros-no-se-sale", async ({ p, s }) => {
   const largo = "Benachrichtigungseinstellungen".repeat(6);
-  const c = conInd([MES_NOV({ revision: largo + " 🎉 عربي", acciones: largo, revisado_por: "admin", revisado_en: haceH(2) })]); s.filas = c.filas; s.rpcRespuestas.indicadores_del_mes_en_curso = c.enCurso;
+  const metas = METAS_C().map((m, i) => i === 3 ? { ...m, meta: largo + " 🎉 عربي" } : m);   // (vuelta 2: lo raro también donde se lee, en la meta guardada con el mes)
+  const c = conInd([MES_NOV({ metas, revision: largo + " 🎉 عربي", acciones: largo, revisado_por: "admin", revisado_en: haceH(2) })]); s.filas = c.filas; s.rpcRespuestas.indicadores_del_mes_en_curso = c.enCurso;
   await aInd(p, s);
   const r = await p.evaluate(() => ({ ancho: document.documentElement.scrollWidth, ventana: innerWidth, sale: [...document.querySelectorAll("section *")].filter(x => !/^(INPUT|TEXTAREA|TABLE|TBODY|THEAD|TR)$/.test(x.tagName) && x.scrollWidth > x.clientWidth + 2 && getComputedStyle(x).overflowX !== "auto").length }));
   ok(id + "-con-datos-raros-no-se-sale", r.ancho <= r.ventana && r.sale === 0, JSON.stringify(r));
 }, { viewport: vp });
+// v10.84.195 — vuelta 2, por donde no se diseñó: el doble clic al guardar, la base que no guarda o no devuelve la fila, las metas que no llegan, un mes guardado
+//   con otra forma (sin una cifra), salir por el menú con la revisión escrita, volver a leer con algo escrito, y el mes que el trabajo de la noche no guardó.
+const REV = r => r.getByLabel(/Revisión de Dirección/), ACC = r => r.getByLabel(/Lo que se decide hacer/), NOV = p => p.getByRole("region", { name: "Indicadores de noviembre de 2026" });
+const guardaYDevuelve = s => { s.contesta.indicadores_mes = (m, cuerpo) => [{ ...MES_NOV(), ...cuerpo, revisado_por: "admin", revisado_en: new Date().toISOString() }]; };
+await caso("ses-470-doble-clic-en-guardar-la-revision-guarda-una-vez", async ({ p, s }) => {
+  const c = conInd(); s.filas = c.filas; s.rpcRespuestas.indicadores_del_mes_en_curso = c.enCurso; guardaYDevuelve(s); s.retrasoEscritura.indicadores_mes = 800;
+  await aInd(p, s);
+  await REV(NOV(p)).fill("En la meta");
+  await NOV(p).getByRole("button", { name: "Guardar la revisión" }).dblclick();
+  await p.waitForTimeout(1800);
+  const n = escritoEn(s, "indicadores_mes", "PATCH").length;
+  ok("ses-470-doble-clic-en-guardar-la-revision-guarda-una-vez", n === 1, n + " PATCH");
+});
+await caso("ses-471-si-la-base-no-guarda-lo-escrito-se-queda", async ({ p, s }) => {
+  const c = conInd(); s.filas = c.filas; s.rpcRespuestas.indicadores_del_mes_en_curso = c.enCurso; s.escrituraFalla = "indicadores_mes";
+  await aInd(p, s);
+  const r = NOV(p), escrito = "Quejas arriba de la meta: revisar el color con Lupita ✍️ (Peña-Núñez)";
+  await REV(r).fill(escrito); await ACC(r).fill("Junta el lunes");
+  await r.getByRole("button", { name: "Guardar la revisión" }).click();
+  await r.getByText(/No se guardó la revisión/).first().waitFor({ timeout: 8000 }).catch(() => {});
+  const t = await r.innerText(), v1 = await REV(r).inputValue().catch(() => "(sin la caja)"), v2 = await ACC(r).inputValue().catch(() => "(sin la caja)");
+  const habil = await r.getByRole("button", { name: "Guardar la revisión" }).isEnabled().catch(() => false), todo = await texto(p);
+  ok("ses-471-si-la-base-no-guarda-lo-escrito-se-queda", /No se guardó la revisión/.test(t) && v1 === escrito && v2 === "Junta el lunes" && habil && !/Quedó la revisión/.test(todo),
+    `${(t.match(/No se guard.{0,60}/) || ["(sin aviso)"])[0]} | ${v1 === escrito} ${v2} ${habil}`);
+});
+await caso("ses-472-sin-la-fila-de-vuelta-no-dice-que-quedo", async ({ p, s }) => {
+  const c = conInd(); s.filas = c.filas; s.rpcRespuestas.indicadores_del_mes_en_curso = c.enCurso; s.contesta.indicadores_mes = () => [];
+  await aInd(p, s);
+  const r = NOV(p);
+  await REV(r).fill("En la meta");
+  await r.getByRole("button", { name: "Guardar la revisión" }).click();
+  await p.waitForTimeout(1200);
+  const t = await texto(p), v = await REV(r).inputValue().catch(() => "(sin la caja)");
+  ok("ses-472-sin-la-fila-de-vuelta-no-dice-que-quedo", /No se sabe si se guardó/.test(t) && !/Quedó la revisión|Revisado por/.test(t) && v === "En la meta",
+    (t.match(/No se sabe.{0,50}|Quedó la.{0,30}|Revisado por.{0,30}/) || ["(nada)"])[0] + " | " + v);
+});
+await caso("ses-473-sin-las-metas-el-mes-en-curso-no-se-queda-leyendo", async ({ p, s }) => {
+  const c = conInd(); s.filas = { ...c.filas, metas_calidad: "falla" }; s.rpcRespuestas.indicadores_del_mes_en_curso = c.enCurso;
+  await aInd(p, s);
+  await p.getByText(/No se pudieron leer los indicadores/).first().waitFor({ timeout: 12000 }).catch(() => {}); await p.waitForTimeout(300);   // (con 503 la librería reintenta ~7 s)
+  const enCurso = await p.getByRole("region", { name: "El mes en curso" }).innerText().then(x => x.replace(/\s+/g, " ")).catch(() => "(sin la sección)");
+  const nov = await filaDe(p, "Entrega a tiempo", "Indicadores de noviembre de 2026");
+  ok("ses-473-sin-las-metas-el-mes-en-curso-no-se-queda-leyendo", !/Leyendo/.test(enCurso) && /metas/.test(enCurso) && /✓ Cumple/.test(nov), enCurso.slice(0, 140) + " | " + nov.slice(-12));
+});
+await caso("ses-474-un-mes-guardado-sin-una-cifra-no-la-inventa", async ({ p, s }) => {
+  const v = VALORES(); delete v.entrega_a_tiempo; delete v.quejas; delete v.merma; delete v.no_conformidades;
+  const c = conInd([MES_NOV({ valores: v })]); s.filas = c.filas; s.rpcRespuestas.indicadores_del_mes_en_curso = c.enCurso;
+  await aInd(p, s);
+  const sec = "Indicadores de noviembre de 2026", e = await filaDe(p, "Entrega a tiempo", sec), q = await filaDe(p, "Quejas del cliente", sec), m = await filaDe(p, "Merma", sec), d = await filaDe(p, "Devoluciones", sec);
+  const todo = await p.getByRole("region", { name: sec }).innerText().then(x => x.replace(/\s+/g, " ")).catch(() => "");
+  ok("ses-474-un-mes-guardado-sin-una-cifra-no-la-inventa", [e, q, m].every(f => /Sin dato/.test(f) && !/Cumple|No cumple/.test(f)) && !/Sin entregas con fecha|No se registró merma|No conformidades del mes/.test(todo) && /✓ Cumple/.test(d) && /Salidas de Diseño a CTP o Lista: 95/.test(todo),
+    [e, q, m].map(f => f.slice(-26)).join(" | "));
+});
+await caso("ses-475-salir-con-la-revision-escrita-pregunta", async ({ p, s }) => {
+  const c = conInd(); s.filas = c.filas; s.rpcRespuestas.indicadores_del_mes_en_curso = c.enCurso;
+  await aInd(p, s);
+  const escrito = "Vamos en 85%: revisar los calendarios";
+  await REV(NOV(p)).fill(escrito);
+  const pregunta = p.getByRole("dialog", { name: /Salir sin guardar la revisión/ });
+  await p.locator('button[title="Analytics"]').first().click(); await p.waitForTimeout(500);
+  const pregunto = await pregunta.isVisible().catch(() => false);
+  if (pregunto) { await pregunta.getByRole("button", { name: /Seguir escribiendo/ }).click(); await p.waitForTimeout(400); }
+  const sigue = await REV(NOV(p)).inputValue({ timeout: 1500 }).catch(() => "(sin la revisión)");
+  await p.locator('button[title="Analytics"]').first().click(); await p.waitForTimeout(500);
+  if (await pregunta.isVisible().catch(() => false)) { await pregunta.getByRole("button", { name: /^Salir sin guardar$/ }).click(); await p.waitForTimeout(700); }
+  const fuera = !(await p.getByRole("heading", { name: "Indicadores del mes" }).isVisible().catch(() => false));
+  ok("ses-475-salir-con-la-revision-escrita-pregunta", pregunto && sigue === escrito && fuera, `pregunto=${pregunto} sigue=${sigue === escrito ? "sí" : sigue} fuera=${fuera}`);
+});
+await caso("ses-476-el-2-de-diciembre-sin-noviembre-guardado-lo-dice", async ({ p, s }) => {
+  const c = conInd([]); s.filas = c.filas; s.rpcRespuestas.indicadores_del_mes_en_curso = VALORES({ mes: "2026-12" });
+  await aIndEl(p, s, "2026-12-02T10:00:00-06:00");
+  const t = await texto(p);
+  ok("ses-476-el-2-de-diciembre-sin-noviembre-guardado-lo-dice", /Falta noviembre de 2026/.test(t) && /printflow-indicadores-mes/.test(t) && !/se guarda solo el 1 de diciembre/.test(t), (t.match(/Falta .{0,110}|Todavía no.{0,60}/) || [t.slice(0, 120)])[0]);
+});
+await caso("ses-477-el-1-de-diciembre-antes-de-la-1-todavia-no-alarma", async ({ p, s }) => {
+  const c = conInd([]); s.filas = c.filas; s.rpcRespuestas.indicadores_del_mes_en_curso = VALORES({ mes: "2026-12" });
+  await aIndEl(p, s, "2026-12-01T00:25:00-06:00");
+  const t = await texto(p);
+  ok("ses-477-el-1-de-diciembre-antes-de-la-1-todavia-no-alarma", !/Falta noviembre/.test(t) && /Todavía no se guarda ningún mes/.test(t), (t.match(/Falta .{0,80}|Todavía no.{0,60}/) || [t.slice(0, 120)])[0]);
+});
+await caso("ses-478-en-enero-sin-diciembre-dice-cual-falta", async ({ p, s }) => {
+  const c = conInd([MES_NOV()]); s.filas = c.filas; s.rpcRespuestas.indicadores_del_mes_en_curso = VALORES({ mes: "2027-01" });
+  await aIndEl(p, s, "2027-01-05T09:00:00-06:00");
+  const t = await texto(p);
+  ok("ses-478-en-enero-sin-diciembre-dice-cual-falta", /Falta diciembre de 2026/.test(t) && !/Falta noviembre/.test(t) && /Indicadores de noviembre|noviembre de 2026/.test(t), (t.match(/Falta .{0,80}/) || ["(sin aviso)"])[0]);
+});
+await caso("ses-479-volver-a-leer-no-borra-lo-escrito", async ({ p, s }) => {
+  const c = conInd(); s.filas = c.filas; s.rpcRespuestas.indicadores_del_mes_en_curso = c.enCurso;
+  await aInd(p, s);
+  await REV(NOV(p)).fill("Escrito a medias");
+  await p.getByRole("button", { name: "Volver a leer" }).click(); await p.waitForTimeout(1200);
+  const v = await REV(NOV(p)).inputValue().catch(() => "(sin la caja)");
+  ok("ses-479-volver-a-leer-no-borra-lo-escrito", v === "Escrito a medias", v);
+});
 await caso("ses-446-el-historial-dice-quien-y-que", async ({ p, s }) => {
   s.filas = conNC([NCF("NC-0001", { es_no_conformidad: true, causa: "RGB", historial: [{ en: haceH(3), por: "admin", cambios: { es_no_conformidad: [null, true], causa: [null, "RGB"] } }], cambiada_en: haceH(3), cambiada_por: "admin" })]);
   await aNC(p, s);
