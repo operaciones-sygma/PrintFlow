@@ -3508,10 +3508,12 @@ const abrirNC = async (p, folio) => { await p.getByRole("button", { name: new Re
 const guardarApagado = (p, folio) => ventanaNC(p, folio).getByRole("button", { name: "Guardar", exact: true }).isDisabled();
 const ventanaAnotar = p => p.getByRole("dialog", { name: "Anotar una no conformidad" });
 const devuelveLoGuardado = s => { s.contesta.no_conformidades = (m, cuerpo, url) => { if (m === "POST") return [{ ...NCF("NC-0004"), id: "nc-nueva", clave: null, ...cuerpo, folio: "NC-0004", creada_por: "preprensa", es_no_conformidad: true }]; const id = (url.searchParams.get("id") || "").replace(/^eq\./, ""); const f = (s.filas.no_conformidades || []).find(x => x.id === id); return f ? [{ ...f, ...cuerpo, cambiada_en: new Date().toISOString(), cambiada_por: "preprensa" }] : []; }; };
-for (const [quien, ve] of [["noemi", true], ["marcelo", true], ["karla", true], ["lupita", true], ["gerardo", true], ["german", true], ["genaro", true], ["bodega", false]]) await caso(`ses-430-${quien}-${ve ? "ve" : "no-ve"}-no-conformidades`, async ({ p, s }) => {
+// (vuelta 1, de la prueba) la bodega (Almacén) ni entra a PrintFlow («Esa cuenta no tiene acceso»): no hay a quién no enseñársela; y el menú se lee cuando ya está
+for (const [quien, ve] of [["noemi", true], ["marcelo", true], ["karla", true], ["lupita", true], ["gerardo", true], ["german", true], ["genaro", true]]) await caso(`ses-430-${quien}-${ve ? "ve" : "no-ve"}-no-conformidades`, async ({ p, s }) => {
   s.filas = conNC();
-  await abrirYEntrar(p, s, quien); await despertar(p);
-  const menu = await entradasDelMenu(p);
+  await abrirYEntrar(p, s, quien); await esperarMenu(p, /^Todas$/); await despertar(p);
+  // (vuelta 1, de la prueba) entradasDelMenu sólo da Pendientes, Folios y Tablero (es de la cola de Karla): aquí, todos los títulos del menú
+  const menu = await p.evaluate(() => [...document.querySelectorAll("button[title]")].map(b => b.title));
   ok(`ses-430-${quien}-${ve ? "ve" : "no-ve"}-no-conformidades`, menu.includes("No conformidades") === ve, menu.join(" | "));
 });
 await caso("ses-431-al-abrir-pide-lo-nuevo-y-ensena-lo-abierto", async ({ p, s }) => {
@@ -3525,6 +3527,8 @@ await caso("ses-431-al-abrir-pide-lo-nuevo-y-ensena-lo-abierto", async ({ p, s }
 await caso("ses-432-sin-lectura-no-dice-que-no-hay", async ({ p, s }) => {
   s.filas = { ...conNC(), no_conformidades: "falla" };
   await aNC(p, s);
+  // (vuelta 1, de la prueba) con 503 la librería reintenta la lectura 3 veces (1, 2 y 4 s) antes de avisar: se espera el aviso, no 900 ms
+  await p.getByText(/No se pudieron leer las no conformidades/).first().waitFor({ timeout: 12000 }).catch(() => {});
   const t = await texto(p), reintentar = await p.getByRole("button", { name: "Reintentar" }).count();
   ok("ses-432-sin-lectura-no-dice-que-no-hay", /No se pudieron leer las no conformidades/.test(t) && reintentar >= 1 && !/No hay no conformidades/.test(t) && !/Abiertas \(0\)/.test(t), `«${(t.match(/No se pudieron.{0,80}/) || [t.slice(0, 120)])[0]}» · reintentar ${reintentar}`);
 });
@@ -3673,7 +3677,7 @@ await caso("ses-446-el-historial-dice-quien-y-que", async ({ p, s }) => {
   const v = ventanaNC(p, "NC-0001");
   await v.getByText(/^Historial \(1\)/).click(); await p.waitForTimeout(200);
   const t = await leerTexto(v);
-  ok("ses-446-el-historial-dice-quien-y-que", /Marcelo: ¿Es no conformidad\? «Sí» · Causa «RGB»/.test(t), (t.match(/Historial.{0,120}/) || [t.slice(0, 120)])[0]);
+  ok("ses-446-el-historial-dice-quien-y-que", /Administrador: ¿Es no conformidad\? «Sí» · Causa «RGB»/.test(t), (t.match(/Historial.{0,120}/) || [t.slice(0, 120)])[0]);
 });
 
 // ════════════════════════ v10.84.190: el perfil por la cuenta, no por el nombre (paso 2 de una sola cuenta) ════════════════════════
