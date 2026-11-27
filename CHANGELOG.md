@@ -48,6 +48,10 @@ Marcelo, 27-nov: «Sí, cada mes»: el reporte de indicadores del día 1 contra 
 - Las órdenes, «No conformidades» y lo que guarda el trabajo de cada noche.
 - `FORMA_ABIERTA`, que comparten la forma de la orden y «Planta», sólo se usa: la vista se registra al abrir y se quita al cerrar si sigue siendo la suya.
 
+**En producción.** 27-nov 13:00, READY `dpl_EnA9mtYHp8GRvKi2M6xecYJrpy58` (3c0c58f; la pantalla, 0b8400e y 2287250; sus pruebas, 61297bf y 5943e38). Candado 3627 de 3627 (25 nuevas), de a 4, 1411 s, a la primera y sin inestables ni regresiones. Revisado sin escribir: los dos dominios sirven el mismo JS con la pantalla nueva y lo de la 194.
+
+**Vuelta atrás.** Promover `dpl_9v48cqs5YiEvzCdbvtjq3sZdsxaz` (56cba5d: la app de la 194) o `git revert --no-edit 2287250 5943e38 0b8400e 61297bf` y subir (la pantalla con sus pruebas; ensayada en una copia aparte: deja `src`, `scripts` y `tests` como 56cba5d, salvo `tests/LEEME.md`). La base no cambió con ella: los meses se siguen guardando solos.
+
 **Para Marcelo.**
 - El 1-dic a las 00:20 se guarda noviembre. Ese día abre «Indicadores del mes» y escribe la revisión: esa página es la evidencia de la revisión por la dirección.
 - La merma todavía no tiene meta en número. Por ahora la meta es que se registre; cuando haya 3 meses de datos se pone su porcentaje.
