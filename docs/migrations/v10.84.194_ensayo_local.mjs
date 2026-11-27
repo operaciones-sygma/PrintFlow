@@ -6,11 +6,12 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 const AQUI = path.dirname(fileURLToPath(import.meta.url));
 const ALMACEN = process.env.REPO_ALMACEN || path.resolve(AQUI, "..", "..", "..", "sygma-almacen");   // PGlite viene de ../sygma-almacen/node_modules
 const { PGlite } = await import(pathToFileURL(path.join(ALMACEN, "node_modules", "@electric-sql", "pglite", "dist", "index.js")).href);
-const MIG = fs.readFileSync(process.argv[2] || path.join(AQUI, "v10.84.194_no_conformidades.sql"), "utf8");
+const MIG = (t => t.replace(/^set local (statement|lock)_timeout.*$/gm, ""))(fs.readFileSync(process.argv[2] || path.join(AQUI, "v10.84.194_no_conformidades.sql"), "utf8"));
 
 const ESQUEMA = String.raw`
 create role anon; create role authenticated; create role service_role;
-create schema auth; create schema cobranza; create schema cron;
+create schema auth; create schema cobranza; create schema cron; create schema supabase_migrations;
+create table supabase_migrations.schema_migrations (version text primary key, statements text[], name text);
 create function auth.uid() returns uuid language sql stable as $$ select (nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub')::uuid $$;
 create table public.users (id uuid primary key default gen_random_uuid(), username text unique not null, role text not null, active boolean default true, user_id uuid);
 create table cobranza.users (id uuid primary key, username text not null, role text not null, active boolean not null default true);
@@ -25,8 +26,9 @@ create function public.pf_uid_username() returns text language sql stable securi
 $f$;
 create table public.orders (id text primary key, production_number text, client text, client_company text, stage text, source text, due_date date, delivered_at timestamptz, returned_at timestamptz, return_reason text);
 create table public.order_timeline (id bigserial primary key, order_id text, action text, created_at timestamptz default now(), to_stage text);
-create table cron.jobs (nombre text, cuando text, que text);
-create function cron.schedule(n text, c text, q text) returns bigint language sql as $$ insert into cron.jobs values (n, c, q); select 1::bigint $$;
+create table cron.job (jobid bigserial, jobname text, schedule text, command text);   -- como el de pg_cron
+create view cron.jobs as select jobname nombre, schedule cuando, command que from cron.job;
+create function cron.schedule(n text, c text, q text) returns bigint language sql as $$ insert into cron.job (jobname, schedule, command) values (n, c, q) returning jobid $$;
 grant usage on schema public, cobranza to authenticated, anon;
 insert into public.users (username, role, user_id) values ('preprensa', 'preprensa', '00000000-0000-4000-8000-000000000001'), ('admin', 'admin', '00000000-0000-4000-8000-000000000002'),
   ('visor', 'visor', '00000000-0000-4000-8000-000000000003'), ('bodega', 'almacen', '00000000-0000-4000-8000-000000000004'), ('german', 'german', '00000000-0000-4000-8000-000000000005');

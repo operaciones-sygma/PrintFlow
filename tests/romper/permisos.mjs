@@ -47,7 +47,19 @@ ${ANTES}
   ${intento("admin_cambia_precios", "admin", `perform public.save_app_config('chemical_prices', v_precios, 'gerardo')`)}
   ${intento("secretaria_registra_impresion", "secretaria", `perform public.register_print('${ORDEN}', 'admin', null)`)}
   ${intento("gerardo_firma_buenos_dias", "gerardo", `perform public.log_wakeup_ack('admin', 0, '[]'::jsonb)`)}
+  -- v10.84.194-195b (ISO 9001): las no conformidades y los indicadores del mes, con los permisos que Central y la revisión amarraron
+  ${intento("visor_detecta_nc", "visor", `perform public.nc_detectar()`)}
+  ${intento("visor_anota_nc", "visor", `insert into public.no_conformidades (origen, que_paso) values ('queja', 'PRUEBA: se deshace')`)}
+  ${intento("visor_ve_el_mes", "visor", `perform public.indicadores_del_mes_en_curso()`)}
+  ${intento("admin_ve_el_mes", "admin", `perform public.indicadores_del_mes_en_curso()`)}
+  ${intento("visor_calcula_un_mes", "visor", `perform public.indicadores_calcular('2026-11-01')`)}
+  perform set_config('request.jwt.claims', json_build_object('sub', '00000000-0000-4000-8000-0000000000ff', 'role', 'authenticated')::text, true);   -- una cuenta que no es de PrintFlow
+  begin perform public.nc_detectar(); v_estado := 'pasó'; exception when others then v_estado := sqlstate; end;
+  r := r || jsonb_build_object('ajeno_detecta_nc', v_estado);
   execute 'reset role';
+  r := r || jsonb_build_object('anon_ejecuta_nc_detectar', has_function_privilege('anon', 'public.nc_detectar()', 'execute'),
+    'sesion_ejecuta_calcular', has_function_privilege('authenticated', 'public.indicadores_calcular(date)', 'execute'),
+    'sesion_cambia_lo_medido', has_column_privilege('authenticated', 'public.indicadores_mes', 'valores', 'update'));
   r := r || jsonb_build_object(
     'precios_quien', (select updated_by from public.app_config where key = 'chemical_prices'),
     'impresion_quien', (select last_printed_by from public.orders where id = '${ORDEN}'),
@@ -76,6 +88,15 @@ const CASOS = [
   ["perm-gerardo-firma-buenos-dias", r => r.gerardo_firma_buenos_dias === "pasó", r => `gerardo al firmar el «Buenos días»: ${r.gerardo_firma_buenos_dias}`],
   ["perm-buenos-dias-autor-es-la-sesion", r => r.buenos_dias_quien === "gerardo" && /^gerardo/.test(r.buenos_dias_autor || ""), r => `gerardo firmó mandando «admin»; quedó user=${r.buenos_dias_quien}, autor=${r.buenos_dias_autor}`],
   ["perm-sin-sesion-no-registra", r => r.anon_registra_impresion === "42501", r => `sin sesión (anon) al registrar una impresión: ${r.anon_registra_impresion}`],
+  // v10.84.194-195b — no conformidades e indicadores del mes (ISO 9001)
+  ["perm-iso-visor-corre-la-deteccion", r => r.visor_detecta_nc === "pasó", r => `el visor (ve la lista) al correr nc_detectar: ${r.visor_detecta_nc}`],
+  ["perm-iso-visor-no-anota", r => r.visor_anota_nc === "42501", r => `el visor al anotar una queja: ${r.visor_anota_nc}`],
+  ["perm-iso-el-mes-solo-direccion", r => r.visor_ve_el_mes === "42501" && r.admin_ve_el_mes === "pasó", r => `el mes en curso: visor ${r.visor_ve_el_mes}, Dirección ${r.admin_ve_el_mes}`],
+  ["perm-iso-una-sesion-no-calcula-un-mes", r => r.visor_calcula_un_mes === "42501" && r.sesion_ejecuta_calcular === false, r => `indicadores_calcular: el visor ${r.visor_calcula_un_mes}; authenticated la ejecuta: ${r.sesion_ejecuta_calcular}`],
+  ["perm-iso-otra-cuenta-no-detecta", r => r.ajeno_detecta_nc === "42501", r => `una cuenta que no es de PrintFlow al correr nc_detectar: ${r.ajeno_detecta_nc}`],
+  // (Central) la rama de «sin sesión» de nc_detectar es segura sólo porque anon no la ejecuta
+  ["perm-iso-sin-sesion-no-ejecuta-la-deteccion", r => r.anon_ejecuta_nc_detectar === false, r => `anon ejecuta nc_detectar: ${r.anon_ejecuta_nc_detectar}`],
+  ["perm-iso-nadie-cambia-lo-medido", r => r.sesion_cambia_lo_medido === false, r => `authenticated puede cambiar indicadores_mes.valores: ${r.sesion_cambia_lo_medido}`],
 ];
 
 async function correr() {
