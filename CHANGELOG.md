@@ -36,7 +36,8 @@ Marcelo, 27-nov, a «¿qué recomiendas hacer para tener evidencia para la ISO?�
 - Las de la 189 que cuidaban el botón suelto (ses-200 a ses-228) cuidan lo mismo por la puerta nueva: el doble clic escribe una vez, otra sesión la movió, la base que no guarda, sin el renglón no queda autorizada, la ventana que se queda vieja, el teclado de punta a punta, los datos raros y las dos pantallas. ses-209 y ses-210 pasaron de «se queda como estaba» a «ya pregunta».
 - Tanda nueva **`sesion-5`** (ses-400 en adelante; la app real, puerto 5474) y en `detalle` det-252 a det-275.
 - **Vuelta 2, por donde no se diseñó** (escritas después del código, cada una con su sabotaje): el número escrito de varias formas (ses-420), el cliente sin ficha por su nombre (ses-421), doble clic en «Directo a CTP» (ses-422), datos raros del catálogo de break-ui en la lista y el aviso (ses-424), la reimpresión de una H- (det-274) y un renglón sin «por dónde» (det-275). Con el código, 6 de 6; con los sabotajes, caen las 6. Dos sabotajes no caían al principio y se dice: en ses-422 quitar los escudos no rompía nada (el segundo clic llega antes de que se pinte la ventana y vuelve a abrir la misma), así que su sabotaje es regresar el botón al camino viejo; ses-424 era floja (medía cajas, y el texto que se sale no es un elemento): ahora mide el desborde de cada uno.
-- `detalle`, `sesion-3` y `sesion-5` completas con el código: 372 de 372 (416 s), sin regresiones. 🔑 **El banco del detalle copia de `App.jsx` renglón por renglón** lo que dice cómo autorizó el cliente: `autorizacionDelCliente` va en UN renglón (partida en varios, el banco no compilaba).
+- `detalle`, `sesion-3` y `sesion-5` completas con el código: 372 de 372 (416 s), sin regresiones.
+- **El candado:** 3544 de 3544 (43 nuevas), de a 4, 1399 s, a la primera y sin inestables. 🔑 **El banco del detalle copia de `App.jsx` renglón por renglón** lo que dice cómo autorizó el cliente: `autorizacionDelCliente` va en UN renglón (partida en varios, el banco no compilaba).
 
 **Qué NO se tocó.** La base (ninguna migración: un renglón de la bitácora y `proof_approved`, como la 189). «Prueba de Color» y «Cliente Aprobó» (la prueba de color) siguen igual. Lo ya autorizado.
 
@@ -44,6 +45,10 @@ Marcelo, 27-nov, a «¿qué recomiendas hacer para tener evidencia para la ISO?�
 - Hablarlo con Noemí: cada salida de Diseño le pregunta ahora (un clic y, si no es reimpresión, el nombre de quien autorizó y por dónde).
 - «Cliente Aprobó», después de la prueba de color, todavía no pide quién del cliente ni por dónde (9 órdenes desde junio): si lo quieres igual, es un cambio chico.
 - Si quieres de vuelta el botón suelto, se regresa fácil.
+
+**En producción.** 27-nov 09:41, READY `dpl_HFvb694gw4ygj8VXQ1QqcTweCuBi` (listo a las 09:41:09), commits `343a228` y `8d1dfe4` (pruebas), `dad924a` (la app), `2d0bd85` y `0668025`. Revisado sin escribir: los dos dominios (`produccion.sygma.mx` y `print-flow-eosin.vercel.app`) sirven el mismo `index-DRcJYUH_.js`, con la pregunta nueva (5 de 5 textos) y sin la acción vieja (0 de 2); el recorrido de los 8 roles contra `produccion.sygma.mx`, 99 pasos en 171 s: nada truena (lo lento y las escrituras cortadas, las de siempre).
+
+**Vuelta atrás.** De urgencia, promover `dpl_Ajm374a5oStxxaaS3iiPUiGpsAzw` (048c42b: el código de la 192). Y `git revert --no-edit 0668025 2d0bd85 dad924a 8d1dfe4 343a228` y subir (ensayada en un worktree: sin conflictos, deja `src`, `scripts` y `tests` como 048c42b). La base no cambió: no hay nada que regresar ahí; los renglones «✅ …» que se escriban se quedan en la bitácora y la 192 los lee como sin autorización conocida.
 
 **Sin probar.** Con Noemí de verdad (cuánto tarda en contestar y si elige bien). En un lector de pantalla de verdad.
 
