@@ -14,6 +14,14 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ## Pruebas: la segunda oportunidad de lo que ni empezó, la misma de las cuatro apps — 27-nov-2026 (sólo pruebas, la app no cambia)
 
+> **EN PRODUCCIÓN el 27-nov a las 10:30** (`8a19e93`, READY `dpl_BMGSaword7cRVkPcWbXiFpKjLDdx`).
+> - **Candado:** 3,566 de 3,566 en 1,002 s, de a 4. Una pasó a la segunda, `nueva-oc/noc-19`, por `net::ERR_NO_BUFFER_SPACE` al abrir el
+>   banco: el caso ni empezó, justo el que esta regla cubre, aunque `nueva-oc` no es de dinero y ya tenía su segunda oportunidad. Quedó revisada
+>   como la red de Windows.
+> - **Revisado en producción sin escribir:** los dos dominios sirven la compilación del candado (7 de 8 archivos idénticos, el otro salvo los
+>   finales de línea).
+> - **Vuelta atrás:** promover `dpl_34h3TopGBCYsDK5Um2znrHWjDo1C` (86f1219, la misma app), o `git revert --no-edit 8a19e93` y subir.
+
 Marcelo, 27-nov: *«sí, da una segunda oportunidad»* (la decisión del 6-nov, en `../cobranzaflow/docs/PENDIENTES.md`). Las tandas de dinero no
 repetían ni el caso que no llegó a abrir su página. El 5-nov frenaron tres candados de PrintFlow por `net::ERR_NO_BUFFER_SPACE` en una prueba
 de dinero distinta cada vez, y la 184 subió al cuarto intento.
