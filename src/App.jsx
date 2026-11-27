@@ -1472,8 +1472,9 @@ const ACTION_ROLES = {
   approveCartComplete: { allowed:["admin","secretaria"], ownerBound:[] },
   // ─── Phase 3 (v10.12.0.4) — handlers descubiertos durante Phase 2 ───
   approve_proof:    { allowed:["admin","secretaria","vendedor","preprensa","produccion"], ownerBound:["vendedor"] },
-  // v10.84.189 — quien ve los botones de Diseño (StageFlowButtons): Pre-prensa y Dirección
-  autorizar_sin_prueba: { allowed:["admin","preprensa"], ownerBound:[] },
+  // v10.84.189 — quien ve los botones de Diseño (StageFlowButtons): Pre-prensa y Dirección. v10.84.193: salir de Diseño a CTP o sin CTP a Lista, con la
+  //   pregunta de cómo autorizó el cliente (era «autorizar_sin_prueba», el botón suelto)
+  salir_de_diseno: { allowed:["admin","preprensa"], ownerBound:[] },
   web_request_file: { allowed:["admin","secretaria","preprensa"], ownerBound:[] },
   edit_specs:       { allowed:["admin","preprensa","produccion"], ownerBound:[] },
   // ─── Cuadra: producción a stock + venta desde stock (v10.42.0) ───
@@ -1583,7 +1584,7 @@ function actionDeniedToast(action, order, user, userLogin) {
     approveCartComplete: "aprobar el carrito de",
     // Phase 3 (v10.12.0.4)
     approve_proof: "aprobar la prueba de",
-    autorizar_sin_prueba: "marcar la autorización de",
+    salir_de_diseno: "sacar de Diseño",
     web_request_file: "solicitar archivo del pedido web",
     edit_specs: "editar specs técnicas de"
   };
@@ -3629,8 +3630,28 @@ const listaEn=(o,hasta)=>{let m=null;for(const e of (o&&o.timeline)||[]){if(!e||
 //   ahí: de lo que se autorizó, no quedaba quién ni cuándo. «Cliente autorizó sin prueba» guarda lo mismo que «Cliente Aprobó»: `proof_approved` (cuándo; regresar a Diseño lo borra) y su renglón en la
 //   bitácora (quién: `by_user`, y `by_uid` lo sella la base con la sesión). Sin columna nueva: de cuál de las dos fue lo dice el renglón, y manda el último. `como` es "sin", "con" o null: lo terminado no
 //   trae su bitácora hasta abrir su detalle (regla 12), y sin el renglón no se afirma de cuál fue.
-const TEXTO_SIN_PRUEBA="✅ Cliente autorizó sin prueba de color";
-const autorizacionDelCliente=o=>{if(!o?.proof_approved)return null;const l=[...(o.timeline||[])].reverse().find(e=>{const a=String(e?.action||"");return a.startsWith(TEXTO_SIN_PRUEBA)||a.startsWith("✅ Prueba aprobada")});return {como:!l?null:String(l.action).startsWith(TEXTO_SIN_PRUEBA)?"sin":"con",quien:l?.by||null,cuando:o.proof_approved}};
+const TEXTO_SIN_PRUEBA="✅ Cliente autorizó sin prueba de color";   // v10.84.193 — ya no se escribe (era el botón suelto); se sigue leyendo
+// v10.84.193 — Marcelo, 27-nov (ISO 9001 8.2.3 y 8.6; medido: de ~603 salidas de Diseño desde junio, 8 con registro de que el cliente aprobó): «Directo a CTP» y
+//   «Sin CTP, Lista» PREGUNTAN cómo autorizó el cliente (`ComoAutorizoVentana`). Tres respuestas, cada una con su renglón en la bitácora y `proof_approved`, como
+//   «Cliente Aprobó» (sin columna nueva: la base no cambia). Todas empiezan con «✅». Quién del cliente y por dónde van en el renglón; quién lo registró, en `by_user`.
+const TEXTO_APROBO_PRUEBA="✅ Cliente aprobó la prueba";
+const TEXTO_SIN_VER_PRUEBA="✅ Cliente autorizó sin ver prueba";
+const TEXTO_REIMPRESION="✅ Reimpresión sin cambios de ";
+const CANALES_DEL_CLIENTE=[{id:"whatsapp",l:"WhatsApp",frase:"por WhatsApp"},{id:"correo",l:"Correo",frase:"por correo"},{id:"telefono",l:"Teléfono",frase:"por teléfono"},{id:"persona",l:"En persona",frase:"en persona"}];
+// el nombre como se guarda: sin «·» ni «→» (el renglón se lee por ellos), sin saltos ni espacios de más, y hasta 60 letras (las cuenta por letra, no por byte)
+const limpiarQuien=t=>Array.from(String(t||"").replace(/[·→\r\n\t]+/g," ").replace(/\s+/g," ").trim()).slice(0,60).join("").trim();
+// lo que dice el renglón (y el comentario) de cada respuesta, sin las etapas
+const textoDeLaAutorizacion=r=>{if(!r)return "";if(r.como==="reimpresion")return r.de?TEXTO_REIMPRESION+r.de:"";const q=limpiarQuien(r.quien),c=CANALES_DEL_CLIENTE.find(x=>x.id===r.canal);if(q.length<2||!c||(r.como!=="aprobo"&&r.como!=="sin"))return "";return (r.como==="aprobo"?TEXTO_APROBO_PRUEBA:TEXTO_SIN_VER_PRUEBA)+" · "+q+" "+c.frase};
+// cómo se lee de vuelta: el «por …» de por dónde es el ÚLTIMO antes de las etapas (un «por» dentro del nombre no lo confunde)
+const RE_QUIEN_Y_POR_DONDE=/^✅ Cliente (?:aprobó la prueba|autorizó sin ver prueba) · (.+?) (por WhatsApp|por correo|por teléfono|en persona)(?= · |$)/;
+const RE_REIMPRESION=/^✅ Reimpresión sin cambios de ([PH]-\d+)/;
+// `como`: "con" (prueba de color, «Cliente Aprobó»), "sin" (la 189), "prueba" (aprobó la prueba), "sinVer" (sin ver prueba), "reimpresion" o null (sin el renglón)
+//   (en UN renglón: el banco del detalle, tests/banco/gen-detalle.mjs, la copia renglón por renglón con las constantes de arriba)
+const autorizacionDelCliente=o=>{if(!o?.proof_approved)return null;const l=[...(o.timeline||[])].reverse().find(e=>{const a=String(e?.action||"");return a.startsWith(TEXTO_SIN_PRUEBA)||a.startsWith("✅ Prueba aprobada")||a.startsWith(TEXTO_APROBO_PRUEBA)||a.startsWith(TEXTO_SIN_VER_PRUEBA)||a.startsWith(TEXTO_REIMPRESION)});const base={quien:l?.by||null,cuando:o.proof_approved};if(!l)return {como:null,...base};const a=String(l.action);if(a.startsWith("✅ Prueba aprobada"))return {como:"con",...base};if(a.startsWith(TEXTO_SIN_PRUEBA))return {como:"sin",...base};const r=RE_REIMPRESION.exec(a);if(r)return {como:"reimpresion",de:r[1],...base};const m=RE_QUIEN_Y_POR_DONDE.exec(a);return {como:a.startsWith(TEXTO_APROBO_PRUEBA)?"prueba":"sinVer",deQuien:m?m[1]:null,porDonde:m?m[2]:null,...base}};
+// v10.84.193 — lo que dice el renglón «Cliente autorizó» del detalle (sin el cuándo ni quién lo registró, que se agregan después)
+const comoAutorizo=aut=>!aut?"":aut.como==="con"?"Con prueba de color":aut.como==="sin"?"Sin prueba de color":aut.como==="reimpresion"?"Reimpresión sin cambios de "+aut.de:(aut.como==="prueba"?"Aprobó la prueba":aut.como==="sinVer"?"Sin ver prueba":"")+(aut.deQuien?" · "+aut.deQuien+" "+aut.porDonde:"");
+// el mismo cliente: por su ficha (client_id) o, sin ella, por el nombre
+const mismoCliente=(a,b)=>!!a&&!!b&&(a.client_id&&b.client_id?a.client_id===b.client_id:String(a.client_company||a.client||"").trim().toLowerCase()===String(b.client_company||b.client||"").trim().toLowerCase());
 // el fin del día de su entrega (las 23:59:59), en ms
 const finDeLaEntrega=o=>new Date(String(o.due_date).slice(0,10)+"T23:59:59").getTime();
 // lista a tiempo: está lista (en Salidas o recibida de maquila) y quedó lista a más tardar el día de su entrega
@@ -4995,7 +5016,9 @@ const nombreDeOrden=o=>o?(o.production_number||o.client||"La orden"):"La orden";
 const motivoDeLaBase=e=>{const m=String(e?.message||e||"").trim();const base=errorEnPalabras(e);if(base!=="la base no lo aceptó")return base;return m&&/^[A-ZÁÉÍÓÚÑ¿]/.test(m)&&!/violates|constraint|duplicate key|column|relation|function|syntax|null value|operator|JSON/i.test(m)?m:base};
 const copiarFolio=f=>({label:"Copiar "+f,onClick:()=>{try{navigator.clipboard?.writeText(f)}catch(_){}}});   // v10.84.70 — el folio asignado, a un clic (y el aviso dura 6.5 s)
 const escudoDeClics=(ms=600)=>{if(typeof document==="undefined")return;const d=document.createElement("div");d.setAttribute("aria-hidden","true");d.dataset.escudo="1";d.style.cssText="position:fixed;inset:0;z-index:2147483000;background:transparent";const tragar=e=>{e.preventDefault();e.stopPropagation()};["click","dblclick","mousedown","mouseup","pointerdown","pointerup","touchstart","touchend","contextmenu"].forEach(t=>d.addEventListener(t,tragar,true));document.body.appendChild(d);setTimeout(()=>d.remove(),ms)};
-const FilaDelDetalle=({l,v})=>v&&v!=="—"?<dl style={{display:"flex",padding:"7px 0",borderBottom:"0.5px solid "+C.bd,margin:0}}><dt style={{width:130,fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase",flexShrink:0}}>{l}</dt><dd style={{flex:1,fontSize:13,color:C.tx,margin:0}}>{v}</dd></dl>:null;
+// v10.84.193 — el valor se parte si trae una palabra sin cortes (minWidth:0 + overflowWrap): «Cliente autorizó» lleva el nombre que escribe Noemí, y una palabra
+//   larga se salía del detalle
+const FilaDelDetalle=({l,v})=>v&&v!=="—"?<dl style={{display:"flex",padding:"7px 0",borderBottom:"0.5px solid "+C.bd,margin:0}}><dt style={{width:130,fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase",flexShrink:0}}>{l}</dt><dd style={{flex:1,minWidth:0,overflowWrap:"anywhere",fontSize:13,color:C.tx,margin:0}}>{v}</dd></dl>:null;
 const SeccionDelDetalle=({icono,children,mt=12})=><div style={{display:"flex",alignItems:"center",gap:6,fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginTop:mt,marginBottom:4}}>{icono}{children}</div>;
 // v10.84.50: lo que sabe la ficha, arriba: sus alertas y banderas (alertasDeLaOrden/banderasDeLaOrden, la misma
 //   definición), la máquina con su reloj, a quién le toca y «Reimprimir» si la copia impresa quedó obsoleta.
@@ -5055,7 +5078,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction,oc=null,re
   //   —con Esc, «Cancelar» o al terminar— se regresa a la orden, que se actualiza sola (App la busca viva en `orders`), con
   //   el foco donde estaba. Lo que lleva a otra pantalla (editar, duplicar, imprimir) o se hace de una vez (avanzar,
   //   validar, recordar, quitar la espera) sí cierra, como antes.
-  const ENCIMA=["autorizar_sin_prueba","corregir_precio","facturar_siguiente_parte","jalar_a_salidas","deliver_with_invoice","deliver_covered","deliver_only","split_invoice","pre_invoice","apply_historic_folio","refacturar","deshacer_saldo","deshacer_cancelacion","cancel_with_nc","cancel_order","revert","snooze","waste","send_maquila","delete"];
+  const ENCIMA=["salir_de_diseno","corregir_precio","facturar_siguiente_parte","jalar_a_salidas","deliver_with_invoice","deliver_covered","deliver_only","split_invoice","pre_invoice","apply_historic_folio","refacturar","deshacer_saldo","deshacer_cancelacion","cancel_with_nc","cancel_order","revert","snooze","waste","send_maquila","delete"];
   const volverA=useRef(null),revisarRef=useRef(null);
   const despachar=(id,action,arg)=>{
     escudoDeClics();   // v10.84.54 — el segundo clic de un doble clic no llega a nada
@@ -5280,7 +5303,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction,oc=null,re
       {(()=>{
         const bAlias=o.client_id?<ClientAliasManager clientId={o.client_id} role={role} userLogin={userLogin}/>:null;
         const bProducto=<><Seccion>Producto</Seccion>
-          {o.product_type&&<Row l="Descripción" v={o.product}/>}<Row l="Categoría" v={esVentaDeInventario(o.product_type)?"Venta de inventario":(nombreDeCategoria(o.categoria)||"Sin clasificar")}/><Row l="Creada" v={o.created_at?fDT(o.created_at)+(o.created_by?" por "+(o.created_by==="secretaria"?"Lupita":o.created_by):""):null}/><Row l="Entrega" v={o.due_date?(fechaEnPalabras(o.due_date,{corto:true})||fD(o.due_date))+(o.delivery_calculated_at?" · estándar":""):null}/>{/* v10.84.189 — quien la vea sabe si alguien la pidió así o salió sola; y quién autorizó y cuándo, sin abrir el historial */}{(()=>{const aut=autorizacionDelCliente(o);return aut?<Row l="Cliente autorizó" v={(aut.como==="sin"?"Sin prueba de color · ":aut.como==="con"?"Con prueba de color · ":"")+fDT(aut.cuando)+(aut.quien?" · "+(AUTHOR_NAME[aut.quien]||aut.quien):"")}/>:null})()}
+          {o.product_type&&<Row l="Descripción" v={o.product}/>}<Row l="Categoría" v={esVentaDeInventario(o.product_type)?"Venta de inventario":(nombreDeCategoria(o.categoria)||"Sin clasificar")}/><Row l="Creada" v={o.created_at?fDT(o.created_at)+(o.created_by?" por "+(o.created_by==="secretaria"?"Lupita":o.created_by):""):null}/><Row l="Entrega" v={o.due_date?(fechaEnPalabras(o.due_date,{corto:true})||fD(o.due_date))+(o.delivery_calculated_at?" · estándar":""):null}/>{/* v10.84.189 — quien la vea sabe si alguien la pidió así o salió sola; y quién autorizó y cuándo, sin abrir el historial */}{(()=>{const aut=autorizacionDelCliente(o);if(!aut)return null;const c=comoAutorizo(aut);return <Row l="Cliente autorizó" v={(c?c+" · ":"")+fDT(aut.cuando)+(aut.quien?" · "+(AUTHOR_NAME[aut.quien]||aut.quien):"")}/>})()/* v10.84.193 — también cómo: aprobó la prueba o sin verla (quién del cliente y por dónde), o reimpresión de P-… */}
           {o.agent&&<Row l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><UserIcon size={11} weight="bold"/>Vendedor</span>} v={o.agent}/>}
           {role==="admin"&&<Row l="ID interno" v={<span style={{fontFamily:"'Geist Mono',monospace",fontSize:12,color:C.t2}}>{o.id}</span>}/>}</>;
         const bEspecs=!isMaq&&(o.paper_type||o.ink_front||o.width_cm||o.standard_size||o.finishes)?<><Seccion>Especificaciones</Seccion><Row l="Papel" v={o.paper_type}/><Row l="Gramaje" v={o.paper_grammage?o.paper_grammage+" grs":null}/><Row l="Medidas" v={o.standard_size?ssLabel(o.standard_size):(medidaCm(o)||null)}/><Row l="Tintas Frente" v={o.ink_front}/><Row l="Tintas Vuelta" v={o.ink_back}/>{Array.isArray(o.pantone_front)&&o.pantone_front.length>0&&<Row l="Pantones Frente" v={<PantoneChips codes={o.pantone_front} role={role}/>}/>}{Array.isArray(o.pantone_back)&&o.pantone_back.length>0&&<Row l="Pantones Vuelta" v={<PantoneChips codes={o.pantone_back} role={role}/>}/>}<Row l="Acabados" v={o.finishes}/></>:null;
@@ -5460,6 +5483,86 @@ function ConfirmModal({title,message,detalle,confirmLabel,confirmColor,cancelLab
   // v10.84.32 — el foco entra al diálogo en la acción segura: antes se quedaba en el botón que lo abrió, detrás del velo.
   // Y el título es el nombre accesible del diálogo.
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex}}><div role="dialog" aria-modal="true" aria-labelledby="dlg-confirm-titulo" aria-describedby={(message||!detalle)?"dlg-confirm-mensaje":undefined} onKeyDown={atraparTab} style={{background:C.bg,borderRadius:20,padding:28,maxWidth:detalle?460:380,width:"90%",textAlign:"center"}}><div style={{marginBottom:8,display:"flex",justifyContent:"center"}}><WarningIcon size={36} weight="fill" color={C.wn}/></div><h3 id="dlg-confirm-titulo" style={{fontSize:16,fontWeight:700,margin:"0 0 8px"}}>{title}</h3>{detalle&&<div style={{textAlign:"left",background:C.sf,borderRadius:10,padding:"6px 12px",margin:message?"4px 0 12px":"4px 0 20px",maxHeight:"40vh",overflowY:"auto"}}>{detalle.filas.map((f,i)=><div key={i} style={{display:"flex",gap:12,alignItems:"baseline",padding:"6px 0",borderTop:i?"1px solid "+C.bd:"none"}}><div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:700,color:C.tx}}>{f.titulo}</div>{f.sub&&<div style={{fontSize:11,color:C.t2,marginTop:1}}>{f.sub}</div>}</div><div style={{fontSize:12.5,fontWeight:600,color:C.tx,fontFamily:"'Geist Mono',monospace",fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{f.monto}</div></div>)}{detalle.total&&<div style={{display:"flex",gap:12,alignItems:"baseline",padding:"8px 0 4px",borderTop:"1.5px solid "+C.bd}}><div style={{flex:1,fontSize:12.5,fontWeight:700,color:C.tx}}>{detalle.total.titulo}</div><div style={{fontSize:13,fontWeight:700,color:C.tx,fontFamily:"'Geist Mono',monospace",fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{detalle.total.monto}</div></div>}</div>}{(message||!detalle)&&<p id="dlg-confirm-mensaje" style={{fontSize:13,color:C.t2,margin:"0 0 20px",whiteSpace:"pre-line"}}>{message}</p>}<div style={{display:"flex",gap:8}}><button autoFocus onClick={onClose} disabled={saving} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd,opacity:saving?0.5:1}}>{cancelLabel||"No, cancelar"}</button>{/* v10.84.68 — sin onConfirm es un AVISO que detiene algo (p. ej. el efectivo sobre una factura por adelantado): sólo su botón de cerrar */}{onConfirm&&<button onClick={doConfirm} disabled={saving} style={{...bt(confirmColor||C.ok),flex:1,justifyContent:"center",opacity:saving?0.6:1}}>{saving?"Procesando…":confirmLabel}</button>}</div>{/* v10.84.89 — una tercera salida opcional (la pregunta de anticipos: ir a «Facturar por partes») */}{extra&&<button onClick={()=>{if(saving)return;escudoDeClics(500);extra.onClick()}} disabled={saving} style={{...bt(C.ac),width:"100%",justifyContent:"center",marginTop:8}}>{extra.label}</button>}</div></div>;
+}
+// ─── v10.84.193 — LA PREGUNTA AL SALIR DE DISEÑO (Marcelo, 27-nov; ISO 9001 8.2.3 y 8.6) ────────────────────────────────────────────────
+// «Directo a CTP» y «Sin CTP, Lista» ya no mueven en un clic: preguntan cómo autorizó el cliente. Lo medido el 27-nov: desde el 9-nov, de 76 salidas de Diseño 3
+//   dejaron registro, y 44 de 75 eran del mismo cliente y el mismo producto que una orden anterior (las reimpresiones). Tres respuestas:
+//   · aprobó la prueba (vio el PDF o la foto) o autorizó sin verla: quién del cliente y por dónde (WhatsApp, correo, teléfono o en persona);
+//   · es reimpresión sin cambios de una orden anterior: las del mismo cliente, de antes que ésta y sin cancelar (primero las del mismo producto; las 5 más
+//     nuevas), o se escribe el número. La que no existe, ella misma o un número mal escrito no dejan; la de otro cliente o la cancelada se avisan y dejan.
+// Lo que se responde lo escribe App en el renglón de la bitácora (doAdv con `autorizacion`). Esc o el fondo con algo elegido preguntan antes de tirarlo (como
+//   «Poner en espera»); el pie con «Registrar y pasar» siempre a la vista (lo que crece se desliza arriba). Se monta sobre la orden viva (regla 14).
+const OPCIONES_DE_AUTORIZACION=[{id:"aprobo",l:"Aprobó la prueba",d:"Vio el PDF o la foto y dijo que sí"},{id:"sin",l:"Autorizó sin ver prueba",d:"Dijo que se imprima sin verla"},{id:"reimpresion",l:"Es reimpresión sin cambios",d:"Igual que una orden anterior"}];
+function ComoAutorizoVentana({order,orders,destino,onConfirm,onClose}){
+  const [como,setComo]=useState(null);
+  const [quien,setQuien]=useState("");
+  const [canal,setCanal]=useState(null);
+  const [de,setDe]=useState(null);       // la anterior elegida de la lista (su P-)
+  const [otra,setOtra]=useState("");     // o la que se escribe (gana sobre la lista)
+  const [saving,setSaving]=useState(false);
+  const [preguntaSalir,setPreguntaSalir]=useState(false);
+  const enviando=useRef(false),primera=useRef(null),refQuien=useRef(null);
+  const sucio=!!como||quien.trim().length>0||!!canal||!!de||otra.trim().length>0;
+  const salir=()=>{if(saving)return;if(sucio&&!preguntaSalir){setPreguntaSalir(true);return}onClose()};
+  useEscClose(salir);
+  useDevolverFoco();
+  useLayoutEffect(()=>{primera.current?.focus({preventScroll:true})},[]);
+  const num=order.production_number||"la orden";
+  const anteriores=useMemo(()=>{const t0=Date.parse(order.created_at),antes=isNaN(t0)?Infinity:t0;
+    return (orders||[]).filter(x=>x&&x.id!==order.id&&x.production_number&&mismoCliente(x,order)&&!/cancelled|web_rejected/.test(String(x.stage||""))&&(Date.parse(x.created_at)||0)<antes)
+      .sort((a,b)=>((b.product_type===order.product_type)-(a.product_type===order.product_type))||((Date.parse(b.created_at)||0)-(Date.parse(a.created_at)||0))).slice(0,5)},[orders,order]);
+  const escrita=useMemo(()=>{const t=otra.trim();if(!t)return null;const m=/^(?:([PH])\s*-?\s*)?(\d{1,5})$/i.exec(t);if(!m)return {mal:"Escribe el número de la orden, como P-0743."};
+    const n=(m[1]||"P").toUpperCase()+"-"+m[2].padStart(4,"0");if(n===order.production_number)return {mal:"Es esta misma orden."};
+    const x=(orders||[]).find(y=>y&&y.production_number===n);if(!x)return {mal:"No encuentro "+n+" en PrintFlow."};
+    const avisos=[];if(!mismoCliente(x,order))avisos.push(n+" es de otro cliente: "+(x.client_company||x.client||"sin nombre")+".");if(/cancelled/.test(String(x.stage||"")))avisos.push(n+" se canceló.");
+    return {numero:n,aviso:avisos.join(" ")}},[otra,orders,order]);
+  const deCual=como==="reimpresion"?(otra.trim()?(escrita&&!escrita.mal?escrita.numero:null):de):null;
+  const q=limpiarQuien(quien);
+  const falta=!como?"cómo autorizó el cliente":como==="reimpresion"?(deCual?null:"de cuál orden es la reimpresión"):([q.length<2&&"quién del cliente",!canal&&"por dónde"].filter(Boolean).join(" y ")||null);
+  const enviar=async()=>{if(falta||enviando.current)return;enviando.current=true;setSaving(true);try{await onConfirm(como==="reimpresion"?{como,de:deCual}:{como,quien:q,canal})}finally{enviando.current=false;setSaving(false)}};
+  const elegir=(fijar,v)=>{fijar(v);setPreguntaSalir(false)};
+  const seguirAqui=()=>{setPreguntaSalir(false);requestAnimationFrame(()=>{const f=refQuien.current||primera.current;f&&f.isConnected&&f.focus({preventScroll:true})})};
+  const tarjeta=sel=>({display:"flex",alignItems:"flex-start",gap:8,padding:"8px 11px",borderRadius:9,border:"1.5px solid "+(sel?C.ac:C.bd),background:sel?C.ac+"0e":C.bg,cursor:"pointer",fontSize:12,color:C.tx,minWidth:0,overflowWrap:"anywhere"});
+  const etiqueta={display:"block",fontSize:11,fontWeight:700,color:C.t2,margin:"0 0 6px"};
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1100,padding:16}} onClick={salir}>
+    <div onClick={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="como-aut-titulo" aria-describedby="como-aut-desc" onKeyDown={atraparTab} style={{background:C.bg,borderRadius:20,maxWidth:520,width:"100%",maxHeight:"calc(100vh - 32px)",display:"flex",flexDirection:"column",boxSizing:"border-box",overflow:"hidden"}}>
+      <div style={{padding:"22px 22px 8px",overflowY:"auto",overflowX:"hidden",minHeight:0}}>
+        <h3 id="como-aut-titulo" style={{fontSize:16,fontWeight:800,margin:"0 0 4px",color:C.tx,overflowWrap:"anywhere"}}>¿Cómo autorizó el cliente {num}?</h3>
+        <p id="como-aut-desc" style={{fontSize:12,color:C.t2,margin:"0 0 14px",lineHeight:1.45,overflowWrap:"anywhere"}}>{destino==="ctp"?"Pasa a «CTP» y le avisa a Germán.":"Pasa sin CTP a «Lista para imprimir» y le avisa a Gerardo."} Queda a tu nombre, con la fecha y la hora de ahora.</p>
+        <div role="radiogroup" aria-label="¿Cómo autorizó el cliente?" style={{display:"flex",flexDirection:"column",gap:6,marginBottom:12}}>
+          {OPCIONES_DE_AUTORIZACION.map((op,i)=><label key={op.id} style={tarjeta(como===op.id)}><input ref={i===0?primera:undefined} type="radio" name="como-aut" checked={como===op.id} onChange={()=>elegir(setComo,op.id)} style={{marginTop:2,flexShrink:0}}/><span style={{minWidth:0}}><span style={{display:"block",fontWeight:700}}>{op.l}</span><span style={{display:"block",fontSize:11,color:C.t2}}>{op.d}</span></span></label>)}
+        </div>
+        {(como==="aprobo"||como==="sin")&&<div style={{marginBottom:6}}>
+          <label htmlFor="como-aut-quien" style={etiqueta}>¿Quién del cliente?</label>
+          <input id="como-aut-quien" ref={refQuien} type="text" value={quien} maxLength={80} autoComplete="off" onChange={e=>elegir(setQuien,e.target.value)} placeholder="El nombre de quien autorizó" style={{...inp,fontSize:12,marginBottom:10,width:"100%",boxSizing:"border-box"}}/>
+          <div id="como-aut-canal" style={etiqueta}>¿Por dónde?</div>
+          <div role="radiogroup" aria-labelledby="como-aut-canal" style={{display:"flex",flexWrap:"wrap",gap:6}}>
+            {CANALES_DEL_CLIENTE.map(c=><label key={c.id} style={{...tarjeta(canal===c.id),alignItems:"center",padding:"6px 10px"}}><input type="radio" name="como-aut-canal" checked={canal===c.id} onChange={()=>elegir(setCanal,c.id)} style={{margin:0}}/>{c.l}</label>)}
+          </div>
+        </div>}
+        {como==="reimpresion"&&<div style={{marginBottom:6}}>
+          {anteriores.length?<><div id="como-aut-de" style={etiqueta}>¿De cuál orden?</div>
+            <div role="radiogroup" aria-labelledby="como-aut-de" style={{display:"flex",flexDirection:"column",gap:6,marginBottom:10}}>
+              {anteriores.map(x=>{const sel=!otra.trim()&&de===x.production_number;return <label key={x.id} style={tarjeta(sel)}><input type="radio" name="como-aut-de" checked={sel} onChange={()=>{elegir(setDe,x.production_number);setOtra("")}} style={{marginTop:2,flexShrink:0}}/><span style={{minWidth:0}}>{x.production_number+" · "+fD(x.created_at)+" · "+(x.product_type||"Sin tipo")+" · "+Number(x.quantity||0).toLocaleString("es-MX")+" pzas"}</span></label>})}
+            </div></>:<p style={{fontSize:12,color:C.t2,margin:"0 0 10px"}}>No hay órdenes anteriores de este cliente en PrintFlow.</p>}
+          <label htmlFor="como-aut-otra" style={etiqueta}>Otra orden (P-…)</label>
+          <input id="como-aut-otra" type="text" value={otra} maxLength={12} autoComplete="off" onChange={e=>{elegir(setOtra,e.target.value);setDe(null)}} placeholder="P-0743" style={{...inp,fontSize:12,width:"100%",boxSizing:"border-box"}}/>
+          {escrita?.mal&&<div style={{fontSize:12,color:C.dnInk,marginTop:6,fontWeight:600,overflowWrap:"anywhere"}}>{escrita.mal}</div>}
+          {escrita?.aviso&&<div style={{fontSize:12,color:C.wnInk,marginTop:6,fontWeight:600,overflowWrap:"anywhere"}}>{"Ojo: "+escrita.aviso}</div>}
+        </div>}
+        {preguntaSalir&&<div role="alert" style={{display:"flex",alignItems:"center",flexWrap:"wrap",gap:8,margin:"10px 0 4px",padding:"10px 12px",borderRadius:10,background:C.sf,border:"1px solid "+C.bd,fontSize:12,color:C.tx}}>
+          <span style={{flex:"1 1 200px"}}>¿Salir sin registrar? Lo que elegiste se pierde y {num} se queda en Diseño.</span>
+          <button onClick={seguirAqui} style={{...bt(C.ac),fontSize:12,padding:"6px 12px"}}>Seguir aquí</button>
+          <button onClick={onClose} style={{...bt(C.bg,C.tx),fontSize:12,padding:"6px 12px",border:"1px solid "+C.bdSt}}>Salir sin registrar</button>
+        </div>}
+      </div>
+      <div style={{padding:"10px 22px 18px",borderTop:"0.5px solid "+C.bd,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+        <div aria-live="polite" style={{flex:"1 1 180px",fontSize:12,color:C.t2,minWidth:0}}>{falta?"Falta: "+falta+".":null}</div>
+        <button onClick={onClose} disabled={saving} style={{...bt(C.sf,C.t2),fontSize:12,padding:"8px 14px",border:"0.5px solid "+C.bd}}>Todavía no</button>
+        <button onClick={enviar} disabled={!!falta||saving} style={!falta?{...bt(tintaAA(destino==="ctp"?C.ctp:C.ok,5)),fontSize:12,padding:"8px 14px",cursor:saving?"default":"pointer",opacity:saving?.6:1}:{...bt(C.sf,C.t2),fontSize:12,padding:"8px 14px",border:"1px solid "+C.bd,cursor:"not-allowed"}}>{saving?"Registrando…":"Registrar y pasar a "+(destino==="ctp"?"CTP":"Lista")}</button>
+      </div>
+    </div>
+  </div>;
 }
 // ─── v10.84.67 — KARLA PASA A SALIDAS LO QUE YA ESTÁ LISTO (Marcelo, 8-oct) ─────────────────────────────────────────────────
 // Karla: «a veces ya debo entregar o facturar una orden y no me deja, porque Gerardo no la pasa a Salidas». Medido (60 días): 296
@@ -16118,7 +16221,8 @@ function StageFlowButtons({o,role,onAction:onActionSinEscudo,variante}){
   const T=c=>tintaAA(c);   // el color de un texto de estado («Ya validaste», «Prod · Pre-p»), en su tinta (v10.84.125: también en la ficha; daba 2.6:1)
   return <>
       {o.stage==="draft"&&(role==="produccion"||role==="preprensa"||role==="admin")&&<>{!det&&(role==="preprensa"||role==="admin")&&<button onClick={()=>onAction(o.id,"edit_specs")} style={E(C.dsn)}><NotePencilIcon size={14} weight="bold"/>Specs y archivo</button>}{!det&&(role==="produccion"||role==="admin")&&<button onClick={()=>onAction(o.id,"edit")} style={E(C.ios)}><ClipboardTextIcon size={14} weight="bold"/>Revisar y Editar</button>}{role==="produccion"&&!o.validated_by_production&&<button onClick={()=>onAction(o.id,"validate_prod")} style={B(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Validar Producción</button>}{role==="produccion"&&o.validated_by_production&&<span style={{fontSize:10,color:T(C.ok),fontWeight:600,padding:"8px 0"}}><CheckCircleIcon size={12} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>Ya validaste</span>}{role==="preprensa"&&!o.validated_by_preprensa&&<button onClick={()=>onAction(o.id,"validate_pre")} style={B(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Validar Pre-prensa</button>}{role==="preprensa"&&o.validated_by_preprensa&&<span style={{fontSize:10,color:T(C.ok),fontWeight:600,padding:"8px 0"}}><CheckCircleIcon size={12} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>Ya validaste</span>}{role==="admin"&&<button onClick={()=>onAction(o.id,"advance","design")} style={B(C.dsn)}><PaletteIcon size={14} weight="bold"/>Enviar a Diseño</button>}<div style={{display:"flex",gap:4,fontSize:10,color:C.t2,alignItems:"center",padding:"4px 0"}}><span style={{color:T(o.validated_by_production?C.ok:C.wn)}}>{o.validated_by_production?<CheckCircleIcon size={10} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>:<HourglassIcon size={10} style={{verticalAlign:"-1px",marginRight:2}}/>}Prod</span><span style={{color:T(o.validated_by_preprensa?C.ok:C.wn)}}>{o.validated_by_preprensa?<CheckCircleIcon size={10} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>:<HourglassIcon size={10} style={{verticalAlign:"-1px",marginRight:2}}/>}Pre-p</span></div></>}
-      {o.stage==="design"&&(role==="preprensa"||role==="admin")&&<><button onClick={()=>onAction(o.id,"advance","proof_printing")} style={B(C.prf)}><PrinterIcon size={14} weight="bold"/>Prueba de Color{recProof(o)?" (Rec.)":""}</button>{/* v10.84.189 — pregunta a dónde pasa (a CTP o sin CTP a Lista). «Directo a CTP» y «Sin CTP, Lista» se quedan para las reimpresiones sin cambios */}<button onClick={()=>onAction(o.id,"autorizar_sin_prueba")} style={B(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Cliente autorizó sin prueba</button><button onClick={()=>onAction(o.id,"advance","ctp")} title="Para reimpresiones sin cambios: no registra autorización del cliente" style={B(C.ctp)}><DiscIcon size={14} weight="bold"/>Directo a CTP</button><button onClick={()=>onAction(o.id,"advance","ready")} title="Para reimpresiones sin cambios: no registra autorización del cliente" style={B(C.ok)}><FastForwardIcon size={14} weight="bold"/>Sin CTP, Lista</button></>}
+      {o.stage==="design"&&(role==="preprensa"||role==="admin")&&<><button onClick={()=>onAction(o.id,"advance","proof_printing")} style={B(C.prf)}><PrinterIcon size={14} weight="bold"/>Prueba de Color{recProof(o)?" (Rec.)":""}</button>{/* v10.84.193 — «Directo a CTP» y «Sin CTP, Lista» preguntan cómo autorizó el cliente (aprobó la prueba, sin verla o reimpresión de P-…): la pregunta es de App
+          (salir_de_diseno), encima del detalle. El botón suelto «Cliente autorizó sin prueba» de la 189 es una de las respuestas */}<button onClick={()=>onAction(o.id,"salir_de_diseno","ctp")} style={B(C.ctp)}><DiscIcon size={14} weight="bold"/>Directo a CTP</button><button onClick={()=>onAction(o.id,"salir_de_diseno","ready")} style={B(C.ok)}><FastForwardIcon size={14} weight="bold"/>Sin CTP, Lista</button></>}
       {o.stage==="proof_printing"&&(role==="german"||role==="admin")&&<button onClick={()=>onAction(o.id,"advance","proof_client")} style={B("#f59e0b")}><ExportIcon size={14} weight="bold"/>Enviar Prueba al Cliente</button>}
       {o.stage==="proof_client"&&(role==="preprensa"||isSec(role)||role==="admin")&&<><button onClick={()=>onAction(o.id,"approve_proof")} style={B(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Cliente Aprobó</button><button onClick={()=>onAction(o.id,"advance","design")} style={B(C.dn)}><XIcon size={14} weight="bold"/>Pide Cambios</button></>}
       {/* v10.84.94 — Germán (y admin) sin arrastrar: la que espera va «A CTP», la activa de CTP «A Procesadora», la activa de la Procesadora
@@ -16336,7 +16440,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsp
   if(o.stock_role==="sale") bT2.push(<Badge key="stocks" tone="context" title="Venta desde stock — sale del inventario para entregar al cliente" icon={<ShoppingCartIcon size={11} weight="bold"/>}>desde Stock</Badge>);
   // T3 — metadata (recede; colapsa tras "+N")
   if(o.source==="web") bT3.push(<Badge key="web" tone="context" title={o.web_order_ref?"Ref: "+o.web_order_ref:"Pedido recibido desde sygma.mx"} icon={<GlobeIcon size={11} weight="bold"/>}>Web</Badge>);
-  if(o.proof_approved){const aut=autorizacionDelCliente(o);bT3.push(<Badge key="proof" tone="context" title={aut?.como==="sin"?"El cliente autorizó sin prueba de color":undefined} icon={<CheckIcon size={10} weight="bold"/>}>{aut?.como==="con"?"Prueba":"Autorizó"}</Badge>);}   // v10.84.189 — «Prueba» sólo si hubo prueba
+  if(o.proof_approved){const aut=autorizacionDelCliente(o),c=comoAutorizo(aut);bT3.push(<Badge key="proof" tone="context" title={c?"Cliente autorizó: "+c:undefined} icon={<CheckIcon size={10} weight="bold"/>}>{aut?.como==="con"?"Prueba":aut?.como==="prueba"?"Aprobó":aut?.como==="reimpresion"?"Reimpresión":"Autorizó"}</Badge>);}   // v10.84.189 — «Prueba» sólo si hubo prueba de color; v10.84.193 — «Aprobó» (la prueba) y «Reimpresión»
   if(o.file_url) bT3.push(<Badge key="file" tone="context" title="Tiene archivo adjunto" icon={<PaperclipIcon size={11} weight="bold"/>}>archivo</Badge>);
   if(o.plate_status==="existing"&&!compact) bT3.push(<Badge key="plate" tone="context" title="Reutiliza placa existente — saltó CTP" icon={<ArrowsClockwiseIcon size={10} weight="bold"/>}>Placa</Badge>);
   if(o.plate_status==="new_ctp"&&!compact) bT3.push(<Badge key="ctp" tone="context" title="Requiere nueva placa CTP" icon={<PlusIcon size={10} weight="bold"/>}>CTP</Badge>);
@@ -21535,7 +21639,7 @@ export default function PrintFlow() {
   const [paletteOpen,setPaletteOpen]=useState(false); // v10.72.40 — command palette (Ctrl/⌘+K)
   useEffect(()=>{const onKey=e=>{if((e.ctrlKey||e.metaKey)&&(e.key==="k"||e.key==="K")){e.preventDefault();setPaletteOpen(o=>!o);}};window.addEventListener("keydown",onKey);return ()=>window.removeEventListener("keydown",onKey);},[]);
   const [devolverModal,setDevolverModal]=useState(null);
-  const [autorizarId,setAutorizarId]=useState(null);   // v10.84.189 — «Cliente autorizó sin prueba»: se monta sobre la orden viva (regla 14)
+  const [salirDiseno,setSalirDiseno]=useState(null);   // v10.84.193 — {id, destino}: la pregunta al salir de Diseño, montada sobre la orden viva (regla 14)
   const [cancelModal,setCancelModal]=useState(null);
   const [moveModal,setMoveModal]=useState(null); // ↔️ v10.11.0 Sub-fase A — Modal mover orden entre OCs
   const [folioOCModal,setFolioOCModal]=useState(null); // 📄 v10.11.0 Sub-fase B — Modal asignar folio a OC: {oc, ocOrders, preAssigned}
@@ -23079,10 +23183,13 @@ export default function PrintFlow() {
     const o=orders.find(x=>x.id===id);
     const wasInQueue=o?.machine_queue_position!=null&&o?.current_machine&&o?.current_machine!=="vm_manual";
     const willClearMachine=ns!=="packaging";  // si va a Empaque, current_machine pasa a "vm_manual"; resto limpia
-    // v10.84.189 — opts.autorizoSinPrueba: la autorización y el cambio de etapa van en el MISMO UPDATE (con la misma condición de la etapa), y sin su renglón de quién no se queda (abajo)
-    const autorizadaEn=opts.autorizoSinPrueba?new Date().toISOString():null;
-    const prefijoAut=opts.autorizoSinPrueba?TEXTO_SIN_PRUEBA+" · ":"";
-    setOrders(p=>p.map(o=>{if(o.id!==id)return o;const u={...o,stage:ns,timeline:addTL(o,prefijoAut+(SM[o.stage]?.l||"")+" → "+(SM[ns]?.l||""),{to:ns})};if(autorizadaEn){u.proof_approved=autorizadaEn;u.comments=[...(o.comments||[]),{text:TEXTO_SIN_PRUEBA,by:"sistema",date:autorizadaEn}]}if(o.current_machine&&willClearMachine){u.machine_log=closeML(o);u.current_machine=null;u.machine_queue_position=null}if(ns==="packaging"){if(o.current_machine){u.machine_log=closeML(o)}const l=[...(u.machine_log||o.machine_log||[])];l.push({machine:"vm_manual",started:new Date().toISOString()});u.machine_log=l;u.current_machine="vm_manual";u.machine_queue_position=null}if(ns.includes("delivered")){u.deliveredAt=new Date().toISOString();u.delivered_at=u.deliveredAt}if(!ns.includes("delivered")&&o.stage.includes("delivered")){u.deliveredAt=null;u.delivered_at=null}if(ns==="draft"){u.validated_by_production=false;u.validated_by_preprensa=false}if(ns==="design"){u.proof_approved=null}return u}));
+    // v10.84.189 — la autorización y el cambio de etapa van en el MISMO UPDATE (con la misma condición de la etapa), y sin su renglón de quién no se queda (abajo)
+    // v10.84.193 — opts.autorizacion: la respuesta de la pregunta al salir de Diseño ({como, quien, canal} o {como:"reimpresion", de}); su texto es el renglón
+    const textoAut=opts.autorizacion?textoDeLaAutorizacion(opts.autorizacion):"";
+    if(opts.autorizacion&&!textoAut){setActionLoading(null);showToast("⚠️ Falta decir cómo autorizó el cliente: no se movió.","error");return {ok:false}}
+    const autorizadaEn=textoAut?new Date().toISOString():null;
+    const prefijoAut=textoAut?textoAut+" · ":"";
+    setOrders(p=>p.map(o=>{if(o.id!==id)return o;const u={...o,stage:ns,timeline:addTL(o,prefijoAut+(SM[o.stage]?.l||"")+" → "+(SM[ns]?.l||""),{to:ns})};if(autorizadaEn){u.proof_approved=autorizadaEn;u.comments=[...(o.comments||[]),{text:textoAut,by:"sistema",date:autorizadaEn}]}if(o.current_machine&&willClearMachine){u.machine_log=closeML(o);u.current_machine=null;u.machine_queue_position=null}if(ns==="packaging"){if(o.current_machine){u.machine_log=closeML(o)}const l=[...(u.machine_log||o.machine_log||[])];l.push({machine:"vm_manual",started:new Date().toISOString()});u.machine_log=l;u.current_machine="vm_manual";u.machine_queue_position=null}if(ns.includes("delivered")){u.deliveredAt=new Date().toISOString();u.delivered_at=u.deliveredAt}if(!ns.includes("delivered")&&o.stage.includes("delivered")){u.deliveredAt=null;u.delivered_at=null}if(ns==="draft"){u.validated_by_production=false;u.validated_by_preprensa=false}if(ns==="design"){u.proof_approved=null}return u}));
     try{
     // v10.26.0 — Si estaba en cola de máquina real, sacarla via RPC (puede promover siguiente)
     let queueResult=null;
@@ -23152,8 +23259,8 @@ export default function PrintFlow() {
     if(ns==="maq_received"){if(user!=="admin")await db.addNotification("admin",id,"new_order","📥 Maquila recibida del proveedor"+(opts.jalada?" (la recibió "+(AUTHOR_NAME[user]||user)+")":"")+" — "+(o?.client||"")+" · "+(o?.product_type||""),null,user);if(user!=="karla")await db.addNotification("karla",id,"new_order","📄 Maquila lista para asignar folio — "+(o?.client||"")+" · "+(o?.product_type||"")+" · "+(o?.production_number||""),null,user);
       if(opts.jalada){const r=orderResponsible(o),dest=r&&responsibleNotifyTarget(o,r.role),antes=dondeVa(o);if(dest&&dest!==user)await db.addNotification(dest,id,"new_order","📥 "+(AUTHOR_NAME[user]||user)+" recibió "+nombreDeOrden(o)+" de maquila (estaba "+(o?.stage==="maq_created"?"sin marcar como enviada":antes.lugar.charAt(0).toLowerCase()+antes.lugar.slice(1))+(antes.detalle?", "+antes.detalle:"")+"): ya llegó del proveedor — "+(o?.client||"")+" · "+(o?.product_type||""),null,user)}}
     }catch(nErr){console.warn("[doAdv] notif warn (avance OK):",nErr?.message)}
-    if(autorizadaEn){try{await db.addComment(id,TEXTO_SIN_PRUEBA,"sistema")}catch(cErr){console.warn("[doAdv] el comentario de la autorización falló (ya quedó en la bitácora):",cErr?.message)}}
-    if(!opts.silencioso)showToast((autorizadaEn?"Quedó la autorización del cliente · ":"")+nombreDeOrden(o)+" pasó a «"+(SM[ns]?.lt||"la siguiente etapa")+"»"+(o?.client?" · "+o.client:""));   // v10.84.60 — con la orden
+    if(autorizadaEn){try{await db.addComment(id,textoAut,"sistema")}catch(cErr){console.warn("[doAdv] el comentario de la autorización falló (ya quedó en la bitácora):",cErr?.message)}}
+    if(!opts.silencioso)showToast((autorizadaEn?(opts.autorizacion?.como==="reimpresion"?"Quedó como reimpresión de "+opts.autorizacion.de+" · ":"Quedó la autorización del cliente · "):"")+nombreDeOrden(o)+" pasó a «"+(SM[ns]?.lt||"la siguiente etapa")+"»"+(o?.client?" · "+o.client:""));   // v10.84.60 — con la orden
     return {ok:true};
     }catch(e){console.error("[doAdv] Error al avanzar:",e);
       // v10.84.59 — la orden se regresa a donde estaba en el momento (se veía movida mientras salía el aviso, hasta la recarga)
@@ -23166,6 +23273,8 @@ export default function PrintFlow() {
     // 🔒 v10.12.0.3 Phase 2 — Hardstop: roles operativos solo en sus stages; vendedor solo en órdenes propias. (No tocamos doAdv para no afectar revert/drag)
     const o=orders.find(x=>x.id===id);
     if(o&&!canExecuteAction("advance",o,user,userLogin)){showToast(actionDeniedToast("advance",o,user,userLogin),"error");return}
+    // v10.84.193 — de Diseño a CTP, o sin CTP a Lista, no se pasa sin decir cómo autorizó el cliente (Marcelo, 27-nov): cualquier puerta que llegue aquí abre la pregunta
+    if(o&&o.stage==="design"&&(ns==="ctp"||ns==="ready")){escudoDeClics();setSalirDiseno({id,destino:ns});return}
     // v10.49.1 punto 3 — Al recibir maquila ("📥 Recibimos el Trabajo": maq_in_progress → maq_received),
     // precio cliente Y costo proveedor son OBLIGATORIOS. Sin ellos no puede facturarse correctamente.
     if(ns==="maq_received"&&o?.order_type==="maquila"){
@@ -23387,13 +23496,15 @@ export default function PrintFlow() {
     }catch(e){console.error("[approveProof] Error:",e);showToast("❌ No se pudo aprobar prueba: "+(e?.message||"error desconocido"),"error");reload()}finally{setActionLoading(null)}
   },[user,orders,showToast,reload]);
 
-  // v10.84.189 — «Cliente autorizó sin prueba»: por doAdv, como «Directo a CTP» y «Sin CTP, Lista» (la fila, la pausa, los avisos a Germán o a Gerardo y la condición de la etapa). La ventana se pudo quedar vieja: lo que vale es dónde está la orden ahora
-  const autorizarSinPrueba=useCallback(async(id,destino)=>{
+  // v10.84.189 — por doAdv, como «Directo a CTP» y «Sin CTP, Lista» antes (la fila, la pausa, los avisos a Germán o a Gerardo y la condición de la etapa). La ventana se
+  //   pudo quedar vieja: lo que vale es dónde está la orden ahora. v10.84.193 — con la respuesta de la pregunta (era «autorizarSinPrueba», del botón suelto)
+  const registrarAutorizacion=useCallback(async(id,destino,respuesta)=>{
     const o=orders.find(x=>x.id===id);
     if(!o)return;
-    if(!canExecuteAction("autorizar_sin_prueba",o,user,userLogin)){showToast(actionDeniedToast("autorizar_sin_prueba",o,user,userLogin),"error");return}
+    if(!canExecuteAction("salir_de_diseno",o,user,userLogin)){showToast(actionDeniedToast("salir_de_diseno",o,user,userLogin),"error");return}
     if(o.stage!=="design"){showToast("⚠️ "+nombreDeOrden(o)+" ya no está en Diseño: no se registró nada.","error");return}
-    return doAdv(id,destino,{autorizoSinPrueba:true});
+    if(destino!=="ctp"&&destino!=="ready")return;
+    return doAdv(id,destino,{autorizacion:respuesta});
   },[user,userLogin,orders,showToast,doAdv]);
 
   // v10.73.82 (scan w1sw90ei4) — `undo` entra como PARÁMETRO. Antes, assignNow (en Kanban) pintaba su propio toast
@@ -24300,7 +24411,7 @@ export default function PrintFlow() {
       setRefacturarModal(o);
     }
     if(action==="approve_proof")approveProof(id);
-    if(action==="autorizar_sin_prueba"){const oa=orders.find(x=>x.id===id);if(!oa)return;if(!canExecuteAction("autorizar_sin_prueba",oa,user,userLogin)){showToast(actionDeniedToast("autorizar_sin_prueba",oa,user,userLogin),"error");return}escudoDeClics();setAutorizarId(id)}   // v10.84.189
+    if(action==="salir_de_diseno"){const oa=orders.find(x=>x.id===id);if(!oa)return;if(!canExecuteAction("salir_de_diseno",oa,user,userLogin)){showToast(actionDeniedToast("salir_de_diseno",oa,user,userLogin),"error");return}if(payload!=="ctp"&&payload!=="ready")return;escudoDeClics();setSalirDiseno({id,destino:payload})}   // v10.84.193 (era autorizar_sin_prueba, v10.84.189)
     if(action==="send_maquila"){
       // 🔒 v10.12.0.3 Phase 2 — Hardstop: admin/sec/vendedor (vendedor solo propias)
       const sm=orders.find(x=>x.id===id);
@@ -25067,9 +25178,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         Promise.resolve().then(()=>setInvoiceModal(merged));
       }} onClose={()=>{setInventoryOpen(false);reload()}}/>}
       {coronaOpen&&<CoronaModal user={user} userLogin={userLogin} showToast={showToast} onClose={()=>setCoronaOpen(false)} pnDeOrden={id=>(orders.find(x=>x.id===id)||{}).production_number||null} onAbrirOrden={id=>{setCoronaOpen(false);handleAction(id,"detail")}}/>}
-      {autorizarId&&(()=>{const oa=orders.find(x=>x.id===autorizarId);if(!oa)return null;const num=oa.production_number||"la orden";const cerrar=()=>setAutorizarId(null);
+      {/* v10.84.193 — la pregunta al salir de Diseño (era «¿El cliente autorizó … sin prueba de color?», del botón suelto de la 189), sobre la orden viva */}
+      {salirDiseno&&(()=>{const oa=orders.find(x=>x.id===salirDiseno.id);if(!oa)return null;const num=oa.production_number||"la orden";const cerrar=()=>setSalirDiseno(null);
         if(oa.stage!=="design")return <ConfirmModal key={oa.id+oa.stage} zIndex={1100} title={num+" ya no está en Diseño"} message={"Mientras decidías pasó a «"+(SM[oa.stage]?.lt||oa.stage)+"» desde otra sesión: no se registró nada."} cancelLabel="Entendido" onClose={cerrar}/>;
-        return <ConfirmModal key={oa.id} zIndex={1100} title={"¿El cliente autorizó "+num+" sin prueba de color?"} message="Queda a tu nombre, con la fecha y la hora de ahora. ¿A dónde pasa?" cancelLabel="Todavía no" confirmLabel="Sí, pasar a CTP" confirmColor={tintaAA(C.ok,5)} onConfirm={()=>{escudoDeClics();cerrar();return autorizarSinPrueba(oa.id,"ctp")}} extra={{label:"Sí, sin CTP: a Lista",onClick:()=>{cerrar();autorizarSinPrueba(oa.id,"ready")}}} onClose={cerrar}/>})()}
+        return <ComoAutorizoVentana key={oa.id} order={oa} orders={orders} destino={salirDiseno.destino} onConfirm={r=>{escudoDeClics();cerrar();return registrarAutorizacion(oa.id,salirDiseno.destino,r)}} onClose={cerrar}/>})()}
       {devolverModal&&<DevolverModal onConfirm={async(reason)=>{try{const o=orders.find(x=>x.id===devolverModal);await doAdv(devolverModal,"design");await db.addComment(devolverModal,"↩️ Devuelto a Diseño: "+reason,user);await db.notify("preprensa",devolverModal,"order_edit","↩️ Orden devuelta a Diseño — "+(o?.client||"")+" · "+(o?.product_type||"")+": "+reason,null,user);if(user==="admin")await db.addNotification("produccion",devolverModal,"order_edit","↩️ Orden devuelta a Diseño — "+(o?.client||"")+" · "+(o?.product_type||"")+": "+reason,null,user);setDevolverModal(null)}catch(e){console.error("[DevolverModal] Error:",e);showToast("❌ No se pudo devolver: "+(e?.message||"error desconocido"),"error");reload()}}} onClose={()=>setDevolverModal(null)}/>}
       {/* v10.38.0 — Modal regresar orden a CTP (legacy, conservado por compat — sin botón en UI) */}
       {returnToCtpModal&&<ReturnToCtpModal order={returnToCtpModal} onConfirm={async(reason)=>{await returnToCtp(returnToCtpModal.id,reason);setReturnToCtpModal(null)}} onClose={()=>setReturnToCtpModal(null)}/>}
