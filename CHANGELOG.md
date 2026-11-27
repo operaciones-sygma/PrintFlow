@@ -38,6 +38,9 @@ El plan y la base, en `docs/una-sola-cuenta/LEEME.md`. Esta versión es lo que d
   - Con el código: 66 de 66, y la tanda `sesion` entera, 313 de 314. Cayó ses-06, que pedía «desactivada»: era de la prueba y se corrigió. También aceptan el aviso nuevo ses-22, ses-305, ses-306 y ses-315.
   - 9 sabotajes, uno por pieza: cada uno tumba la suya.
 - **27-nov:** rebasada encima de la 195 (8050090) sin choques; `v10.84.PASO5` pasó a `v10.84.196` en 8 renglones; `sesion-4`, 66 de 66.
+  - La suite entera en la copia aparte, antes del cambio de cuentas: 3643 de 3643, de a 4, en 1409 s.
+  - Salió una inestable: ses-322, que falló a la primera con `locator.fill: Timeout 10000ms` y pasó a la segunda. La casilla de entrar no estuvo lista en 10 s con cuatro tandas a la vez. Sola pasó 5 de 5, y en esa ventana no hubo eventos 4231/4266.
+  - Se marcó revisada en una bitácora aparte, para no ensuciar la de la copia principal: la 196 sólo cambia textos que salen después de llenar la casilla.
 
 
 
