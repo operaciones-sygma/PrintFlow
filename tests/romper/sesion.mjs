@@ -3488,9 +3488,10 @@ await caso("ses-424-datos-raros-en-la-lista-y-el-aviso-no-se-salen", async ({ p,
   const dlg = await abrirOrden(p, s, "P-1400");
   await autorizar(p, dlg);
   await responder(p, { como: "reimpresion", otra: "P-1331" });   // el aviso de otro cliente con su nombre larguísimo, y la lista con el producto raro
-  const r = await ventanaAut(p).evaluate(d => { const c = d.getBoundingClientRect(); const fuera = [...d.querySelectorAll("*")].filter(x => { const b = x.getBoundingClientRect(); return b.width > 0 && b.right > c.right + 1; }).map(x => x.tagName + ":" + (x.textContent || "").slice(0, 24)); return { deLado: d.scrollWidth > d.clientWidth + 1, fuera: fuera.slice(0, 4) }; });
+  // (sabotaje: sin el corte del aviso NO caía) el texto que se sale no es un elemento: se mide el desborde de cada uno (scrollWidth), no sus cajas
+  const r = await ventanaAut(p).evaluate(d => { const sale = [...d.querySelectorAll("*")].filter(x => !/^(INPUT|TEXTAREA|SELECT)$/.test(x.tagName) && x.scrollWidth > x.clientWidth + 2).map(x => x.tagName + ":" + (x.textContent || "").slice(0, 24) + " " + x.scrollWidth + ">" + x.clientWidth); return { deLado: d.scrollWidth > d.clientWidth + 1, sale: sale.slice(0, 4) }; });
   const t = await leerTexto(ventanaAut(p));
-  ok("ses-424-datos-raros-en-la-lista-y-el-aviso-no-se-salen", !r.deLado && r.fuera.length === 0 && /es de otro cliente/.test(t) && /P-1330 /.test(t), JSON.stringify(r));
+  ok("ses-424-datos-raros-en-la-lista-y-el-aviso-no-se-salen", !r.deLado && r.sale.length === 0 && /es de otro cliente/.test(t) && /P-1330 /.test(t), JSON.stringify(r));
 });
 
 // ════════════════════════ v10.84.190: el perfil por la cuenta, no por el nombre (paso 2 de una sola cuenta) ════════════════════════
