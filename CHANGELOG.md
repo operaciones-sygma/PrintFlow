@@ -46,6 +46,12 @@ Esta versión es lo que dice la pantalla, y sube después de la base. Los coment
   - La suite entera en la copia aparte, antes del cambio de cuentas: 3643 de 3643, de a 4, en 1409 s.
   - Salió una inestable: ses-322, que falló a la primera con `locator.fill: Timeout 10000ms` y pasó a la segunda. La casilla de entrar no estuvo lista en 10 s con cuatro tandas a la vez. Sola pasó 5 de 5, y en esa ventana no hubo eventos 4231/4266.
   - Se marcó revisada en una bitácora aparte, para no ensuciar la de la copia principal: la 196 sólo cambia textos que salen después de llenar la casilla.
+- **27-nov, el candado desde la copia principal** (20:01-20:25, ya con la base del paso 4): frenó con 3639 de 3643.
+  - **Tres eran de la prueba, no de la app.** `permisos` (perm-admin-cambia-precios y perm-iso-el-mes-solo-direccion) y `archivos` (arch-admin-ve) daban 42501 a Dirección: simulaban a «admin» con el id de su cuenta vieja, que desde las 19:57 no tiene renglón.
+    - La base no trae escrito ningún id de cuenta vieja (funciones, RLS, vistas, valores por defecto y cron, medido sólo leyendo): lo de Marcelo sigue a su renglón.
+    - Ahora las dos buscan a cada quien por su usuario de PrintFlow, dentro de la transacción. Si falta un usuario, la tanda entera falla («CUENTAS»): con el id de una cuenta ya ligada, una que espera 42501 pasaría sin probar nada (Dulce, Genaro y «secretaria», al ligarse).
+    - Con eso, 20 de 20 y 12 de 12. Saboteadas con un usuario que no existe, caen las 32.
+  - **inv-11 de `folio`** cayó por `net::ERR_NO_BUFFER_SPACE` de Windows en la consola. Es de dinero y no tiene segunda oportunidad: se volvió a correr el candado.
 
 ## v10.84.195 — «Indicadores del mes» (la evidencia para la ISO 9001, 3 de 3: la revisión por la dirección) — 27-nov-2026
 

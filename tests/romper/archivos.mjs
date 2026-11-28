@@ -10,11 +10,13 @@ import fs from "node:fs";
 const PROYECTO = "uvhardaeooaxjrrgdjwa";
 const iEnsayo = process.argv.indexOf("--ensayar");
 const ANTES = iEnsayo >= 0 ? fs.readFileSync(process.argv[iEnsayo + 1], "utf8") : "";
-const U = {   // public.users.user_id (5-oct-2026)
-  german: "f9fc2b18-3dbb-422a-a9cb-70ca03bf170b", noemi: "ac0a8997-c507-48cb-ba2e-5ea77ea4b27b", admin: "80fa4231-bff6-4e14-9943-6cc5a418c481",
-  visor: "74666552-2e27-4b20-97b3-38c7fc9561a6", genaro: "f321f84b-582b-4ee8-9ee1-9a3138654f5c", secretaria: "6b85fba8-383f-495c-ae4a-8cf5858c4a15",
-};
-const como = q => `perform set_config('request.jwt.claims', json_build_object('sub', '${U[q]}', 'role', 'authenticated')::text, true);`;
+// v10.84.196 — cada quien por su usuario de PrintFlow (public.users.username), no por un id escrito: el 27-nov «admin» pasó a la cuenta
+// marcelo@sygma.mx (una sola cuenta, `ligar`) y con el id viejo la tanda simulaba una cuenta sin renglón (arch-admin-ve, 42501). Genaro y
+// «secretaria» se ligan después: con su id viejo, «no ve» habría pasado sin probar nada. El id de hoy se busca dentro de la transacción,
+// antes de cambiar de rol; si falta un usuario, la tanda entera falla.
+const U = { german: "german", noemi: "noemi", admin: "admin", visor: "claude-pruebas", genaro: "genaro", secretaria: "secretaria" };
+const USUARIOS = Object.values(U);
+const como = q => `perform set_config('request.jwt.claims', json_build_object('sub', v_uid->>'${U[q]}', 'role', 'authenticated')::text, true);`;
 const quien = (clave, q) => `
   ${como(q)}
   begin perform count(*) from public.pf_archivos_del_bucket(); v_estado := 've'; exception when others then v_estado := sqlstate; end;
@@ -23,7 +25,11 @@ const quien = (clave, q) => `
 const SQL = `
 do $prueba$
 declare r jsonb := '{}'::jsonb; v_estado text; v_filas int; v_huerfanos text[]; v_hoy_huerfanos int;
+  v_uid jsonb := (select jsonb_object_agg(username, user_id) from public.users where username in (${USUARIOS.map(u => `'${u}'`).join(", ")}));
 begin
+  if (select count(*) from jsonb_object_keys(coalesce(v_uid, '{}'::jsonb))) <> ${USUARIOS.length} then
+    raise exception 'CUENTAS: faltan usuarios de la prueba en public.users (están: %)', coalesce(v_uid, '{}'::jsonb);
+  end if;
 ${ANTES}
   execute 'set local role authenticated';
   ${quien("german", "german")}

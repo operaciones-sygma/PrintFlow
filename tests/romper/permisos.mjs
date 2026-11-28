@@ -13,17 +13,22 @@ import fs from "node:fs";
 const PROYECTO = "uvhardaeooaxjrrgdjwa";
 const iEnsayo = process.argv.indexOf("--ensayar");
 const ANTES = iEnsayo >= 0 ? fs.readFileSync(process.argv[iEnsayo + 1], "utf8") : "";
-const U = {   // public.users.user_id (5-oct-2026)
-  visor: "74666552-2e27-4b20-97b3-38c7fc9561a6",      // claude-pruebas
-  dulce: "0ec50922-b1bb-4666-a09f-738242c2255e",      // visor de verdad
-  german: "f9fc2b18-3dbb-422a-a9cb-70ca03bf170b",
-  secretaria: "6b85fba8-383f-495c-ae4a-8cf5858c4a15",
-  gerardo: "1c1ba04c-9195-4579-9b4d-a0a2366e07e9",    // produccion
-  admin: "80fa4231-bff6-4e14-9943-6cc5a418c481",
+// v10.84.196 — cada quien por su usuario de PrintFlow (public.users.username), no por un id escrito. El 27-nov «admin» pasó a la cuenta
+// marcelo@sygma.mx (una sola cuenta, `ligar`), y con el id de su cuenta vieja la tanda simulaba una cuenta sin renglón: 42501 en lo de
+// Dirección (el candado de la 196 frenó por eso). Dulce y «secretaria» se ligan después, y con el id viejo «Dulce no registra» habría
+// pasado sin probar nada. El id de hoy se busca dentro de la transacción, antes de cambiar de rol; si falta un usuario, la tanda entera falla.
+const U = {
+  visor: "claude-pruebas",   // la cuenta de pruebas, visor
+  dulce: "dulce",            // visor de verdad
+  german: "german",
+  secretaria: "secretaria",
+  gerardo: "gerardo",        // produccion
+  admin: "admin",
 };
+const USUARIOS = Object.values(U);
 const ORDEN = "OP-MPYPMZ9NB3C";   // H-3612, entregada: el registro de impresión se ensaya ahí y se deshace
 
-const como = quien => `perform set_config('request.jwt.claims', json_build_object('sub', '${U[quien]}', 'role', 'authenticated')::text, true);`;
+const como = quien => `perform set_config('request.jwt.claims', json_build_object('sub', v_uid->>'${U[quien]}', 'role', 'authenticated')::text, true);`;
 const intento = (clave, quien, llamada) => `
   ${como(quien)}
   begin ${llamada}; v_estado := 'pasó'; exception when others then v_estado := sqlstate; end;
@@ -35,7 +40,11 @@ declare
   r jsonb := '{}'::jsonb;
   v_estado text;
   v_precios jsonb := (select value from public.app_config where key = 'chemical_prices');
+  v_uid jsonb := (select jsonb_object_agg(username, user_id) from public.users where username in (${USUARIOS.map(u => `'${u}'`).join(", ")}));
 begin
+  if (select count(*) from jsonb_object_keys(coalesce(v_uid, '{}'::jsonb))) <> ${USUARIOS.length} then
+    raise exception 'CUENTAS: faltan usuarios de la prueba en public.users (están: %)', coalesce(v_uid, '{}'::jsonb);
+  end if;
 ${ANTES}
   execute 'set local role authenticated';
   ${intento("visor_registra_impresion", "visor", `perform public.register_print('${ORDEN}', 'claude-pruebas', null)`)}
