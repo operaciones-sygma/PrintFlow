@@ -1,5 +1,9 @@
 # Lo que dicen las pantallas el 29-nov
 
+> **Se hizo el 27-nov.** Marcelo adelantó el cambio de cuentas. Las tres ramas `cuenta-29nov` subieron esa noche, una a la vez y con su candado,
+> después de la base: PrintFlow v10.84.196, Almacén y Contabilidad. Lo que pasó, en `LEEME.md`, «El 27-nov, lo que se hizo». Los comentarios del
+> código y los nombres de las pruebas dicen «29-nov», la fecha que se planeó.
+
 Cada app ya funciona con `nombre@sygma.mx` antes de esto: PrintFlow desde la v10.84.191, Almacén, Contabilidad, CobranzaFlow y el Cotizador desde antes. Lo de aquí es lo que cada pantalla le dice a la gente. **No se aplica antes del cambio**: Gerardo todavía no tiene su correo. Se escribe en una copia aparte de cada app (`git worktree`), con las pruebas de abajo escritas primero, y sube con su candado el domingo, después de `paso4_base.sql` y antes de avisarle a la gente.
 
 Decisión de diseño: **el nombre a secas no se rechaza en el código, deja de existir en Auth.** Las cuentas `@padillahnos.local` de las personas ya no existen o están apagadas, así que escribir «gerardo» da credenciales malas, y entonces la pantalla dice cómo se entra. Lo de pegar el dominio se queda para la cuenta de pruebas (`claude-pruebas@padillahnos.local`, que usan los recorridos y `base-real`) y no hay que tocar las decenas de tandas que entran con un nombre.
@@ -32,7 +36,7 @@ Sin probar: un teléfono de verdad, y el candado completo de cada app, que corre
 
 **Ese domingo, en cada una:**
 1. `git -C <copia> fetch` y `git rebase origin/main cuenta-29nov`. En Almacén, antes, mirar con su conversación qué trae en `Login.jsx`, `supabase.js`, `tests/romper/recorridos.mjs` y `tests/LEEME.md`.
-   - Su `main` se movió la misma noche: al 7-nov ~09:10 iba en `a8857e3`, siete pasadas encima de `28eb219`, la base de la rama.
+   - Su `main` se movió la misma noche: el 7-nov a las 08:05 ya iba en `a8857e3`, siete pasadas encima de `28eb219`, la base de la rama.
    - Una pasada cambió `recorridos.mjs`: `abrirReq` ahora espera `tbody tr`.
    - `git merge-tree --write-tree origin/main cuenta-29nov` dijo que se mezcla sin choques: los cambios caen en otros renglones de `recorridos.mjs` y de `tests/LEEME.md`.
    - Si para el 29-nov choca, se conservan los dos lados y se vuelven a correr `login`, `sesion` y `recorridos`.

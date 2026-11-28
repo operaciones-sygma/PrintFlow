@@ -2,15 +2,16 @@
 
 Marcelo, 19-oct-2026: *«en todos se entrara con usuarios como marcelo@sygma.mx»*, y al proponerle que también se pudiera escribir sólo el nombre: *«nooo debe
 ser nombre@sygma.mx»*. 6-nov: los pasos 1 a 3, ya, sin que nadie pierda acceso; el 4 y el 5 **no se hacen mientras viaja (9 al 25-nov)**: quedan listos para el
-**domingo 29-nov**, el día antes del ensayo de Almacén (propuesto para el lunes 30-nov; **su fecha la confirma Marcelo**).
+**domingo 29-nov**, el día antes del ensayo de Almacén (propuesto para el lunes 30-nov; **su fecha la confirma Marcelo**). **Marcelo los adelantó al viernes
+27-nov** (por Central, 15:06). Lo que pasó esa noche está en «El 27-nov, lo que se hizo», abajo.
 
 | Paso | Qué | Estado |
 |---|---|---|
 | 1 | «Salir» de Contabilidad y del Cotizador, sólo de esa app | ver el CHANGELOG de cada una |
 | 2 | PrintFlow busca el perfil por la cuenta (`get_my_session`, v10.84.190) | **en producción**, 7-nov ~02:35 |
 | 3 | PrintFlow acepta también el correo completo, y sigue aceptando el nombre (v10.84.191) | **en producción**, 7-nov ~02:56 |
-| 4 | Cada quien a su `@sygma.mx`; apagar las cuentas viejas | **listo para el 29-nov; sin aplicar** |
-| 5 | Central y avisarle a la gente | **listo para el 29-nov; sin hacer** |
+| 4 | Cada quien a su `@sygma.mx`; apagar las cuentas viejas | **27-nov, en producción**: la base (19:56), los cuatro correos y Marcelo ligado (19:57). Karla, Genaro, Dulce y Lupita, después, con la contraseña temporal. `apagar_vieja`, de nadie todavía |
+| 5 | Central y avisarle a la gente | **27-nov**: las pantallas de PrintFlow (v10.84.196), Almacén y Contabilidad. El aviso a la gente va después, con la contraseña temporal |
 
 ## Quién cambia y cómo (medido el 6-nov, `medir.sql` lo vuelve a medir)
 
@@ -64,8 +65,55 @@ ser nombre@sygma.mx»*. 6-nov: los pasos 1 a 3, ya, sin que nadie pierda acceso;
   - Con el nombre, cada uno de los cuatro da un renglón, también con mayúsculas, acento o espacio. Karla, secretaria, admin, lupita, vacío o NOMBRE dan cero.
   - En 200 corridas separadas, las 200 contraseñas salieron distintas y de 12 letras permitidas.
   - `auth.users` no tiene disparadores. El `EXPLAIN` del archivo tal cual pasa sin ejecutarlo.
+- **27-nov ~18:20, Marcelo cambió lo de las contraseñas** (por Central). Habrá una contraseña temporal, la misma para todos, y una pantalla en las
+  cinco apps que, la primera vez que entran, pide poner la suya.
+  - Va en otra conversación. La temporal no se escribe en archivos ni en mensajes.
+  - Las de Gerardo, Germán y Noemí no se cambiaron del 26 al 28: esperan a esa pantalla.
 
-## El 29-nov, en orden
+## El 27-nov, lo que se hizo
+
+Con el OK de Marcelo de las 19:53 (*«sí, te doy mi OK, sigo tus recomendaciones»*) y los turnos de Central. Todo por la API de administración.
+
+- **19:56:09, el ensayo** (`paso4_ensayo.sql`): 0 fallas. Después, sólo leyendo, no quedó nada.
+- **19:56:30, la base** (`paso4_base.sql`, una transacción): `schema_migrations` `20261128015630` («una_sola_cuenta_paso4_base»), 9 personas y 14 fotos.
+  - Huellas md5 después: `mi_perfil` 6df8a857…, `_rol_efectivo` 4fa67516…, `quien` 7899bf81… y `verify_actor_role` 8748e8fc….
+  - El esquema `cuentas_29nov` no da USAGE a nadie y sus funciones son invoker. Las 4 reemplazadas conservan sus permisos.
+- **19:57, `pasar_correo`** de Arturo, Gerardo, Germán y Noemí: ya son `nombre@sygma.mx`, con `diferencias {}`. Mismo id y misma contraseña: quien
+  estaba adentro siguió adentro.
+- **19:57, `ligar('marcelo')`**: «admin» de PrintFlow pasó a marcelo@sygma.mx, con `diferencias {}`. Había entrado con ella a las 19:39.
+  - `admin@padillahnos.local` queda sin perfil y con sus sesiones.
+  - Su `apagar_vieja` necesita que Marcelo entre otra vez con la nueva, después de las 19:57.
+- **Karla, Genaro, Dulce y Lupita no se ligaron.**
+  - Ninguno había entrado con su correo desde el 26-nov (medido a las 18:45 y a las 19:55).
+  - `p_sin_comprobar` los habría dejado sin PrintFlow ni Almacén a la siguiente vez que abrieran, con una contraseña de CobranzaFlow que no
+    escriben desde agosto u octubre.
+  - Se ligan con la contraseña temporal. Hasta entonces entran como siempre, con su nombre.
+- **Invariantes después:** CobranzaFlow 94 de 94 y Almacén 34 de 34, como antes.
+- **Las pantallas, una app a la vez y cada una con su candado:**
+  - PrintFlow v10.84.196: 20:54, READY `dpl_8Be4u6EJJ5z8LZLfQV436ZwYBgum`.
+  - Almacén: 21:17, READY `dpl_FwXZH5jbiLUQszj5yqYFf3kEVxqY`.
+  - Contabilidad: 21:19, READY `dpl_2uc2LoF9K4RMGE7mrvpVpCEbnPmx`.
+  - Las vueltas atrás de cada una, ensayadas, en su CHANGELOG.
+- **Lo que el cambio rompió en las pruebas, no en las apps:**
+  - Cuatro pruebas simulaban a las personas con el id escrito, y el de «admin» ya no tiene renglón:
+    - PrintFlow: `permisos` y `archivos`. El primer candado de la 196 frenó por eso.
+    - CobranzaFlow: `probar-corregir-precio-base` y `probar-grupos-base`.
+  - Ahora buscan a cada quien por su usuario: PrintFlow e442ec2 y CobranzaFlow v3.7.1060.
+  - La copia de la base de las pruebas de Almacén (`tests/invariantes/esquema.sql`) se regeneró con las 3 funciones nuevas.
+  - La base no trae escrito ningún id de cuenta: lo medí sólo leyendo en funciones, RLS, vistas, valores por defecto y cron.
+- 🔥 **Antes de ligar a Karla.** Lo vio el ensayo de su `ligar` dentro de `probar-corregir-precio-base`, que se deshace: caen cp-50 y cp-52.
+  - `public._precio_al_final_quien` mira primero `public.users`. A una cuenta que está en las dos tablas le dice app «printflow», y
+    `corregir_precio_orden` le rechaza los renglones de Conceptos de CobranzaFlow.
+  - A Marcelo ya le pasa desde las 19:57. Mientras tanto esa corrección la hace Karla; si Marcelo la necesita antes, `regresar('marcelo')` con su OK.
+  - También cambian de firma, no de permisos:
+    - `audit_stamp_actor`: lo que Marcelo hace en PrintFlow se firma «marcelo», no «admin (PrintFlow)».
+    - `pf_uid_username`: «admin» en las funciones compartidas.
+  - Con una sola cuenta la base ya no sabe desde qué app la llaman: es una decisión de diseño y un arreglo de base, con su ensayo y el OK de Marcelo.
+- **Después de cada `ligar`**, correr las pruebas que usan a las personas de verdad contra la base:
+  - en PrintFlow, `node tests/romper/permisos.mjs` y `archivos.mjs`;
+  - en CobranzaFlow, `node scripts/probar-corregir-precio-base.mjs` y `probar-grupos-base.mjs`.
+
+## El plan del 29-nov, en orden (se hizo el 27-nov: arriba)
 
 **Del 26 al 28 (Marcelo ya está):**
 
