@@ -47,7 +47,7 @@ Esta versión es lo que dice la pantalla, y sube después de la base. Los coment
   - Salió una inestable: ses-322, que falló a la primera con `locator.fill: Timeout 10000ms` y pasó a la segunda. La casilla de entrar no estuvo lista en 10 s con cuatro tandas a la vez. Sola pasó 5 de 5, y en esa ventana no hubo eventos 4231/4266.
   - Se marcó revisada en una bitácora aparte, para no ensuciar la de la copia principal: la 196 sólo cambia textos que salen después de llenar la casilla.
 
-
+## v10.84.195 — «Indicadores del mes» (la evidencia para la ISO 9001, 3 de 3: la revisión por la dirección) — 27-nov-2026
 
 Marcelo, 27-nov: «Sí, cada mes»: el reporte de indicadores del día 1 contra sus metas («las recomendadas», con entrega a tiempo 85%), como evidencia de la revisión por la dirección (ISO 9001 6.2, 9.1.3 y 9.3). La base ya estaba desde la mañana (`v10_84_195_indicadores_del_mes` y `v10_84_195b_permisos_de_mas`, en la entrada de la 194): cada noche a las 00:20 guarda el mes que cerró, con lo medido y las metas de ese día. El primero, noviembre, se guarda el 1-dic.
 
