@@ -14,6 +14,18 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ## v10.84.196 — Una sola cuenta, paso 5: lo que dice la pantalla de entrar desde el cambio de cuentas — 27-nov-2026
 
+> **EN PRODUCCIÓN el 27-nov a las 20:54**, después de la base del paso 4 (19:56) y con el OK de Marcelo de las 19:53 (*«sí, te doy mi OK, sigo tus recomendaciones»*).
+> - Despliegue: READY `dpl_8Be4u6EJJ5z8LZLfQV436ZwYBgum` (e442ec2), en `produccion.sygma.mx` y `print-flow-eosin.vercel.app`.
+> - Candado: 3643 de 3643, de a 4, 1410 s, al segundo intento y sin inestables (abajo, por qué frenó el primero).
+> - **Revisado en producción sin escribir, en los dos dominios.**
+>   - Sirven el mismo JS (`index-BQeYhMfA.js`), con los textos nuevos y sin los viejos («Usuario o correo», «Ej: gerardo, o tu correo completo»). Sin la contraseña de sitio, 401.
+>   - `tests/recorrido/sesion.mjs`, de la A a la E: todo bien.
+>   - «gerardo» con una contraseña mala dice «Ahora se entra con tu correo completo: gerardo@sygma.mx.». gerardo@padillahnos.local ya no existe, así que no se tocó la cuenta de nadie.
+> - **Vuelta atrás:**
+>   - promover `dpl_Fo64T7Sff7HRXFEFUPmxfsLqu66i` (8050090, el código de la 195), que deja de ser de un clic con el despliegue del commit de docs;
+>   - o `git revert --no-edit 65b063f b042396 523bcc2 06408bb` y subir. Ensayada en una copia aparte: deja `src` y `scripts` como 8050090 y conserva el arreglo de pruebas e442ec2.
+>   - La pantalla de antes funciona con las cuentas nuevas; sólo dice los textos de antes. La base tiene su propia vuelta atrás, `docs/una-sola-cuenta/paso4_base_vuelta_atras.sql`, o `cuentas_29nov.regresar('nombre')` por persona.
+
 Marcelo adelantó el cambio de cuentas del domingo 29 al viernes 27-nov (por Central). Cada quien entra con `nombre@sygma.mx`:
 - **Arturo, Gerardo, Germán y Noemí**, desde el 27-nov a las 19:57, con la misma cuenta: cambia de correo y conserva su contraseña (`pasar_correo`).
 - **Marcelo**, desde el 27-nov a las 19:57: su renglón de PrintFlow («admin») pasó a su cuenta de CobranzaFlow (`ligar`). Había entrado con ella a las 19:39.
@@ -52,6 +64,7 @@ Esta versión es lo que dice la pantalla, y sube después de la base. Los coment
     - Ahora las dos buscan a cada quien por su usuario de PrintFlow, dentro de la transacción. Si falta un usuario, la tanda entera falla («CUENTAS»): con el id de una cuenta ya ligada, una que espera 42501 pasaría sin probar nada (Dulce, Genaro y «secretaria», al ligarse).
     - Con eso, 20 de 20 y 12 de 12. Saboteadas con un usuario que no existe, caen las 32.
   - **inv-11 de `folio`** cayó por `net::ERR_NO_BUFFER_SPACE` de Windows en la consola. Es de dinero y no tiene segunda oportunidad: se volvió a correr el candado.
+- **El segundo candado** (20:30-20:54, con e442ec2 encima; al arrancar, 19 conexiones en TIME_WAIT y ningún evento 4231/4266 en la hora anterior): 3643 de 3643, a la primera y sin inestables.
 
 ## v10.84.195 — «Indicadores del mes» (la evidencia para la ISO 9001, 3 de 3: la revisión por la dirección) — 27-nov-2026
 
