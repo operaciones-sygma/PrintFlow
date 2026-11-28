@@ -14,11 +14,16 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ## v10.84.196 — Una sola cuenta, paso 5: lo que dice la pantalla de entrar desde el cambio de cuentas — 27-nov-2026
 
-Marcelo adelantó el cambio de cuentas del domingo 29 al viernes 27-nov (por Central). Desde esa noche cada quien entra con `nombre@sygma.mx`:
-- Arturo, Gerardo, Germán y Noemí, con la misma cuenta, que cambia de correo y conserva su contraseña (`pasar_correo`).
-- Karla, Genaro, Dulce, Lupita y Marcelo, con su cuenta de CobranzaFlow, a la que pasa su renglón de PrintFlow (`ligar`).
+Marcelo adelantó el cambio de cuentas del domingo 29 al viernes 27-nov (por Central). Cada quien entra con `nombre@sygma.mx`:
+- **Arturo, Gerardo, Germán y Noemí**, desde el 27-nov a las 19:57, con la misma cuenta: cambia de correo y conserva su contraseña (`pasar_correo`).
+- **Marcelo**, desde el 27-nov a las 19:57: su renglón de PrintFlow («admin») pasó a su cuenta de CobranzaFlow (`ligar`). Había entrado con ella a las 19:39.
+- **Karla, Genaro, Dulce y Lupita**, cuando se liguen. Hasta entonces siguen con su cuenta de hoy y su nombre a secas.
+  - Marcelo decidió el 27-nov darles una contraseña temporal, la misma para todos, y que la app les pida poner la suya al entrar.
+  - Esa pantalla y su `ligar` van en otra conversación.
 
-El plan y la base, en `docs/una-sola-cuenta/LEEME.md`. Esta versión es lo que dice la pantalla, y sube después de la base.
+La base (`paso4_base.sql`) se aplicó el 27-nov a las 19:56, por la API y con el OK de Marcelo: `schema_migrations` `20261128015630`, con el ensayo antes (0 fallas). El plan, en `docs/una-sola-cuenta/LEEME.md`.
+
+Esta versión es lo que dice la pantalla, y sube después de la base. Los comentarios del código y los nombres de las pruebas dicen «29-nov», la fecha planeada; no se cambiaron para no tocar lo ya probado.
 
 **Qué se cambió.**
 - **La casilla dice «Correo»**, con el ejemplo `Ej: gerardo@sygma.mx`. Antes decía «Usuario o correo» y «Ej: gerardo, o tu correo completo».
